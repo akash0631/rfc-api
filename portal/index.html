@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>V2 Retail · RFC Automator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#f5f7fc; --white:#fff; --border:#e4e8f0; --border2:#ccd3e8;
+      --accent:#4361ee; --al:#eef1fd; --green:#16a34a; --gl:#f0fdf4;
+      --red:#dc2626; --text:#0f172a; --sub:#475569; --muted:#94a3b8;
+      --sans:'Plus Jakarta Sans',sans-serif; --mono:'JetBrains Mono',monospace;
+    }
+    body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; }
+
+    /* Top nav */
+    .topbar {
+      background:#0f172a; height:52px; display:flex; align-items:center;
+      justify-content:space-between; padding:0 24px; position:sticky; top:0; z-index:50;
+      box-shadow:0 2px 12px rgba(0,0,0,.3);
+    }
+    .brand { display:flex; align-items:center; gap:9px; }
+    .bdot { width:7px;height:7px;border-radius:50%;background:#34d399;animation:blink 2s infinite; }
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+    .bname { font-size:14px;font-weight:800;color:#fff; }
+    .bname span{color:#4361ee;}
+    .btag { font-size:10px;background:rgba(67,97,238,.2);border:1px solid rgba(67,97,238,.4);color:#818cf8;padding:2px 8px;border-radius:999px;font-family:monospace; }
+    .nav-links{display:flex;gap:6px;}
+    .nl{color:#94a3b8;text-decoration:none;font-size:12px;font-weight:600;padding:5px 11px;border-radius:6px;transition:all .15s;}
+    .nl:hover{color:#fff;background:rgba(255,255,255,.08);}
+    .nl.on{color:#4361ee;background:rgba(67,97,238,.12);}
+
+    .app { max-width:760px;margin:0 auto;padding:28px 16px 80px; }
+
+    .hdr{margin-bottom:24px;}
+    .hdr-tag{display:inline-flex;align-items:center;gap:6px;background:var(--al);border:1px solid #c7d2fe;border-radius:999px;padding:3px 11px 3px 7px;font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:10px;}
+    .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;}
+    .hdr h1{font-size:22px;font-weight:800;letter-spacing:-.4px;}
+    .hdr h1 em{font-style:normal;color:var(--accent);}
+    .hdr p{font-size:11.5px;color:var(--muted);margin-top:4px;font-family:var(--mono);}
+
+    .steps{display:flex;background:var(--white);border:1px solid var(--border);border-radius:12px;padding:4px;gap:3px;margin-bottom:18px;}
+    .stp{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:9px;font-size:12px;font-weight:600;color:var(--muted);}
+    .stp.active{background:var(--accent);color:#fff;box-shadow:0 2px 8px #4361ee44;}
+    .stp.done{background:var(--gl);color:var(--green);}
+    .stp-n{width:18px;height:18px;border-radius:50%;border:1.5px solid currentColor;display:grid;place-items:center;font-size:9px;font-weight:700;flex-shrink:0;}
+    .stp.active .stp-n{background:rgba(255,255,255,.25);border-color:transparent;}
+    .stp.done .stp-n{background:var(--green);border-color:transparent;color:#fff;}
+
+    .card{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:11px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+    .ct{font-size:9px;font-family:var(--mono);font-weight:500;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+    .ct::after{content:'';flex:1;height:1px;background:var(--border);}
+
+    .field{margin-bottom:12px;}
+    .field label{display:block;font-size:11px;font-weight:600;color:var(--sub);margin-bottom:4px;}
+    .fi{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--mono);font-size:12.5px;padding:8px 10px;outline:none;transition:border-color .15s;}
+    .fi:focus{border-color:var(--accent);background:var(--white);}
+
+    .env-g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+    .env-c{border:1.5px solid var(--border);border-radius:9px;padding:10px 11px;cursor:pointer;background:var(--bg);transition:all .15s;}
+    .env-c.sel{border-color:transparent;}
+    .env-label{font-size:13px;font-weight:700;margin-bottom:3px;}
+    .env-sub{font-size:9.5px;font-family:var(--mono);color:var(--muted);}
+
+    .pr{display:grid;grid-template-columns:1fr 1fr 30px;gap:7px;margin-bottom:7px;align-items:center;}
+    .pr .fi{padding:7px 9px;font-size:12px;}
+    .rm{background:none;border:none;width:28px;height:28px;border-radius:6px;color:var(--muted);cursor:pointer;font-size:17px;display:grid;place-items:center;transition:all .15s;}
+    .rm:hover{background:#fee2e2;color:var(--red);}
+    .add-p{background:none;border:1.5px dashed var(--border2);border-radius:7px;color:var(--muted);font-family:var(--mono);font-size:11.5px;padding:7px;cursor:pointer;width:100%;margin-top:2px;transition:all .15s;}
+    .add-p:hover{border-color:var(--accent);color:var(--accent);background:var(--al);}
+
+    .ot-g{display:flex;gap:7px;margin-bottom:11px;}
+    .ot{padding:6px 13px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);transition:all .15s;}
+    .ot.on{background:var(--al);border-color:var(--accent);color:var(--accent);}
+
+    .toggles{display:flex;flex-direction:column;gap:7px;margin-bottom:12px;}
+    .tgl-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);}
+    .tgl-info{font-size:12.5px;font-weight:600;}
+    .tgl-sub{font-size:10.5px;font-family:var(--mono);color:var(--muted);margin-top:2px;}
+    .tgl{position:relative;width:34px;height:19px;flex-shrink:0;}
+    .tgl input{opacity:0;width:0;height:0;}
+    .tgl-sl{position:absolute;inset:0;background:var(--border2);border-radius:999px;cursor:pointer;transition:.2s;}
+    .tgl input:checked+.tgl-sl{background:var(--accent);}
+    .tgl-sl::before{content:'';position:absolute;width:13px;height:13px;border-radius:50%;background:#fff;left:3px;top:3px;transition:.2s;}
+    .tgl input:checked+.tgl-sl::before{transform:translateX(15px);}
+
+    .btn-p{width:100%;padding:11px;border:none;border-radius:9px;background:var(--accent);color:#fff;font-family:var(--sans);font-size:13.5px;font-weight:700;cursor:pointer;margin-top:8px;box-shadow:0 2px 8px #4361ee33;display:flex;align-items:center;justify-content:center;gap:7px;transition:all .15s;}
+    .btn-p:hover{background:#3451d1;}
+    .btn-p:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
+    .btn-g{width:100%;padding:10px;border:1.5px solid var(--border);border-radius:9px;background:none;color:var(--sub);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;margin-top:7px;transition:all .15s;}
+    .btn-g:hover{border-color:var(--border2);color:var(--text);}
+
+    .code-w{background:#13141f;border-radius:9px;overflow:hidden;margin-bottom:12px;}
+    .code-b{background:#0d0e1a;padding:8px 13px;display:flex;align-items:center;justify-content:space-between;}
+    .code-b span{font-family:var(--mono);font-size:10px;color:#4a5080;}
+    .cp{background:#1c1e30;border:none;border-radius:4px;color:#4a5080;font-family:var(--mono);font-size:10px;padding:3px 9px;cursor:pointer;transition:all .15s;}
+    .cp:hover{background:var(--accent);color:#fff;}
+    .code-pre{padding:12px 14px;font-family:var(--mono);font-size:11px;line-height:1.75;color:#9aa5d4;overflow:auto;white-space:pre;max-height:280px;}
+
+    .pg-rows{display:flex;flex-direction:column;gap:7px;margin-bottom:12px;}
+    .pg-r{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-weight:600;color:var(--muted);transition:all .3s;}
+    .pg-r.run{border-color:#bfdbfe;background:#eff6ff;color:var(--accent);}
+    .pg-r.ok{border-color:#86efac;background:var(--gl);color:var(--green);}
+    .pg-r.err{border-color:#fca5a5;background:#fef2f2;color:var(--red);}
+    .pg-icon{width:20px;flex-shrink:0;margin-top:1px;display:grid;place-items:center;}
+    .pg-sub{font-size:10px;font-family:var(--mono);color:var(--muted);margin-top:3px;font-weight:400;}
+    .pg-r.run .pg-sub,.pg-r.ok .pg-sub{color:currentColor;opacity:.75;}
+
+    .suc{text-align:center;padding:28px 14px;}
+    .suc-icon{font-size:40px;margin-bottom:11px;}
+    .suc h2{font-size:18px;font-weight:800;color:var(--green);margin-bottom:5px;}
+    .suc p{font-size:11px;color:var(--muted);font-family:var(--mono);}
+    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 12px;font-family:var(--mono);font-size:11px;text-decoration:none;margin:5px 3px 0;}
+    .chip.g{background:var(--gl);border:1px solid #86efac;color:var(--green);}
+    .chip.b{background:var(--al);border:1px solid #c7d2fe;color:var(--accent);}
+    .ep-box{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 13px;margin:11px auto 18px;display:inline-block;}
+
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .hint{font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:9px;line-height:1.5;}
+    .err-bar{background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;padding:9px 12px;color:var(--red);font-size:11.5px;font-family:var(--mono);margin-top:8px;}
+    .spin{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:rot .6s linear infinite;}
+    @keyframes rot{to{transform:rotate(360deg)}}
+    @media(max-width:520px){.two,.env-g{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="bdot"></div>
+    <div class="bname">V2 Retail · <span>RFC Portal</span></div>
+    <div class="btag">LIVE</div>
+  </div>
+  <div class="nav-links">
+    <a class="nl on" href="/">Automator</a>
+    <a class="nl" href="/swagger">Swagger</a>
+    <a class="nl" href="https://github.com/akash0631/rfc-api" target="_blank">GitHub ↗</a>
+  </div>
+</div>
+
+<div id="root"></div>
+
+<script type="text/babel">
+const GITHUB_REPO = "akash0631/rfc-api";
+const GITHUB_TOKEN = "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";
+const SWAGGER_FILE = "v2_sap_api_explorer.html";
+const DAB_CONFIG_FILE = "dab-config.json";
+const DAB_APP_URL = "https://my-dab-app.azurewebsites.net";
+
+const FOLDER_OPTIONS = [
+  "Controllers/Finance","Controllers/GateEntry_LOT_Putway",
+  "Controllers/Vendor_SRM_Routing","Controllers/HU_Creation",
+  "Controllers/FMS_FABRIC_PUTWAY","Controllers/HRMS",
+  "Controllers/NSO","Controllers/PaperlessPicklist",
+  "Controllers/Sampling","Controllers/Vehicle_Loading",
+];
+const ENV_OPTIONS = [
+  {label:"Dev",       fn:"rfcConfigparameters()",           ip:"192.168.144.174",client:"210", color:"#16a34a",bg:"#f0fdf4",bdr:"#86efac"},
+  {label:"Quality",  fn:"rfcConfigparametersquality()",    ip:"192.168.144.179",client:"600", color:"#d97706",bg:"#fffbeb",bdr:"#fcd34d"},
+  {label:"Production",fn:"rfcConfigparametersproduction()",ip:"192.168.144.170",client:"600", color:"#dc2626",bg:"#fef2f2",bdr:"#fca5a5"},
+];
+
+const ghH = {Authorization:`token ${GITHUB_TOKEN}`,Accept:"application/vnd.github.v3+json","Content-Type":"application/json"};
+const ghGet = p => fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${p}`,{headers:ghH});
+const ghPut = (p,content,sha,msg) => fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${p}`,{
+  method:"PUT",headers:ghH,
+  body:JSON.stringify({message:msg,content:btoa(unescape(encodeURIComponent(content))),...(sha?{sha}:{})})
+});
+
+const {useState} = React;
+
+function App() {
+  const [step, setStep]     = useState(1);
+  const [rfcName, setRfc]   = useState("");
+  const [folder, setFolder] = useState(FOLDER_OPTIONS[0]);
+  const [env, setEnv]       = useState(ENV_OPTIONS[0].fn);
+  const [outType, setOut]   = useState("table");
+  const [tableP, setTP]     = useState("ET_DATA");
+  const [params, setPar]    = useState([{name:"",type:""}]);
+  const [desc, setDesc]     = useState("");
+  const [sqlTbl, setSql]    = useState("");
+  const [doSwag, setSwag]   = useState(true);
+  const [doDab, setDab]     = useState(true);
+  const [code, setCode]     = useState("");
+  const [generating, setGen]= useState(false);
+  const [genErr, setGErr]   = useState("");
+  const [stages, setStages] = useState({github:"idle",swagger:"idle",dab:"idle"});
+  const [details, setDet]   = useState({commit:null,commitUrl:null,notes:{}});
+  const [pushing, setPush]  = useState(false);
+
+  const setSt = (k,v) => setStages(s=>({...s,[k]:v}));
+  const setN  = (k,v) => setDet(d=>({...d,notes:{...d.notes,[k]:v}}));
+
+  const generate = async () => {
+    setGen(true); setGErr(""); setCode("");
+    const vp = params.filter(p=>p.name);
+    const prompt = `You are a senior C# .NET developer for V2 Retail SAP RFC API (ASP.NET Web API, .NET 4.7.2).
+Generate a complete controller for RFC: ${rfcName}
+Description: ${desc||"SAP RFC controller"}
+SAP method: BaseController.${env}
+IMPORT parameters:
+${vp.map(p=>`- ${p.name} (TYPE: ${p.type||"CHAR"})`).join("\n")||"- (none)"}
+Output: ${outType==="table"?`Returns TABLE ${tableP} — dynamic metadata loop, skip STRUCTURE/TABLE types, response: {Status,Message,Data:{${tableP}:[...]}}`:"EX_RETURN only — {Status,Message}"}
+EXACT usings:
+using FMS_Fabric_Putway_Api.Models;
+using SAP.Middleware.Connector;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Web.Http;
+using Vendor_Application_MVC.Controllers;
+using Vendor_SRM_Routing_Application.Models.HU_Creation;
+using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
+Namespace: Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
+Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]})
+      });
+      const d = await res.json();
+      const raw = d.content?.find(b=>b.type==="text")?.text||"";
+      const cleaned = raw.replace(/```(?:csharp|cs)?\n?/g,"").replace(/```/g,"").trim();
+      if(!cleaned) throw new Error("No code returned");
+      setCode(cleaned);
+      setSql(`ET_${rfcName.replace(/_RFC$/,"")}`);
+      setStep(2);
+    } catch(e){setGErr(e.message);}
+    setGen(false);
+  };
+
+  const pushController = async () => {
+    const fp = `${folder}/${rfcName}Controller.cs`;
+    setSt("github","run");
+    const cr = await ghGet(fp);
+    const sha = cr.ok?(await cr.json()).sha:null;
+    const eo = ENV_OPTIONS.find(e=>e.fn===env);
+    const res = await ghPut(fp,code,sha,`Add ${rfcName} controller [${eo?.label}]\n\nAuto-generated via RFC Portal`);
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.message||"GitHub push failed");
+    const cSha = d.commit?.sha?.slice(0,7);
+    setDet(x=>({...x,commit:cSha,commitUrl:`https://github.com/${GITHUB_REPO}/commit/${d.commit?.sha}`}));
+    setSt("github","ok");
+    return cSha;
+  };
+
+  const pushSwagger = async (cSha) => {
+    setSt("swagger","run");
+    try {
+      const fr = await ghGet(SWAGGER_FILE);
+      const eo = ENV_OPTIONS.find(e=>e.fn===env);
+      const vp = params.filter(p=>p.name);
+      const pj = JSON.stringify(Object.fromEntries(vp.map(p=>[p.name,`[${p.type||"CHAR"}]`])),null,2);
+      const nb = `\n    <!-- AUTO:${rfcName}:${new Date().toISOString().slice(0,10)} -->\n    <div style="border:1px solid #e4e8f0;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">\n      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">\n        <span style="background:#4361ee;color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;font-family:monospace;">POST</span>\n        <code style="font-size:13px;font-weight:600;">/api/${rfcName}</code>\n        <span style="background:${eo?.bg};border:1px solid ${eo?.bdr};color:${eo?.color};padding:2px 9px;border-radius:5px;font-size:11px;font-family:monospace;">${eo?.label}</span>\n      </div>\n      <p style="font-size:12px;color:#475569;margin-bottom:10px;">${desc||rfcName}</p>\n      <pre style="background:#13141f;color:#9aa5d4;padding:12px;border-radius:7px;font-size:11px;overflow-x:auto;">${pj}</pre>\n    </div>`;
+      let sha=null,html="";
+      if(fr.ok){
+        const fd=await fr.json(); sha=fd.sha;
+        const ex=decodeURIComponent(escape(atob(fd.content.replace(/\n/g,""))));
+        html=ex.includes("<!-- END ENDPOINTS -->")?ex.replace("<!-- END ENDPOINTS -->",nb+"\n    <!-- END ENDPOINTS -->"):ex.replace("</body>",nb+"\n</body>");
+      } else {
+        html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>V2 RFC API</title></head><body style="font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px;"><h1 style="font-size:20px;margin-bottom:20px;">V2 Retail · RFC API Endpoints</h1>\n${nb}\n    <!-- END ENDPOINTS -->\n</body></html>`;
+      }
+      const pr=await ghPut(SWAGGER_FILE,html,sha,`Update Swagger — add ${rfcName} (ref:${cSha})`);
+      if(!pr.ok){const d=await pr.json();throw new Error(d.message);}
+      setN("swagger","Swagger doc updated in repo");
+      setSt("swagger","ok");
+    } catch(e){setN("swagger",e.message);setSt("swagger","err");}
+  };
+
+  const pushDab = async (cSha) => {
+    setSt("dab","run");
+    try {
+      const fr=await ghGet(DAB_CONFIG_FILE);
+      if(!fr.ok) throw new Error("dab-config.json not found");
+      const fd=await fr.json();
+      const ex=JSON.parse(decodeURIComponent(escape(atob(fd.content.replace(/\n/g,"")))));
+      const en=sqlTbl||`ET_${rfcName.replace(/_RFC$/,"")}`;
+      ex.entities[en]={source:{object:`dbo.${en}`,type:"view","key-fields":["ID"]},permissions:[{role:"anonymous",actions:[{action:"read"}]}]};
+      const pr=await ghPut(DAB_CONFIG_FILE,JSON.stringify(ex,null,2),fd.sha,`Register ${en} in DAB config (ref:${cSha})`);
+      if(!pr.ok){const d=await pr.json();throw new Error(d.message);}
+      setN("dab",`Entity ${en} registered → GitHub Actions restarts DAB`);
+      setSt("dab","ok");
+    } catch(e){setN("dab",e.message);setSt("dab","err");}
+  };
+
+  const handlePush = async () => {
+    setPush(true);
+    setStages({github:"idle",swagger:"idle",dab:"idle"});
+    setDet({commit:null,commitUrl:null,notes:{}});
+    try {
+      const sha=await pushController();
+      await Promise.all([doSwag&&pushSwagger(sha),doDab&&pushDab(sha)].filter(Boolean));
+      setStep(3);
+    } catch(e){setSt("github","err");setN("github",e.message);}
+    setPush(false);
+  };
+
+  const reset=()=>{
+    setStep(1);setRfc("");setDesc("");setSql("");setFolder(FOLDER_OPTIONS[0]);
+    setEnv(ENV_OPTIONS[0].fn);setOut("table");setTP("ET_DATA");
+    setPar([{name:"",type:""}]);setCode("");setGErr("");
+    setStages({github:"idle",swagger:"idle",dab:"idle"});
+    setDet({commit:null,commitUrl:null,notes:{}});
+  };
+
+  const icon=(k)=>{
+    const s=stages[k];
+    if(s==="idle") return <span style={{color:"var(--muted)",fontSize:14}}>○</span>;
+    if(s==="run")  return <span className="spin"/>;
+    if(s==="ok")   return <span>✓</span>;
+    if(s==="err")  return <span>✗</span>;
+  };
+  const eo=ENV_OPTIONS.find(e=>e.fn===env);
+
+  return (
+    <div className="app">
+      <div className="hdr">
+        <div className="hdr-tag"><div className="dot"/>RFC AUTOMATOR · V2 RETAIL</div>
+        <h1>SAP RFC <em>→ REST API</em></h1>
+        <p>generate · push to github · update swagger + dab config</p>
+      </div>
+
+      <div className="steps">
+        {[["01","Configure"],["02","Review & Push"],["03","Done"]].map(([n,l],i)=>(
+          <div key={n} className={`stp ${step===i+1?"active":step>i+1?"done":""}`}>
+            <div className="stp-n">{step>i+1?"✓":n}</div>{l}
+          </div>
+        ))}
+      </div>
+
+      {step===1&&<>
+        <div className="card">
+          <div className="ct">RFC Details</div>
+          <div className="two">
+            <div className="field">
+              <label>RFC Name *</label>
+              <input className="fi" value={rfcName} onChange={e=>setRfc(e.target.value.toUpperCase())} placeholder="ZADVANCE_PAYMENT_RFC"/>
+            </div>
+            <div className="field">
+              <label>Folder *</label>
+              <select className="fi" value={folder} onChange={e=>setFolder(e.target.value)}>
+                {FOLDER_OPTIONS.map(f=><option key={f}>{f}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="field">
+            <label>Description</label>
+            <input className="fi" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="e.g. FI advance payments by date range"/>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="ct">SAP Environment</div>
+          <div className="env-g">
+            {ENV_OPTIONS.map(o=>(
+              <div key={o.fn} className={`env-c ${env===o.fn?"sel":""}`}
+                style={env===o.fn?{background:o.bg,boxShadow:`0 0 0 2px ${o.color}`}:{}}
+                onClick={()=>setEnv(o.fn)}>
+                <div className="env-label" style={{color:env===o.fn?o.color:"var(--text)"}}>{o.label}</div>
+                <div className="env-sub">{o.ip} · {o.client}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="ct">Import Parameters</div>
+          <p className="hint">Exact names from SE37 Import tab</p>
+          {params.map((p,i)=>(
+            <div key={i} className="pr">
+              <input className="fi" value={p.name} onChange={e=>{const a=[...params];a[i].name=e.target.value.toUpperCase();setPar(a);}} placeholder="I_COMPANY_CODE"/>
+              <input className="fi" value={p.type} onChange={e=>{const a=[...params];a[i].type=e.target.value.toUpperCase();setPar(a);}} placeholder="SAP Type e.g. BUKRS"/>
+              <button className="rm" onClick={()=>setPar(params.filter((_,j)=>j!==i))}>×</button>
+            </div>
+          ))}
+          <button className="add-p" onClick={()=>setPar([...params,{name:"",type:""}])}>+ Add Parameter</button>
+        </div>
+
+        <div className="card">
+          <div className="ct">Output Type</div>
+          <div className="ot-g">
+            <div className={`ot ${outType==="table"?"on":""}`} onClick={()=>setOut("table")}>Returns Table</div>
+            <div className={`ot ${outType==="return_only"?"on":""}`} onClick={()=>setOut("return_only")}>EX_RETURN Only</div>
+          </div>
+          {outType==="table"&&<div className="field">
+            <label>Table Parameter Name</label>
+            <input className="fi" value={tableP} onChange={e=>setTP(e.target.value.toUpperCase())} placeholder="ET_DATA or IT_FINAL"/>
+          </div>}
+        </div>
+
+        <div className="card">
+          <div className="ct">Auto-Push Options</div>
+          <div className="toggles">
+            <div className="tgl-row">
+              <div><div className="tgl-info">Update Swagger doc</div><div className="tgl-sub">Injects endpoint into v2_sap_api_explorer.html</div></div>
+              <label className="tgl"><input type="checkbox" checked={doSwag} onChange={e=>setSwag(e.target.checked)}/><span className="tgl-sl"/></label>
+            </div>
+            <div className="tgl-row">
+              <div><div className="tgl-info">Register DAB entity</div><div className="tgl-sub">Updates dab-config.json → Actions restarts DAB app</div></div>
+              <label className="tgl"><input type="checkbox" checked={doDab} onChange={e=>setDab(e.target.checked)}/><span className="tgl-sl"/></label>
+            </div>
+          </div>
+          {doDab&&<div className="field">
+            <label>SQL Table Name for DAB</label>
+            <input className="fi" value={sqlTbl} onChange={e=>setSql(e.target.value.toUpperCase())} placeholder={`ET_${rfcName.replace(/_RFC$/,"")||"TABLENAME"}`}/>
+            <div className="hint" style={{marginTop:4}}>Exposed at {DAB_APP_URL}/api/&lt;table&gt; after pipeline runs</div>
+          </div>}
+        </div>
+
+        {genErr&&<div className="err-bar">⚠ {genErr}</div>}
+        <button className="btn-p" disabled={!rfcName||generating||params.every(p=>!p.name)} onClick={generate}>
+          {generating?<><span className="spin"/>Generating...</>:"Generate Controller →"}
+        </button>
+      </>}
+
+      {step===2&&code&&<>
+        <div className="card">
+          <div className="ct">Generated Controller</div>
+          <div className="code-w">
+            <div className="code-b">
+              <span>{rfcName}Controller.cs · {code.split("\n").length} lines · {eo?.label}</span>
+              <button className="cp" onClick={()=>navigator.clipboard.writeText(code)}>copy</button>
+            </div>
+            <div className="code-pre">{code}</div>
+          </div>
+
+          <div className="pg-rows">
+            <div className={`pg-r ${stages.github==="idle"?"":stages.github==="run"?"run":stages.github==="ok"?"ok":"err"}`}>
+              <div className="pg-icon">{icon("github")}</div>
+              <div>
+                <div>GitHub → {folder}/{rfcName}Controller.cs</div>
+                {details.commit&&<div className="pg-sub">✓ <a href={details.commitUrl} target="_blank" rel="noreferrer" style={{color:"inherit"}}>{details.commit}</a></div>}
+                {details.notes?.github&&<div className="pg-sub">{details.notes.github}</div>}
+              </div>
+            </div>
+            {doSwag&&<div className={`pg-r ${stages.swagger==="idle"?"":stages.swagger==="run"?"run":stages.swagger==="ok"?"ok":"err"}`}>
+              <div className="pg-icon">{icon("swagger")}</div>
+              <div><div>Swagger → {SWAGGER_FILE}</div>{details.notes?.swagger&&<div className="pg-sub">{details.notes.swagger}</div>}</div>
+            </div>}
+            {doDab&&<div className={`pg-r ${stages.dab==="idle"?"":stages.dab==="run"?"run":stages.dab==="ok"?"ok":"err"}`}>
+              <div className="pg-icon">{icon("dab")}</div>
+              <div><div>DAB Config → <code style={{fontSize:10}}>{sqlTbl||`ET_${rfcName.replace(/_RFC$/,"")}`}</code></div>{details.notes?.dab&&<div className="pg-sub">{details.notes.dab}</div>}</div>
+            </div>}
+          </div>
+
+          <button className="btn-p" disabled={pushing} onClick={handlePush}>
+            {pushing?<><span className="spin"/>Pushing all...</>:"↑ Push GitHub + Swagger + DAB Config"}
+          </button>
+          <button className="btn-g" onClick={()=>setStep(1)}>← Back</button>
+        </div>
+      </>}
+
+      {step===3&&<div className="card">
+        <div className="suc">
+          <div className="suc-icon">🚀</div>
+          <h2>All pushed!</h2>
+          <p>{rfcName}Controller.cs is live</p>
+          {details.commit&&<a className="chip g" href={details.commitUrl} target="_blank" rel="noreferrer">✓ Commit {details.commit}</a>}
+          {doDab&&stages.dab==="ok"&&<a className="chip b" href={`${DAB_APP_URL}/api/${sqlTbl||`ET_${rfcName.replace(/_RFC$/,"")}`}`} target="_blank" rel="noreferrer">📡 DAB entity →</a>}
+          <div><div className="ep-box">POST /api/{rfcName}</div></div>
+          <button className="btn-p" style={{maxWidth:200,margin:"0 auto"}} onClick={reset}>+ Add Another RFC</button>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

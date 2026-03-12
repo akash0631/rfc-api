@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>V2 Retail · SAP RFC API Explorer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;800&display=swap');
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f5f7fc; font-family: 'Plus Jakarta Sans', sans-serif; }
+
+    .topbar-custom {
+      background: #0f172a;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; animation: blink 2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .brand-name { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: -0.3px; }
+    .brand-name span { color: #4361ee; }
+    .brand-tag { font-size: 10px; background: rgba(67,97,238,.2); border: 1px solid rgba(67,97,238,.4); color: #818cf8; padding: 2px 9px; border-radius: 999px; font-family: monospace; }
+    .nav-links { display: flex; gap: 8px; }
+    .nav-link { color: #94a3b8; text-decoration: none; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 6px; transition: all .15s; }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,.08); }
+    .nav-link.active { color: #4361ee; background: rgba(67,97,238,.12); }
+
+    .sub-bar {
+      background: #fff;
+      border-bottom: 1px solid #e4e8f0;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .sub-bar label { font-size: 11px; font-weight: 600; color: #64748b; }
+    .sub-bar select, .sub-bar input {
+      background: #f5f7fc; border: 1.5px solid #e4e8f0; border-radius: 7px;
+      font-size: 12px; font-family: monospace; padding: 6px 10px; color: #0f172a;
+      outline: none;
+    }
+    .sub-bar input { width: 320px; }
+    .reload-btn {
+      background: #4361ee; color: #fff; border: none; border-radius: 7px;
+      font-size: 12px; font-weight: 700; padding: 7px 14px; cursor: pointer;
+      transition: all .15s;
+    }
+    .reload-btn:hover { background: #3451d1; }
+
+    #swagger-ui { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+
+    /* Swagger UI overrides */
+    .swagger-ui .topbar { display: none !important; }
+    .swagger-ui .info { margin: 0 0 16px; }
+    .swagger-ui .info .title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 22px; color: #0f172a; }
+    .swagger-ui .scheme-container { background: #fff; border: 1px solid #e4e8f0; border-radius: 10px; padding: 12px 16px; }
+    .swagger-ui .opblock-tag { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; color: #0f172a; }
+    .swagger-ui .opblock.opblock-post { border-color: #4361ee; background: rgba(67,97,238,.04); }
+    .swagger-ui .opblock.opblock-post .opblock-summary { border-color: #4361ee; }
+    .swagger-ui .opblock.opblock-get { border-color: #16a34a; background: rgba(22,163,74,.04); }
+    .swagger-ui .btn.execute { background: #4361ee; border-color: #4361ee; }
+    .swagger-ui .btn.execute:hover { background: #3451d1; }
+  </style>
+</head>
+<body>
+
+<div class="topbar-custom">
+  <div class="brand">
+    <div class="brand-dot"></div>
+    <div class="brand-name">V2 Retail · <span>RFC API</span></div>
+    <div class="brand-tag">SWAGGER UI</div>
+  </div>
+  <div class="nav-links">
+    <a class="nav-link" href="/">Automator</a>
+    <a class="nav-link active" href="/swagger">Swagger</a>
+    <a class="nav-link" href="https://my-dab-app.azurewebsites.net/api/openapi" target="_blank">OpenAPI JSON ↗</a>
+  </div>
+</div>
+
+<div class="sub-bar">
+  <label>OpenAPI Source</label>
+  <input type="text" id="openapiUrl" value="https://my-dab-app.azurewebsites.net/api/openapi" />
+  <button class="reload-btn" onclick="loadSwagger()">Load →</button>
+  <label>Filter</label>
+  <select id="tagFilter" onchange="loadSwagger()">
+    <option value="">All Entities</option>
+    <option value="Finance">Finance</option>
+    <option value="Inventory">Inventory</option>
+    <option value="Sales">Sales</option>
+    <option value="RFC">RFC</option>
+  </select>
+</div>
+
+<div id="swagger-ui"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.min.js"></script>
+<script>
+  let ui;
+
+  async function loadSwagger() {
+    const url = document.getElementById('openapiUrl').value.trim();
+    const tag = document.getElementById('tagFilter').value;
+
+    // Fetch and optionally filter
+    let spec;
+    try {
+      const res = await fetch(url);
+      spec = await res.json();
+
+      // Fix info block
+      spec.info = spec.info || {};
+      spec.info.title = "V2 Retail · SAP RFC API Explorer";
+      spec.info.description = `Live API documentation for V2 Retail's SAP RFC → REST API layer.\n\nBase URL: **https://my-dab-app.azurewebsites.net**\n\nAll endpoints support GET with optional filter/orderby parameters.`;
+      spec.info.version = spec.info.version || "1.0.0";
+
+      // Add servers
+      spec.servers = [{ url: "https://my-dab-app.azurewebsites.net", description: "Azure DAB (Production)" }];
+
+      // Filter by tag if set
+      if (tag && spec.paths) {
+        const filtered = {};
+        for (const [path, methods] of Object.entries(spec.paths)) {
+          const pathTag = Object.values(methods)[0]?.tags?.[0] || path;
+          if (pathTag.toLowerCase().includes(tag.toLowerCase()) ||
+              path.toLowerCase().includes(tag.toLowerCase())) {
+            filtered[path] = methods;
+          }
+        }
+        spec.paths = filtered;
+      }
+    } catch (e) {
+      alert('Failed to load OpenAPI spec: ' + e.message);
+      return;
+    }
+
+    if (ui) {
+      ui.specActions?.updateSpec(JSON.stringify(spec));
+      return;
+    }
+
+    ui = SwaggerUIBundle({
+      spec,
+      dom_id: '#swagger-ui',
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+      layout: 'StandaloneLayout',
+      deepLinking: true,
+      displayRequestDuration: true,
+      filter: true,
+      tryItOutEnabled: true,
+      requestInterceptor: (req) => {
+        req.headers['Accept'] = 'application/json';
+        return req;
+      },
+      onComplete: () => {
+        // Remove the default Swagger topbar
+        document.querySelectorAll('.topbar').forEach(el => el.remove());
+      }
+    });
+  }
+
+  loadSwagger();
+</script>
+</body>
+</html>
