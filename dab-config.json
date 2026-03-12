@@ -1,0 +1,1436 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/download/v1.2.10/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('DATABASE_CONNECTION_STRING')"
+  },
+  "runtime": {
+    "rest": {
+      "enabled": true,
+      "path": "/api"
+    },
+    "graphql": {
+      "enabled": false
+    },
+    "host": {
+      "cors": {
+        "origins": [
+          "*"
+        ],
+        "allow-credentials": false
+      },
+      "authentication": {
+        "provider": "StaticWebApps"
+      },
+      "mode": "production"
+    }
+  },
+  "entities": {
+    "API_Master_AKA": {
+      "source": {
+        "object": "dbo.API_Master_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "BIN_MOV_ART_WISE_AKA": {
+      "source": {
+        "object": "dbo.BIN_MOV_ART_WISE_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "BROADER_MENU": {
+      "source": {
+        "object": "dbo.BROADER_MENU",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "COMPANY_STOCK_GEN_ART_CLR_MASTER_AKA": {
+      "source": {
+        "object": "dbo.COMPANY_STOCK_GEN_ART_CLR_MASTER_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "COMPANY_STOCK_MASTER_AKA": {
+      "source": {
+        "object": "dbo.COMPANY_STOCK_MASTER_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_CO_MJ_ALL_BGT": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_CO_MJ_ALL_BGT",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_CO_MJ_CLR_ALL_BGT": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_CO_MJ_CLR_ALL_BGT",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_CO_MJ_FAB_ALL_BGT_AKA": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_CO_MJ_FAB_ALL_BGT_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_CO_MJ_M_MVGR_ALL_BGT_AKA": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_CO_MJ_M_MVGR_ALL_BGT_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_CO_MJ_SZ_ALL_BGT": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_CO_MJ_SZ_ALL_BGT",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_CO_MJ_VND_ALL_BGT_AKA": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_CO_MJ_VND_ALL_BGT_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_ST_MJ_ALL_BGT": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_ST_MJ_ALL_BGT",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_ST_MJ_CLR_ALL_BGT": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_ST_MJ_CLR_ALL_BGT",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "CO_BGT_AK_ST_MJ_SZ_ALL_BGT": {
+      "source": {
+        "object": "dbo.CO_BGT_AK_ST_MJ_SZ_ALL_BGT",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "C_ART_DATA": {
+      "source": {
+        "object": "dbo.C_ART_DATA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "DAILY_SALE_DATA_GEN_ART_WISE": {
+      "source": {
+        "object": "dbo.DAILY_SALE_DATA_GEN_ART_WISE",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "DAILY_SALE_DATA_GEN_CLR_WISE": {
+      "source": {
+        "object": "dbo.DAILY_SALE_DATA_GEN_CLR_WISE",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ARTICLE_GEN_CLR_WISE": {
+      "source": {
+        "object": "dbo.ET_ARTICLE_GEN_CLR_WISE",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ART_Broader_Menu_DATA": {
+      "source": {
+        "object": "dbo.ET_ART_Broader_Menu_DATA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_PUR_DATA_RPT_AKA": {
+      "source": {
+        "object": "dbo.ET_PUR_DATA_RPT_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_SALES_DATA": {
+      "source": {
+        "object": "dbo.ET_SALES_DATA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_Supplier_Master": {
+      "source": {
+        "object": "dbo.ET_Supplier_Master",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_VARIANT_ART_WISE": {
+      "source": {
+        "object": "dbo.ET_VARIANT_ART_WISE",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_VEND_DEDUCTION": {
+      "source": {
+        "object": "dbo.ET_VEND_DEDUCTION",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_VEND_DEDUCTION_AKA": {
+      "source": {
+        "object": "dbo.ET_VEND_DEDUCTION_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_VEND_PAY": {
+      "source": {
+        "object": "dbo.ET_VEND_PAY",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZART_BAR_DETAIL_RFC": {
+      "source": {
+        "object": "dbo.ET_ZART_BAR_DETAIL_RFC",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZFBL1N_PAYMENT_RFC": {
+      "source": {
+        "object": "dbo.ET_ZFBL1N_PAYMENT_RFC",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZFI_FB65_DISCOUNT_RFC": {
+      "source": {
+        "object": "dbo.ET_ZFI_FB65_DISCOUNT_RFC",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZMC_SIZE_MASTER_RFC": {
+      "source": {
+        "object": "dbo.ET_ZMC_SIZE_MASTER_RFC",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZMM_CITY_TRNS_RFC": {
+      "source": {
+        "object": "dbo.ET_ZMM_CITY_TRNS_RFC",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZPO_MODIFICATION": {
+      "source": {
+        "object": "dbo.ET_ZPO_MODIFICATION",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZPO_MODIFICATION_RFC_AKA": {
+      "source": {
+        "object": "dbo.ET_ZPO_MODIFICATION_RFC_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZPO_MODIFY_REASON": {
+      "source": {
+        "object": "dbo.ET_ZPO_MODIFY_REASON",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ET_ZSRM_ROUTING_LOG_RFC": {
+      "source": {
+        "object": "dbo.ET_ZSRM_ROUTING_LOG_RFC",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "GET_VV_ART_DATA_AKA": {
+      "source": {
+        "object": "dbo.GET_VV_ART_DATA_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "HHT_VERIENT_ART": {
+      "source": {
+        "object": "dbo.HHT_VERIENT_ART",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_DC_MJ_AKA": {
+      "source": {
+        "object": "dbo.INVT_DC_MJ_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_DC_MJ_CAT_VND_AKA": {
+      "source": {
+        "object": "dbo.INVT_DC_MJ_CAT_VND_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_CLR_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_CLR_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_FAB_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_FAB_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_MACRO_MVGR_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_MACRO_MVGR_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_MICRO_MVGR_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_MICRO_MVGR_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_MRP_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_MRP_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_RNG_SEG_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_RNG_SEG_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_SIZE_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_SIZE_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "INVT_ST_MJ_CAT_VND_AKA": {
+      "source": {
+        "object": "dbo.INVT_ST_MJ_CAT_VND_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "Issue_Tracker": {
+      "source": {
+        "object": "dbo.Issue_Tracker",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "Karma_Detailed_Report": {
+      "source": {
+        "object": "dbo.Karma_Detailed_Report",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "Karma_Summary_Report": {
+      "source": {
+        "object": "dbo.Karma_Summary_Report",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "L_ARTICLE_Sheet1": {
+      "source": {
+        "object": "dbo.L_ARTICLE_Sheet1",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "MRDC_VAR_ART_AKA": {
+      "source": {
+        "object": "dbo.MRDC_VAR_ART_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "MSA_STOCK_DATA_AKA": {
+      "source": {
+        "object": "dbo.MSA_STOCK_DATA_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "PO_DATA_AKA": {
+      "source": {
+        "object": "dbo.PO_DATA_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "Product_Master": {
+      "source": {
+        "object": "dbo.Product_Master",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "RETAIL_BAR_CODE_AKA": {
+      "source": {
+        "object": "dbo.RETAIL_BAR_CODE_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ROI_TREND_DATA_AKA": {
+      "source": {
+        "object": "dbo.ROI_TREND_DATA_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "SALE_DATA_CM_AKA": {
+      "source": {
+        "object": "dbo.SALE_DATA_CM_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "SALE_DATA_L_2_YEAR_MONTH_AKA": {
+      "source": {
+        "object": "dbo.SALE_DATA_L_2_YEAR_MONTH_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "STORE_MAJ_CAT_BUDGET_FIXTURE_AKA": {
+      "source": {
+        "object": "dbo.STORE_MAJ_CAT_BUDGET_FIXTURE_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "STORE_PLANT_MASTER_AKA": {
+      "source": {
+        "object": "dbo.STORE_PLANT_MASTER_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "Sale_Data_L_2Years_MAJ_CAT_aka": {
+      "source": {
+        "object": "dbo.Sale_Data_L_2Years_MAJ_CAT_aka",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "Sale_Data_L_2Years_STORE_aka": {
+      "source": {
+        "object": "dbo.Sale_Data_L_2Years_STORE_aka",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "TBL_16_RETAIL_GND_BGT_FORMAT_Sheet1": {
+      "source": {
+        "object": "dbo.TBL_16_RETAIL_GND_BGT_FORMAT_Sheet1",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "TNA_REPORT": {
+      "source": {
+        "object": "dbo.TNA_REPORT",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "Task_Tracker": {
+      "source": {
+        "object": "dbo.Task_Tracker",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "VIEW_SALE_GEN_CLR_ART_WISE": {
+      "source": {
+        "object": "dbo.VIEW_SALE_GEN_CLR_ART_WISE",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "VW_ET_SALES_DATA_AKA": {
+      "source": {
+        "object": "dbo.VW_ET_SALES_DATA_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "VW_GRC_REPORT_AKA": {
+      "source": {
+        "object": "dbo.VW_GRC_REPORT_AKA",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "VW_GRC_REPORT_NEW": {
+      "source": {
+        "object": "dbo.VW_GRC_REPORT_NEW",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "VW_LYSP_DAY_MAPPING": {
+      "source": {
+        "object": "dbo.VW_LYSP_DAY_MAPPING",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "ZSRM_VEND_PAYMENT_INFO": {
+      "source": {
+        "object": "dbo.ZSRM_VEND_PAYMENT_INFO",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    },
+    "vw_PO_PENDING_New": {
+      "source": {
+        "object": "dbo.vw_PO_PENDING_New",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
