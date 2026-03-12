@@ -26,7 +26,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     if (request.IM_USER != null)
                     {
-                        RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
+                        RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                         RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                         RfcRepository rfcrep = dest.Repository;
 
