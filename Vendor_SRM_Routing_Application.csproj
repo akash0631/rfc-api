@@ -1,0 +1,485 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\build\net46\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.props" Condition="Exists('packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\build\net46\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.props')" />
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>
+    </ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{5E07AD66-8559-435B-B15C-781A23275E7A}</ProjectGuid>
+    <ProjectTypeGuids>{349c5851-65df-11da-9384-00065b846f21};{fae04ec0-301f-11d3-bf4b-00c04f79efbc}</ProjectTypeGuids>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Vendor_SRM_Routing_Application</RootNamespace>
+    <AssemblyName>Vendor_SRM_Routing_Application</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <MvcBuildViews>false</MvcBuildViews>
+    <UseIISExpress>true</UseIISExpress>
+    <Use64BitIISExpress />
+    <IISExpressSSLPort>44355</IISExpressSSLPort>
+    <IISExpressAnonymousAuthentication />
+    <IISExpressWindowsAuthentication />
+    <IISExpressUseClassicPipelineMode />
+    <UseGlobalApplicationHostFile />
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="DocumentFormat.OpenXml, Version=3.1.0.0, Culture=neutral, PublicKeyToken=8fb06cb64d019a17, processorArchitecture=MSIL">
+      <HintPath>packages\DocumentFormat.OpenXml.3.1.0\lib\net46\DocumentFormat.OpenXml.dll</HintPath>
+    </Reference>
+    <Reference Include="DocumentFormat.OpenXml.Framework, Version=3.1.0.0, Culture=neutral, PublicKeyToken=8fb06cb64d019a17, processorArchitecture=MSIL">
+      <HintPath>packages\DocumentFormat.OpenXml.Framework.3.1.0\lib\net46\DocumentFormat.OpenXml.Framework.dll</HintPath>
+    </Reference>
+    <Reference Include="DotNetZip, Version=1.16.0.0, Culture=neutral, PublicKeyToken=6583c7c814667745, processorArchitecture=MSIL">
+      <HintPath>packages\DotNetZip.1.16.0\lib\net40\DotNetZip.dll</HintPath>
+    </Reference>
+    <Reference Include="EPPlus, Version=7.3.0.0, Culture=neutral, PublicKeyToken=ea159fdaa78159a1, processorArchitecture=MSIL">
+      <HintPath>packages\EPPlus.7.3.0\lib\net462\EPPlus.dll</HintPath>
+    </Reference>
+    <Reference Include="EPPlus.Interfaces, Version=6.1.1.0, Culture=neutral, PublicKeyToken=a694d7f3b0907a61, processorArchitecture=MSIL">
+      <HintPath>packages\EPPlus.Interfaces.6.1.1\lib\net462\EPPlus.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="EPPlus.System.Drawing, Version=6.1.1.0, Culture=neutral, PublicKeyToken=2308d35469c9bac0, processorArchitecture=MSIL">
+      <HintPath>packages\EPPlus.System.Drawing.6.1.1\lib\net462\EPPlus.System.Drawing.dll</HintPath>
+    </Reference>
+    <Reference Include="InMemoryMultipartFormDataStreamProvider, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\InMemoryMultipartFormDataStreamProvider.1.0.1\lib\net45\InMemoryMultipartFormDataStreamProvider.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Microsoft.IO.RecyclableMemoryStream, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.IO.RecyclableMemoryStream.3.0.0\lib\netstandard2.0\Microsoft.IO.RecyclableMemoryStream.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json.Bson, Version=1.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>packages\Newtonsoft.Json.Bson.1.0.3\lib\net45\Newtonsoft.Json.Bson.dll</HintPath>
+    </Reference>
+    <Reference Include="PresentationCore" />
+    <Reference Include="sapnco, Version=3.0.0.42, Culture=neutral, PublicKeyToken=50436dca5c7f7d23, processorArchitecture=AMD64">
+      <HintPath>packages\sapnco_x64.3.0.18\lib\sapnco.dll</HintPath>
+    </Reference>
+    <Reference Include="sapnco_utils, Version=3.0.0.42, Culture=neutral, PublicKeyToken=50436dca5c7f7d23, processorArchitecture=AMD64">
+      <HintPath>packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll</HintPath>
+    </Reference>
+    <Reference Include="Swashbuckle.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=cd1bb07a5ac7c7bc, processorArchitecture=MSIL">
+      <HintPath>packages\Swashbuckle.Core.5.6.0\lib\net40\Swashbuckle.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ComponentModel.Annotations, Version=4.2.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\System.ComponentModel.Annotations.5.0.0\lib\net461\System.ComponentModel.Annotations.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Net.Http.Formatting, Version=6.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.AspNet.WebApi.Client.6.0.0\lib\net45\System.Net.Http.Formatting.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=4.0.4.1, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\System.Runtime.CompilerServices.Unsafe.4.5.3\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Security" />
+    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Threading.Tasks.Extensions.4.5.4\lib\net461\System.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.Cors, Version=5.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.AspNet.Cors.5.3.0\lib\net45\System.Web.Cors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.DynamicData" />
+    <Reference Include="System.Web.Entity" />
+    <Reference Include="System.Web.ApplicationServices" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Web.Http, Version=5.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.AspNet.WebApi.Core.5.3.0\lib\net45\System.Web.Http.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.Http.Cors, Version=5.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.AspNet.WebApi.Cors.5.3.0\lib\net45\System.Web.Http.Cors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.Http.WebHost, Version=5.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\Microsoft.AspNet.WebApi.WebHost.5.3.0\lib\net45\System.Web.Http.WebHost.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Web.Abstractions" />
+    <Reference Include="System.Web.Routing" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Web.Services" />
+    <Reference Include="System.EnterpriseServices" />
+    <Reference Include="Microsoft.Web.Infrastructure, Version=2.0.1.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <Private>True</Private>
+      <HintPath>packages\Microsoft.Web.Infrastructure.2.0.1\lib\net40\Microsoft.Web.Infrastructure.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Net.Http">
+    </Reference>
+    <Reference Include="System.Net.Http.WebRequest">
+    </Reference>
+    <Reference Include="System.Web.Helpers, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <Private>True</Private>
+      <HintPath>packages\Microsoft.AspNet.WebPages.3.2.9\lib\net45\System.Web.Helpers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.Mvc, Version=5.2.9.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <Private>True</Private>
+      <HintPath>packages\Microsoft.AspNet.Mvc.5.2.9\lib\net45\System.Web.Mvc.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.Optimization">
+      <HintPath>packages\Microsoft.AspNet.Web.Optimization.1.1.3\lib\net40\System.Web.Optimization.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.Razor, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <Private>True</Private>
+      <HintPath>packages\Microsoft.AspNet.Razor.3.2.9\lib\net45\System.Web.Razor.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.WebPages, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <Private>True</Private>
+      <HintPath>packages\Microsoft.AspNet.WebPages.3.2.9\lib\net45\System.Web.WebPages.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.WebPages.Deployment, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <Private>True</Private>
+      <HintPath>packages\Microsoft.AspNet.WebPages.3.2.9\lib\net45\System.Web.WebPages.Deployment.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web.WebPages.Razor, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <Private>True</Private>
+      <HintPath>packages\Microsoft.AspNet.WebPages.3.2.9\lib\net45\System.Web.WebPages.Razor.dll</HintPath>
+    </Reference>
+    <Reference Include="WebActivatorEx, Version=2.0.0.0, Culture=neutral, PublicKeyToken=7b26dc2a43f6a0d4, processorArchitecture=MSIL">
+      <HintPath>packages\WebActivatorEx.2.0\lib\net40\WebActivatorEx.dll</HintPath>
+    </Reference>
+    <Reference Include="WebGrease">
+      <Private>True</Private>
+      <HintPath>packages\WebGrease.1.6.0\lib\WebGrease.dll</HintPath>
+    </Reference>
+    <Reference Include="Antlr3.Runtime">
+      <Private>True</Private>
+      <HintPath>packages\Antlr.3.5.0.2\lib\Antlr3.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="WindowsBase" />
+    <Reference Include="zxing, Version=0.16.9.0, Culture=neutral, PublicKeyToken=4e88037ac681fe60, processorArchitecture=MSIL">
+      <HintPath>packages\ZXing.Net.0.16.9\lib\net48\zxing.dll</HintPath>
+    </Reference>
+    <Reference Include="zxing.presentation, Version=0.16.9.0, Culture=neutral, PublicKeyToken=4e88037ac681fe60, processorArchitecture=MSIL">
+      <HintPath>packages\ZXing.Net.0.16.9\lib\net48\zxing.presentation.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <!--<Reference Include="Newtonsoft.Json">
+      <HintPath>packages\Newtonsoft.Json.12.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>-->
+    <Reference Include="Microsoft.CodeDom.Providers.DotNetCompilerPlatform">
+      <HintPath>packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\lib\net45\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="App_Start\BundleConfig.cs" />
+    <Compile Include="App_Start\FilterConfig.cs" />
+    <Compile Include="App_Start\RouteConfig.cs" />
+    <Compile Include="App_Start\SwaggerConfig.cs" />
+    <Compile Include="App_Start\WebApiConfig.cs" />
+    <Compile Include="Controllers\Authenticate_sub_oldController.cs" />
+    <Compile Include="Controllers\Authenticate_oldController.cs" />
+    <Compile Include="Controllers\Authentication\LoginController.cs" />
+    <Compile Include="Controllers\BroaderMenu\Article_OTBController.cs" />
+    <Compile Include="Controllers\DcRouting\HU_IdentifierAutoUpdateController.cs" />
+    <Compile Include="Controllers\DcRouting\DCRoutingAutoUpdateController.cs" />
+    <Compile Include="Controllers\DcRouting\ZWM_HU_STORE_TT_RFCController.cs" />
+    <Compile Include="Controllers\DcRouting\ZDC_ROUTING_SUB_RFCController.cs" />
+    <Compile Include="Controllers\DcRouting\zwm_dc_routing_rfcController.cs" />
+    <Compile Include="Controllers\DcRouting\ZWM_GATE_ENTRY_RFCController.cs" />
+    <Compile Include="Controllers\Finance\ZSALES_MOP_RFCController.cs" />
+    <Compile Include="Controllers\Finance\ZRFC_CREDITORS_LOVABLController.cs" />
+    <Compile Include="Controllers\FMS_FABRIC_PUTWAY\FMSAutoUpdateController.cs" />
+    <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Post_FABPUTWAYGRCController.cs" />
+    <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Validate_GRCController.cs" />
+    <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Validation_BINController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GATE_SAVE3_NController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\Gate_Box_ValidationController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GATE_PALLATE_VALIDATE4_NController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GATE_BIN_VALIDATION4_NController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GET_GATE_ENTRY_DATA4_RFCController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GET_GATE_ENTRY_LIST4_RFCController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GATE_BIN_VALIDATION3_NController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GATE_PALLATE_VALIDATE3_NController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GATE_BOX3NController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GET_GATE_ENTRY_PALLATE_RFCController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GET_GATE_ENTRY_DATA_RFCController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GET_GATE_ENTRY_LIST_RFCController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\Pallate_Box_ValidationController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\Gate_ValidationController.cs" />
+    <Compile Include="Controllers\HRMS\ZPF_MASTER_POST_RFCController.cs" />
+    <Compile Include="Controllers\HRMS\ZLWF_MASTER_POST_RFCController.cs" />
+    <Compile Include="Controllers\HRMS\ZESIC_MASTER_POST_RFCController.cs" />
+    <Compile Include="Controllers\HRMS\ZPT_MASTER_POST_RFCController.cs" />
+    <Compile Include="Controllers\HRMS\ZHR_LEAVE_POLICY_RFCController.cs" />
+    <Compile Include="Controllers\HU_Creation\ArticleDataController.cs" />
+    <Compile Include="Controllers\HU_Creation\BarCodeController.cs" />
+    <Compile Include="Controllers\HU_Creation\HU_AuthenticateController.cs" />
+    <Compile Include="Controllers\HU_Creation\HU_AutoUpdateController.cs" />
+    <Compile Include="Controllers\HU_Creation\HUCreationController.cs" />
+    <Compile Include="Controllers\HU_Creation\HUNameCheckController.cs" />
+    <Compile Include="Controllers\HU_Creation\HUNameGeneratorController.cs" />
+    <Compile Include="Controllers\HU_Creation\POReportController.cs" />
+    <Compile Include="Controllers\HU_Creation\QrCodeZipController.cs" />
+    <Compile Include="Controllers\HU_Creation\UploadArticleDataController.cs" />
+    <Compile Include="Controllers\HU_Creation\UploadPoArticleDataController.cs" />
+    <Compile Include="Controllers\HU_Creation\UserValidatePODetailController.cs" />
+    <Compile Include="Controllers\HU_Creation\ZVND_HU_PUSH_API_POSTController.cs" />
+    <Compile Include="Controllers\HU_Creation\ZVND_HU_VALIDATE_RFCController.cs" />
+    <Compile Include="Controllers\HU_Creation\ZWM_VEND_PO_HEADERController.cs" />
+    <Compile Include="Controllers\HU_PRINT\HU_IdentificationController.cs" />
+    <Compile Include="Controllers\HU_PRINT\HU_PrintController.cs" />
+    <Compile Include="Controllers\HU_SCAN\ZWM_SAVE_HUController.cs" />
+    <Compile Include="Controllers\HU_SCAN\ZWM_SCAN_HUController.cs" />
+    <Compile Include="Controllers\NSO\NSOSiteListController.cs" />
+    <Compile Include="Controllers\NSO\NSOConfigPostController.cs" />
+    <Compile Include="Controllers\NSO\NSOConfigRoutingController.cs" />
+    <Compile Include="Controllers\NSO\NSOExpensePostController.cs" />
+    <Compile Include="Controllers\NSO\NSO_GL_CODESController.cs" />
+    <Compile Include="Controllers\PaperlessPicklist\GetPicklistDataController.cs" />
+    <Compile Include="Controllers\PaperlessPicklist\AuthenticateController.cs" />
+    <Compile Include="Controllers\PaperlessPicklist\GetPicklistNumberController.cs" />
+    <Compile Include="Controllers\PaperlessPicklist\PostPickListScannedDataController.cs" />
+    <Compile Include="Controllers\Sampling\ArticleYesOrNoDataController.cs" />
+    <Compile Include="Controllers\Sampling\QcDoneController.cs" />
+    <Compile Include="Controllers\Sampling\ArticleYesOrNoController.cs" />
+    <Compile Include="Controllers\Sampling\ArticleIdentifierController.cs" />
+    <Compile Include="Controllers\Site_Creation\Site_AutoUpdateController.cs" />
+    <Compile Include="Controllers\Site_Creation\Store_Site_CONF_SAVEController.cs" />
+    <Compile Include="Controllers\Site_Creation\Store_Site_CreationController_New.cs" />
+    <Compile Include="Controllers\Site_Creation\Store_Site_CreationController.cs" />
+    <Compile Include="Controllers\PS_AutoUpdateController.cs" />
+    <Compile Include="Controllers\Vehicle_Loading\ZWM_SAVE_SCANNEDHULIST_RFCController.cs" />
+    <Compile Include="Controllers\Vehicle_Loading\ZWM_HU_SELECTION_RFCController.cs" />
+    <Compile Include="Controllers\Vehicle_Loading\ZWM_TRANSPORTER_DETAILS_RFCController.cs" />
+    <Compile Include="Controllers\Vehicle_Loading\ZWM_HUBWISE_STORE_LIST_RFCController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\ZPO_MODIFICATIONController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\PO_DEL_Date_DATA_POSTController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\Maj_DrpController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\PaymentsrmController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\PO_Fab_POController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\PPT_LISTController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\PRvsPOController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\CompleteRoutingStatusListController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\GateEntryDetails.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\RoutingStatusGROUPController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\RoutingStatusgrpListController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\PPTRoutingStatusListController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\RRBulkUpdate_Routing_Status.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\SRM_AutoUpdateController.cs" />
+    <Compile Include="Controllers\BaseController.cs" />
+    <Compile Include="Controllers\HomeController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\PO_DetailController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\RoutingStatusListController.cs" />
+    <Compile Include="Controllers\Site_Creation\Store_Site_ListController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\RRUpdate_Routing_Status.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\FetchASNData.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\ASN_APPROVED_DATA_POST.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\PPT_POSTController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\Update_Routing_StatusController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\ZME2M_LIveController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\ZMM_ART_CREATION_RFCController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Routing\ZVND_PUTWAY_SAVE_DATA_RFCController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Zone\Zone_PO_DetailController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Zone\ZoneVendorPoDataController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Zone\ZoneVendorDataController.cs" />
+    <Compile Include="Controllers\Vendor_SRM_Zone\ZoneAuthenticateController.cs" />
+    <Compile Include="Global.asax.cs">
+      <DependentUpon>Global.asax</DependentUpon>
+    </Compile>
+    <Compile Include="Models\FMS_FABRIC_PUTWAY\FMSAutoUpdate.cs" />
+    <Compile Include="Models\FMS_FABRIC_PUTWAY\Post_FABPUTWAYGRC.cs" />
+    <Compile Include="Models\FMS_FABRIC_PUTWAY\Validate_BIN.cs" />
+    <Compile Include="Models\FMS_FABRIC_PUTWAY\Validate_GRC.cs" />
+    <Compile Include="Models\HU_Creation\AddArticle.cs" />
+    <Compile Include="Models\HU_Creation\DBOperations.cs" />
+    <Compile Include="Models\HU_Creation\GetPicklistRequest.cs" />
+    <Compile Include="Models\HU_Creation\ReportRequest.cs" />
+    <Compile Include="Models\HU_Creation\RoutingStatusList.cs" />
+    <Compile Include="Models\HU_Creation\Submit_HU_Details.cs" />
+    <Compile Include="Models\HU_Creation\Submit_Routing_Status.cs" />
+    <Compile Include="Models\Login\LoginRequest.cs" />
+    <Compile Include="Models\PeperlessPicklist\AuthenticateRequest.cs" />
+    <Compile Include="Models\PeperlessPicklist\GetPicklistData.cs" />
+    <Compile Include="Models\Sampling\ArticleYesNo.cs" />
+    <Compile Include="Models\Sampling\YesNoTTRequest.cs" />
+    <Compile Include="Models\Site_Creation\Store_Creation_CONF_SAVE.cs" />
+    <Compile Include="Models\Site_Creation\Store_Site_Creation.cs" />
+    <Compile Include="Models\Site_Creation\Store_Creation_List.cs" />
+    <Compile Include="Models\Authenticate.cs" />
+    <Compile Include="Models\Vendor_SRM_Routing\Autoupdate.cs" />
+    <Compile Include="Models\Vendor_SRM_Routing\PO_Detail.cs" />
+    <Compile Include="Models\Vendor_SRM_Routing\PRvsPO.cs" />
+    <Compile Include="Models\Vendor_SRM_Routing\RFCconfig.cs" />
+    <Compile Include="Models\Vendor_SRM_Routing\RoutingStatusList.cs" />
+    <Compile Include="Models\Vendor_SRM_Routing\Submit_Routing_Status.cs" />
+    <Compile Include="PO_Compliance\PO_COMP_GETController.cs" />
+    <Compile Include="PO_Compliance\PO_COMP_POSTController.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Utils\Logger\Logger.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="AutoUpdate.txt" />
+    <Content Include="Content\bootstrap-grid.css" />
+    <Content Include="Content\bootstrap-grid.min.css" />
+    <Content Include="Content\bootstrap-grid.rtl.css" />
+    <Content Include="Content\bootstrap-grid.rtl.min.css" />
+    <Content Include="Content\bootstrap-reboot.css" />
+    <Content Include="Content\bootstrap-reboot.min.css" />
+    <Content Include="Content\bootstrap-reboot.rtl.css" />
+    <Content Include="Content\bootstrap-reboot.rtl.min.css" />
+    <Content Include="Content\bootstrap-utilities.css" />
+    <Content Include="Content\bootstrap-utilities.min.css" />
+    <Content Include="Content\bootstrap-utilities.rtl.css" />
+    <Content Include="Content\bootstrap-utilities.rtl.min.css" />
+    <Content Include="Content\bootstrap.css" />
+    <Content Include="Content\bootstrap.min.css" />
+    <Content Include="Content\bootstrap.rtl.css" />
+    <Content Include="Content\bootstrap.rtl.min.css" />
+    <Content Include="favicon.ico" />
+    <Content Include="DCRouting_AutoUpdate.txt" />
+    <Content Include="FMS_AutoUpdate.txt" />
+    <Content Include="Global.asax" />
+    <Content Include="Content\Site.css" />
+    <Content Include="HU_AutoUpdate.txt" />
+    <Content Include="Scripts\bootstrap.bundle.js" />
+    <Content Include="Scripts\bootstrap.bundle.min.js" />
+    <Content Include="Scripts\bootstrap.esm.js" />
+    <Content Include="Scripts\bootstrap.esm.min.js" />
+    <Content Include="Scripts\bootstrap.js" />
+    <Content Include="Scripts\bootstrap.min.js" />
+    <None Include="Properties\PublishProfiles\Default Settings.pubxml" />
+    <None Include="Properties\PublishProfiles\FolderProfile.pubxml" />
+    <None Include="Properties\PublishProfiles\FolderProfile1.pubxml" />
+    <None Include="Scripts\jquery-3.4.1.intellisense.js" />
+    <Content Include="Scripts\jquery-3.4.1.js" />
+    <Content Include="Scripts\jquery-3.4.1.min.js" />
+    <Content Include="Scripts\jquery-3.4.1.slim.js" />
+    <Content Include="Scripts\jquery-3.4.1.slim.min.js" />
+    <None Include="Scripts\jquery.validate-vsdoc.js" />
+    <Content Include="Scripts\jquery.validate.js" />
+    <Content Include="Scripts\jquery.validate.min.js" />
+    <Content Include="Scripts\jquery.validate.unobtrusive.js" />
+    <Content Include="Scripts\jquery.validate.unobtrusive.min.js" />
+    <Content Include="Scripts\modernizr-2.8.3.js" />
+    <Content Include="Site_AutoUpdate.txt" />
+    <Content Include="SRM_AutoUpdate.txt" />
+    <Content Include="Web.config" />
+    <Content Include="Web.Debug.config">
+      <DependentUpon>Web.config</DependentUpon>
+    </Content>
+    <Content Include="Web.Release.config">
+      <DependentUpon>Web.config</DependentUpon>
+    </Content>
+    <Content Include="Views\Web.config" />
+    <Content Include="Views\_ViewStart.cshtml" />
+    <Content Include="Views\Shared\Error.cshtml" />
+    <Content Include="Views\Shared\_Layout.cshtml" />
+    <Content Include="Views\Home\About.cshtml" />
+    <Content Include="Views\Home\Contact.cshtml" />
+    <Content Include="Views\Home\Index.cshtml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="App_Data\" />
+    <Folder Include="ClientDocument\" />
+    <Folder Include="Views\GSTR\" />
+    <Folder Include="Views\ZVND_PUTWAY_SAVE_DATA_RFC\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Content\bootstrap.rtl.min.css.map" />
+    <Content Include="Content\bootstrap.rtl.css.map" />
+    <Content Include="Content\bootstrap.min.css.map" />
+    <Content Include="Content\bootstrap.css.map" />
+    <Content Include="Content\bootstrap-utilities.rtl.min.css.map" />
+    <Content Include="Content\bootstrap-utilities.rtl.css.map" />
+    <Content Include="Content\bootstrap-utilities.min.css.map" />
+    <Content Include="Content\bootstrap-utilities.css.map" />
+    <Content Include="Content\bootstrap-reboot.rtl.min.css.map" />
+    <Content Include="Content\bootstrap-reboot.rtl.css.map" />
+    <Content Include="Content\bootstrap-reboot.min.css.map" />
+    <Content Include="Content\bootstrap-reboot.css.map" />
+    <Content Include="Content\bootstrap-grid.rtl.min.css.map" />
+    <Content Include="Content\bootstrap-grid.rtl.css.map" />
+    <Content Include="Content\bootstrap-grid.min.css.map" />
+    <Content Include="Content\bootstrap-grid.css.map" />
+    <None Include="packages.config" />
+    <Content Include="Scripts\bootstrap.min.js.map" />
+    <Content Include="Scripts\bootstrap.js.map" />
+    <Content Include="Scripts\bootstrap.esm.min.js.map" />
+    <Content Include="Scripts\bootstrap.esm.js.map" />
+    <Content Include="Scripts\bootstrap.bundle.min.js.map" />
+    <Content Include="Scripts\bootstrap.bundle.js.map" />
+    <Content Include="Scripts\jquery-3.4.1.slim.min.map" />
+    <Content Include="Scripts\jquery-3.4.1.min.map" />
+  </ItemGroup>
+  <PropertyGroup>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
+    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+  </PropertyGroup>
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <Import Project="$(VSToolsPath)\WebApplications\Microsoft.WebApplication.targets" Condition="'$(VSToolsPath)' != ''" />
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v10.0\WebApplications\Microsoft.WebApplication.targets" Condition="false" />
+  <Target Name="MvcBuildViews" AfterTargets="AfterBuild" Condition="'$(MvcBuildViews)'=='true'">
+    <AspNetCompiler VirtualPath="temp" PhysicalPath="$(WebProjectOutputDir)" />
+  </Target>
+  <ProjectExtensions>
+    <VisualStudio>
+      <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}">
+        <WebProjectProperties>
+          <UseIIS>True</UseIIS>
+          <AutoAssignPort>True</AutoAssignPort>
+          <DevelopmentServerPort>58953</DevelopmentServerPort>
+          <DevelopmentServerVPath>/</DevelopmentServerVPath>
+          <IISUrl>https://localhost:44355/</IISUrl>
+          <NTLMAuthentication>False</NTLMAuthentication>
+          <UseCustomServer>False</UseCustomServer>
+          <CustomServerUrl>
+          </CustomServerUrl>
+          <SaveServerSettingsInUserFile>False</SaveServerSettingsInUserFile>
+        </WebProjectProperties>
+      </FlavorProperties>
+    </VisualStudio>
+  </ProjectExtensions>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\build\net46\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\build\net46\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.props'))" />
+  </Target>
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target> -->
+</Project>
