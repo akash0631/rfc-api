@@ -1,47 +1,73 @@
 name: Deploy Controllers to IIS (V2DC-ADDVERB)
 
-# Triggers whenever a new RFC controller is pushed to any Controllers/ subfolder
 on:
   push:
     branches: [master]
     paths:
       - 'Controllers/**'
+      - 'Models/**'
+      - 'SyncController.cs'
 
 jobs:
   deploy-iis:
     name: Build & Deploy to V2DC-ADDVERB IIS
-    runs-on: self-hosted   # <-- runs on the runner installed on V2DC-ADDVERB
+    runs-on: self-hosted
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Find MSBuild via vswhere
+        id: msbuild
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe`) do set MSBUILD_PATH=%%i
+          if "%MSBUILD_PATH%"=="" (
+            set MSBUILD_PATH=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+          )
+          echo msbuild_path=%MSBUILD_PATH%>> %GITHUB_OUTPUT%
+          echo Found MSBuild: %MSBUILD_PATH%
 
       - name: Restore NuGet packages
-        run: nuget restore rfc-api.sln
         shell: cmd
+        run: |
+          if exist "%PROGRAMDATA%\chocolatey\bin\nuget.exe" (
+            "%PROGRAMDATA%\chocolatey\bin\nuget.exe" restore Vendor_SRM_Routing_Application.sln
+          ) else if exist "C:\nuget\nuget.exe" (
+            C:\nuget\nuget.exe restore Vendor_SRM_Routing_Application.sln
+          ) else (
+            echo NuGet not found, downloading...
+            powershell -Command "New-Item -ItemType Directory -Force -Path C:\nuget; Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile C:\nuget\nuget.exe"
+            C:\nuget\nuget.exe restore Vendor_SRM_Routing_Application.sln
+          )
 
       - name: Build solution (Release)
-        run: msbuild rfc-api.sln /p:Configuration=Release /p:Platform="Any CPU" /m
-        shell: cmd
-
-      - name: Deploy to IIS via Web Deploy (MsDeploy)
         shell: cmd
         run: |
-          "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" ^
-            -verb:sync ^
-            -source:package=".\publish\rfc-api.zip" ^
-            -dest:auto,computerName="localhost",authtype="NTLM" ^
-            -setParam:name="IIS Web Application Name",value="rfc-api" ^
-            -enableRule:AppOffline
+          set MSBUILD=${{ steps.msbuild.outputs.msbuild_path }}
+          if not exist "%MSBUILD%" set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+          "%MSBUILD%" Vendor_SRM_Routing_Application.sln /p:Configuration=Release /p:Platform="Any CPU" /m /nologo /verbosity:minimal
 
-      - name: Notify success
-        if: success()
-        run: |
-          echo "Deployed successfully to V2DC-ADDVERB IIS at %date% %time%"
-          curl -s -X POST "https://v2-rfc-pipeline.akash-bab.workers.dev/notify" ^
-            -H "Content-Type: application/json" ^
-            -d "{\"event\":\"iis_deploy\",\"status\":\"success\",\"ref\":\"${{ github.sha }}\"}"
+      - name: Deploy bin to IIS app folder via robocopy
         shell: cmd
+        run: |
+          robocopy bin\ "C:\inetpub\wwwroot\Store Tracker\bin\" *.dll *.pdb /XO /NJH /NJS
+          if %ERRORLEVEL% LEQ 7 (
+            echo Robocopy completed successfully
+            exit /b 0
+          ) else (
+            echo Robocopy failed with code %ERRORLEVEL%
+            exit /b %ERRORLEVEL%
+          )
+
+      - name: Recycle IIS App Pool to pick up new DLLs
+        shell: cmd
+        run: |
+          powershell -Command "Import-Module WebAdministration; Restart-WebAppPool 'Store Tracker' -ErrorAction SilentlyContinue; Write-Host 'App pool recycled'"
+
+      - name: Trigger sync - pull SAP data to data lake
+        shell: cmd
+        run: |
+          timeout /t 5 /nobreak
+          curl -s -X POST http://localhost/api/Sync/run-all -H "Content-Type: application/json"
+          echo Sync triggered
