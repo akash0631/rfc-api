@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "RFC_JOBS"
-id = "2c53c2f286464d529c358d33106cbc7b"
+id = "f31b07a159dc4c3bbc2c06dc2c9fdafc"
 
 [vars]
 GITHUB_REPO = "akash0631/rfc-api"
