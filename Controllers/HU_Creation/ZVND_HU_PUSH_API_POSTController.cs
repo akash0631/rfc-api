@@ -49,7 +49,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                         E_Data.SetValue("CREATION_USER", request.CREATION_USER);
                         E_Data.SetValue("MESSAGE", request.MESSAGE);
                         E_Data.SetValue("STATUS", request.STATUS);
-                       
+                        E_Data.SetValue("INV_NO", request.INV_NO);
+
                     }
 
 
@@ -105,6 +106,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
         public string CREATION_USER { get; set; }
         public string MESSAGE { get; set; }
         public string STATUS { get; set; }
+        public string INV_NO { get; set; }
+        
 
 
     }
