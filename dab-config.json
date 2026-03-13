@@ -1431,6 +1431,32 @@
           ]
         }
       ]
+    },
+    "ET_ZGET_STORE_MASTER": {
+      "source": {
+        "object": "dbo.ET_ZGET_STORE_MASTER",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_ZGET_STORE_MASTER"
+      },
+      "graphql": {
+        "enabled": false
+      }
     }
   }
 }
