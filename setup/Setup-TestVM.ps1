@@ -7,7 +7,7 @@
 $ErrorActionPreference = "Stop"
 $HOST_NAME  = $env:COMPUTERNAME
 $REPO_URL   = "https://github.com/akash0631/rfc-api"
-$REG_TOKEN  = "BU2HDP5UU4JQDZUSG7H3SF3JWP23S"
+$REG_TOKEN  = "BU2HDP3OEXOKBKTW6SHGJW3JWP3OC"
 $IIS_PATH   = "C:\inetpub\wwwroot\Store Tracker"
 $RUNNER_DIR = "C:\actions-runner"
 $NUGET_DIR  = "C:\nuget"
