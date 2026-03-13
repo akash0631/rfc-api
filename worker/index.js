@@ -1077,7 +1077,7 @@ let selectedFile = null;
 let selectedEnv  = 'dev';
 let pollTimer    = null;
 
-function handleFile(file) {
+window.handleFile = function handleFile(file) {
   if (!file) return;
   selectedFile = file;
   document.getElementById('fileSel').style.display='flex';
@@ -1093,14 +1093,14 @@ function handleDrop(e) {
   document.getElementById('drop').classList.remove('over');
   handleFile(e.dataTransfer.files[0]);
 }
-function selEnv(env) {
+window.selEnv = function selEnv(env) {
   selectedEnv = env;
   ['dev','quality','production'].forEach(e => {
     document.getElementById('env-'+e).classList.toggle('sel', e===env);
   });
 }
 
-async function deploy() {
+window.deploy = async function deploy() {
   if (!selectedFile) { alert('Please select a .docx file first'); return; }
   document.getElementById('errBox').style.display='none';
   document.getElementById('upload-section').style.display='none';
@@ -1137,7 +1137,7 @@ function updateStep(id, status, detail) {
   }
 }
 
-function pollStatus(jobId) {
+window.pollStatus = function pollStatus(jobId) {
   pollTimer = setInterval(async () => {
     try {
       const r = await fetch('/status/'+jobId);
