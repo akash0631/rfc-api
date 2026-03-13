@@ -17,96 +17,90 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZTEST_RFC")]
-        public async Task<IHttpActionResult> ZTEST_RFC([FromBody] ZTEST_RFCRequest request)
+        public object ZTEST_RFC(ZTEST_RFCRequest request)
         {
             try
             {
-                RfcDestination destination = RfcDestinationManager.GetDestination(BaseController.rfcConfigparameters());
-                RfcRepository repository = destination.Repository;
-                IRfcFunction function = repository.CreateFunction("ZTEST_RFC");
-
-                function.SetValue("IM_USER", request.IM_USER);
-                function.SetValue("IM_WERKS", request.IM_WERKS);
-
-                function.Invoke(destination);
-
-                IRfcTable exReturn = function.GetTable("EX_RETURN");
-                if (exReturn.Count > 0)
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZTEST_RFC");
+                
+                myfun.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
+                myfun.SetValue("I_DATE", request.I_DATE);
+                
+                myfun.Invoke(dest);
+                
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+                
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    exReturn.CurrentIndex = 0;
-                    string returnType = exReturn.GetString("TYPE");
-                    if (returnType == "E")
+                    return new
                     {
-                        string message = exReturn.GetString("MESSAGE");
-                        return Ok(new
-                        {
-                            Status = "E",
-                            Message = message,
-                            Data = new { ET_DATA = new List<object>() }
-                        });
-                    }
+                        Status = "E",
+                        Message = EX_RETURN.GetString("MESSAGE"),
+                        Data = (object)null
+                    };
                 }
-
-                IRfcTable etData = function.GetTable("ET_DATA");
-                List<Dictionary<string, object>> dataList = new List<Dictionary<string, object>>();
-
-                for (int i = 0; i < etData.Count; i++)
+                
+                IRfcTable tbl = myfun.GetTable("ET_RESULT");
+                var resultData = tbl.AsEnumerable().Select(row =>
                 {
-                    etData.CurrentIndex = i;
-                    Dictionary<string, object> row = new Dictionary<string, object>();
-                    
-                    for (int j = 0; j < etData.Metadata.FieldCount; j++)
+                    var rowData = new Dictionary<string, object>();
+                    for (int i = 0; i < row.Metadata.FieldCount; i++)
                     {
-                        RfcFieldMetadata fieldMeta = etData.Metadata[j];
-                        if (fieldMeta.DataType != RfcDataType.STRUCTURE && fieldMeta.DataType != RfcDataType.TABLE)
+                        var field = row.Metadata[i];
+                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            row[fieldMeta.Name] = etData.GetValue(fieldMeta.Name);
+                            rowData[field.Name] = row.GetValue(field.Name);
                         }
                     }
-                    
-                    dataList.Add(row);
-                }
-
-                return Ok(new
+                    return rowData;
+                }).ToList();
+                
+                return new
                 {
                     Status = "S",
                     Message = "Success",
-                    Data = new { ET_DATA = dataList }
-                });
+                    Data = new
+                    {
+                        ET_RESULT = resultData
+                    }
+                };
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new
+                return new
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { ET_DATA = new List<object>() }
-                });
+                    Data = (object)null
+                };
             }
             catch (RfcCommunicationException ex)
             {
-                return Ok(new
+                return new
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { ET_DATA = new List<object>() }
-                });
+                    Data = (object)null
+                };
             }
             catch (Exception ex)
             {
-                return Ok(new
+                return new
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { ET_DATA = new List<object>() }
-                });
+                    Data = (object)null
+                };
             }
         }
     }
-
+    
     public class ZTEST_RFCRequest
     {
-        public string IM_USER { get; set; }
-        public string IM_WERKS { get; set; }
+        public string I_COMPANY_CODE { get; set; }
+        public string I_DATE { get; set; }
     }
 }
