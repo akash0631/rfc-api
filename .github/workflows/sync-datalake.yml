@@ -22,30 +22,31 @@ jobs:
           reg add "HKCU\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell" /v ExecutionPolicy /t REG_SZ /d Unrestricted /f
           echo Execution policy unlocked
 
-      - name: STEP 0 - Discover IIS apps and test RFC endpoint
+      - name: STEP 0 - Probe IIS to find RFC endpoint URL
+        continue-on-error: true
         shell: powershell
         run: |
-          Write-Host '=== IIS Sites and Apps ==='
-          Import-Module WebAdministration -ErrorAction SilentlyContinue
-          Get-Website | Select-Object Name, State, PhysicalPath, @{n='Bindings';e={$_.bindings.collection | ForEach-Object {"$($_.protocol)://$($_.bindingInformation)"}}} | Format-List
-          Write-Host '=== Web Applications ==='
-          Get-WebApplication | Select-Object Site, Path, PhysicalPath | Format-List
-          Write-Host '=== Probing RFC endpoints ==='
+          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20250101","I_POSTING_DATE_HIGH":"20260313"}'
           $urls = @(
             'http://localhost/api/ZADVANCE_PAYMENT_RFC',
             'http://localhost/rfc-api/api/ZADVANCE_PAYMENT_RFC',
-            'http://localhost/Store Tracker/api/ZADVANCE_PAYMENT_RFC',
-            'http://localhost/Vendor_SRM/api/ZADVANCE_PAYMENT_RFC'
+            'http://localhost/StoreTracker/api/ZADVANCE_PAYMENT_RFC',
+            'http://localhost/Store%20Tracker/api/ZADVANCE_PAYMENT_RFC',
+            'http://localhost/Vendor_SRM_Routing_Application/api/ZADVANCE_PAYMENT_RFC'
           )
+          Write-Host 'Probing IIS for RFC endpoint...'
           foreach ($url in $urls) {
             try {
-              $r = Invoke-WebRequest -Uri $url -Method GET -TimeoutSec 5 -ErrorAction Stop
-              Write-Host "FOUND: $url -> $($r.StatusCode)"
+              $r = Invoke-WebRequest -Uri $url -Method POST -Body $body -ContentType 'application/json' -TimeoutSec 8 -ErrorAction Stop
+              Write-Host "HIT [$($r.StatusCode)]: $url"
             } catch {
               $code = $_.Exception.Response.StatusCode.value__
-              Write-Host "[$code] $url"
+              if ($code) { Write-Host "[$code]: $url" }
+              else { Write-Host "[NO_RESP]: $url" }
             }
           }
+          Write-Host '=== IIS AppPools ==='
+          & "$env:windir\System32\inetsrv\appcmd.exe" list app
 
       - name: STEP 1 - Create SQL table ET_ZADVANCE_PAYMENT
         shell: powershell
@@ -68,27 +69,15 @@ jobs:
           $cmd.CommandText = $sql
           $cmd.ExecuteNonQuery() | Out-Null
           $conn.Close()
-          Write-Host 'STEP 1 complete - table ready'
+          Write-Host 'STEP 1 complete'
 
       - name: STEP 2 - Call SAP RFC and save rows to file
         shell: powershell
         run: |
           $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20250101","I_POSTING_DATE_HIGH":"20260313"}'
-          # Discover correct IIS path first
-          $baseUrls = @('http://localhost', 'http://localhost/rfc-api')
-          $rfcPath = $null
-          foreach ($base in $baseUrls) {
-            try {
-              $probe = Invoke-WebRequest -Uri "$base/api/ZADVANCE_PAYMENT_RFC" -Method POST -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
-              if ($probe.StatusCode -lt 500) { $rfcPath = "$base/api/ZADVANCE_PAYMENT_RFC"; break }
-            } catch {
-              $code = $_.Exception.Response.StatusCode.value__
-              if ($code -and $code -ne 404) { $rfcPath = "$base/api/ZADVANCE_PAYMENT_RFC"; break }
-            }
-          }
-          if (-not $rfcPath) { $rfcPath = 'http://localhost/api/ZADVANCE_PAYMENT_RFC' }
-          Write-Host "Using RFC URL: $rfcPath"
-          $resp = Invoke-RestMethod -Uri $rfcPath -Method POST -Body $body -ContentType 'application/json' -TimeoutSec 120
+          $rfcUrl = 'http://localhost/api/ZADVANCE_PAYMENT_RFC'
+          Write-Host "Calling $rfcUrl..."
+          $resp = Invoke-RestMethod -Uri $rfcUrl -Method POST -Body $body -ContentType 'application/json' -TimeoutSec 120
           $rows = if ($resp.IT_FINAL) { $resp.IT_FINAL } else { $resp }
           if ($rows -isnot [array]) { $rows = @($rows) }
           Write-Host "SAP returned $($rows.Count) rows"
@@ -104,38 +93,30 @@ jobs:
           $cs = 'Server=192.168.151.28,1433;Database=DataV2;User Id=sa;Password=vrl@55555;TrustServerCertificate=True;'
           $conn = New-Object System.Data.SqlClient.SqlConnection($cs)
           $conn.Open()
-          $trunc = $conn.CreateCommand()
-          $trunc.CommandText = 'TRUNCATE TABLE dbo.ET_ZADVANCE_PAYMENT'
-          $trunc.ExecuteNonQuery() | Out-Null
+          ($conn.CreateCommand()).CommandText = 'TRUNCATE TABLE dbo.ET_ZADVANCE_PAYMENT'
+          ($conn.CreateCommand()).ExecuteNonQuery() | Out-Null
           $n = 0
           foreach ($row in $rows) {
             $c = $conn.CreateCommand()
-            $ins = 'INSERT INTO dbo.ET_ZADVANCE_PAYMENT ' +
-                   '(DOCUMENT_TYPE,COMPANY_CODE,DOCUMENT_NUMBER,FISCAL_YEAR,LINE_ITEM,POSTING_KEY,' +
-                   'ACCOUNT_TYPE,SPECIAL_G_L_IND,TRANSACT_TYPE,DEBIT_CREDIT,AMOUNT_IN_LC,AMOUNT,' +
-                   '[TEXT],VENDOR,PAYMENT_AMT,POSTING_DATE,_RFC,_SYNC_AT) ' +
-                   'VALUES (@dt,@co,@dn,@fy,@li,@pk,@at,@sg,@tt,@dc,@al,@am,@tx,@vn,@pa,@pd,@rf,GETDATE())'
-            $c.CommandText = $ins
-            $c.Parameters.AddWithValue('@dt', [string]$row.DOCUMENT_TYPE)  | Out-Null
-            $c.Parameters.AddWithValue('@co', [string]$row.COMPANY_CODE)   | Out-Null
-            $c.Parameters.AddWithValue('@dn', [string]$row.DOCUMENT_NUMBER)| Out-Null
-            $c.Parameters.AddWithValue('@fy', [string]$row.FISCAL_YEAR)    | Out-Null
-            $c.Parameters.AddWithValue('@li', [string]$row.LINE_ITEM)      | Out-Null
-            $c.Parameters.AddWithValue('@pk', [string]$row.POSTING_KEY)    | Out-Null
-            $c.Parameters.AddWithValue('@at', [string]$row.ACCOUNT_TYPE)   | Out-Null
-            $c.Parameters.AddWithValue('@sg', [string]$row.SPECIAL_G_L_IND)| Out-Null
-            $c.Parameters.AddWithValue('@tt', [string]$row.TRANSACT_TYPE)  | Out-Null
-            $c.Parameters.AddWithValue('@dc', [string]$row.DEBIT_CREDIT)   | Out-Null
-            $c.Parameters.AddWithValue('@al', [decimal]$(if ($null -ne $row.AMOUNT_IN_LC) {$row.AMOUNT_IN_LC} else {0})) | Out-Null
-            $c.Parameters.AddWithValue('@am', [decimal]$(if ($null -ne $row.AMOUNT) {$row.AMOUNT} else {0})) | Out-Null
-            $c.Parameters.AddWithValue('@tx', [string]$row.TEXT) | Out-Null
-            $c.Parameters.AddWithValue('@vn', [string]$row.VENDOR) | Out-Null
-            $c.Parameters.AddWithValue('@pa', [decimal]$(if ($null -ne $row.PAYMENT_AMT) {$row.PAYMENT_AMT} else {0})) | Out-Null
-            try { $pd = [datetime]::ParseExact([string]$row.POSTING_DATE,'yyyyMMdd',$null); $c.Parameters.AddWithValue('@pd',$pd)|Out-Null }
-            catch { $c.Parameters.AddWithValue('@pd',[DBNull]::Value)|Out-Null }
-            $c.Parameters.AddWithValue('@rf','ZADVANCE_PAYMENT_RFC') | Out-Null
-            $c.ExecuteNonQuery() | Out-Null
-            $n++
+            $c.CommandText = 'INSERT INTO dbo.ET_ZADVANCE_PAYMENT (DOCUMENT_TYPE,COMPANY_CODE,DOCUMENT_NUMBER,FISCAL_YEAR,LINE_ITEM,POSTING_KEY,ACCOUNT_TYPE,SPECIAL_G_L_IND,TRANSACT_TYPE,DEBIT_CREDIT,AMOUNT_IN_LC,AMOUNT,[TEXT],VENDOR,PAYMENT_AMT,POSTING_DATE,_RFC,_SYNC_AT) VALUES (@dt,@co,@dn,@fy,@li,@pk,@at,@sg,@tt,@dc,@al,@am,@tx,@vn,@pa,@pd,@rf,GETDATE())'
+            $c.Parameters.AddWithValue('@dt', [string]$row.DOCUMENT_TYPE)|Out-Null
+            $c.Parameters.AddWithValue('@co', [string]$row.COMPANY_CODE)|Out-Null
+            $c.Parameters.AddWithValue('@dn', [string]$row.DOCUMENT_NUMBER)|Out-Null
+            $c.Parameters.AddWithValue('@fy', [string]$row.FISCAL_YEAR)|Out-Null
+            $c.Parameters.AddWithValue('@li', [string]$row.LINE_ITEM)|Out-Null
+            $c.Parameters.AddWithValue('@pk', [string]$row.POSTING_KEY)|Out-Null
+            $c.Parameters.AddWithValue('@at', [string]$row.ACCOUNT_TYPE)|Out-Null
+            $c.Parameters.AddWithValue('@sg', [string]$row.SPECIAL_G_L_IND)|Out-Null
+            $c.Parameters.AddWithValue('@tt', [string]$row.TRANSACT_TYPE)|Out-Null
+            $c.Parameters.AddWithValue('@dc', [string]$row.DEBIT_CREDIT)|Out-Null
+            $c.Parameters.AddWithValue('@al', [decimal]$(if ($null -ne $row.AMOUNT_IN_LC){$row.AMOUNT_IN_LC}else{0}))|Out-Null
+            $c.Parameters.AddWithValue('@am', [decimal]$(if ($null -ne $row.AMOUNT){$row.AMOUNT}else{0}))|Out-Null
+            $c.Parameters.AddWithValue('@tx', [string]$row.TEXT)|Out-Null
+            $c.Parameters.AddWithValue('@vn', [string]$row.VENDOR)|Out-Null
+            $c.Parameters.AddWithValue('@pa', [decimal]$(if ($null -ne $row.PAYMENT_AMT){$row.PAYMENT_AMT}else{0}))|Out-Null
+            try{$pd=[datetime]::ParseExact([string]$row.POSTING_DATE,'yyyyMMdd',$null);$c.Parameters.AddWithValue('@pd',$pd)|Out-Null}catch{$c.Parameters.AddWithValue('@pd',[DBNull]::Value)|Out-Null}
+            $c.Parameters.AddWithValue('@rf','ZADVANCE_PAYMENT_RFC')|Out-Null
+            $c.ExecuteNonQuery()|Out-Null; $n++
           }
           $conn.Close()
           Write-Host "Inserted $n rows into DataV2.dbo.ET_ZADVANCE_PAYMENT"
@@ -145,5 +126,4 @@ jobs:
         run: |
           timeout /t 4 /nobreak > nul
           curl -s "https://my-dab-app.azurewebsites.net/api/ET_ZADVANCE_PAYMENT?$top=3"
-          echo.
           echo SYNC COMPLETE
