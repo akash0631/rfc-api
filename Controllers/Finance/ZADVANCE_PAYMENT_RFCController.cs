@@ -16,112 +16,95 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     public class ZADVANCE_PAYMENT_RFCController : BaseController
     {
         [HttpPost]
-        public async Task<HttpResponseMessage> Post([FromBody] ZADVANCE_PAYMENT_RFCRequest request)
+        [Route("api/ZADVANCE_PAYMENT_RFC")]
+        public async Task<object> ZADVANCE_PAYMENT_RFC(ZADVANCE_PAYMENT_RFC_Request request)
         {
-            return await Task.Run(() =>
+            try
             {
-                try
+                RfcDestination rfcDestination = RfcDestinationManager.GetDestination(rfcConfigparameters);
+                RfcRepository rfcRepository = rfcDestination.Repository;
+                IRfcFunction rfcFunction = rfcRepository.CreateFunction("ZADVANCE_PAYMENT_RFC");
+
+                rfcFunction.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
+                rfcFunction.SetValue("I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW);
+                rfcFunction.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
+
+                rfcFunction.Invoke(rfcDestination);
+
+                IRfcStructure exReturn = rfcFunction.GetStructure("EX_RETURN");
+                if (exReturn != null && exReturn.GetValue("TYPE").ToString() == "E")
                 {
-                    if (request.I_COMPANY_CODE != null)
+                    return new
                     {
-                        RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                        RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                        // Get RfcTable from SAP
-                        RfcRepository rfcrep = dest.Repository;
+                        Status = "E",
+                        Message = exReturn.GetValue("MESSAGE").ToString(),
+                        Data = new { ET_ADVANCE_PAYMENT = new object[0] }
+                    };
+                }
 
-                        IRfcFunction myfun = null;
-                        myfun = rfcrep.CreateFunction("ZADVANCE_PAYMENT_RFC");
+                IRfcTable etAdvancePaymentTable = rfcFunction.GetTable("ET_ADVANCE_PAYMENT");
+                List<Dictionary<string, object>> advancePaymentData = new List<Dictionary<string, object>>();
 
-                        myfun.SetValue("I_COMPANY_CODE",      request.I_COMPANY_CODE);
-                        myfun.SetValue("I_POSTING_DATE_LOW",  request.I_POSTING_DATE_LOW);
-                        myfun.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
-
-                        myfun.Invoke(dest);
-
-                        IRfcTable IrfTable = myfun.GetTable("IT_FINAL");
-
-                        IRfcStructure E_RETURN = myfun.GetStructure("EX_RETURN");
-
-                        string SAP_TYPE = E_RETURN.GetValue("TYPE").ToString();
-                        string SAP_Message = E_RETURN.GetValue("MESSAGE").ToString();
-
-                        if (SAP_TYPE == "E")
+                for (int i = 0; i < etAdvancePaymentTable.RowCount; i++)
+                {
+                    etAdvancePaymentTable.CurrentIndex = i;
+                    Dictionary<string, object> row = new Dictionary<string, object>();
+                    
+                    for (int j = 0; j < etAdvancePaymentTable.Metadata.FieldCount; j++)
+                    {
+                        var field = etAdvancePaymentTable.Metadata[j];
+                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            return Request.CreateResponse(HttpStatusCode.OK, new
-                            {
-                                Status = false,
-                                Message = "" + SAP_Message + ""
-                            });
-                        }
-                        else
-                        {
-                            var meta = IrfTable.Metadata.LineType;
-
-                            var etdata = IrfTable.AsEnumerable().Select(r =>
-                            {
-                                var d = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-
-                                for (int i = 0; i < meta.FieldCount; i++)
-                                {
-                                    var f = meta[i];
-
-                                    if (f.DataType == RfcDataType.STRUCTURE || f.DataType == RfcDataType.TABLE)
-                                        continue;
-
-                                    try
-                                    {
-                                        d[f.Name] = r.GetString(f.Name);
-                                    }
-                                    catch
-                                    {
-                                        d[f.Name] = null;
-                                    }
-                                }
-
-                                return d;
-                            }).ToList();
-
-                            return Request.CreateResponse(HttpStatusCode.OK, new
-                            {
-                                Status = true,
-                                Message = "" + SAP_Message + "",
-                                Data = new
-                                {
-                                    IT_FINAL = etdata
-                                }
-                            });
+                            row[field.Name] = etAdvancePaymentTable.GetValue(field.Name);
                         }
                     }
-                    else
-                    {
-                        return Request.CreateResponse(HttpStatusCode.OK, new
-                        {
-                            Status = false,
-                            Message = "Request Not Valid"
-                        });
-                    }
+                    advancePaymentData.Add(row);
                 }
-                catch (Exception ex)
+
+                return new
                 {
-                    return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                    Status = "S",
+                    Message = "Success",
+                    Data = new
                     {
-                        Status = false,
-                        Message = ex.Message
-                    });
-                }
-            });
+                        ET_ADVANCE_PAYMENT = advancePaymentData
+                    }
+                };
+            }
+            catch (RfcAbapException ex)
+            {
+                return new
+                {
+                    Status = "E",
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new object[0] }
+                };
+            }
+            catch (RfcCommunicationException ex)
+            {
+                return new
+                {
+                    Status = "E",
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new object[0] }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    Status = "E",
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new object[0] }
+                };
+            }
         }
     }
 
-    public class ZADVANCE_PAYMENT_RFCRequest
+    public class ZADVANCE_PAYMENT_RFC_Request
     {
-        /// <summary>TYPE: BUKRS — Company Code</summary>
         public string I_COMPANY_CODE { get; set; }
-
-        /// <summary>TYPE: BUDAT — Posting Date From (YYYYMMDD)</summary>
         public string I_POSTING_DATE_LOW { get; set; }
-
-        /// <summary>TYPE: BUDAT — Posting Date To (YYYYMMDD)</summary>
         public string I_POSTING_DATE_HIGH { get; set; }
     }
 }
