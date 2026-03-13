@@ -1311,24 +1311,38 @@ export default {
         {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
 
-    // POST /sync/run/:rfcName → manual single sync
+    // POST /sync/run/:rfcName → queue trigger in KV (IIS polls and picks up)
     const syncRunMatch = url.pathname.match(/^\/sync\/run\/(.+)$/);
     if (syncRunMatch && request.method === 'POST') {
       const rfcName = syncRunMatch[1];
       const raw = await env.RFC_JOBS.get(`sync_job:${rfcName}`);
       if (!raw) return new Response(JSON.stringify({error:'Job not found'}),
         {status:404, headers:{'Content-Type':'application/json'}});
-      const job = JSON.parse(raw);
-      const result = await syncOne(job, env);
-      return new Response(JSON.stringify(result),
-        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+      // Set a trigger key — IIS SyncController /api/Sync/poll picks this up within 1 min
+      await env.RFC_JOBS.put(`sync_trigger:${rfcName}`,
+        new Date().toISOString(), { expirationTtl: 300 });
+      return new Response(JSON.stringify({
+        status: 'queued',
+        rfcName,
+        msg: 'Sync queued — IIS will execute within 1 minute via poll'
+      }), {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
 
-    // POST /sync/run-all → manual full sync
+    // POST /sync/run-all → queue all triggers
     if (url.pathname === '/sync/run-all' && request.method === 'POST') {
-      const results = await runAllSyncs(env);
-      return new Response(JSON.stringify(results),
-        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+      const list = await env.RFC_JOBS.list({prefix:'sync_job:'});
+      const queued = [];
+      for (const key of list.keys) {
+        const job = JSON.parse(await env.RFC_JOBS.get(key.name) || '{}');
+        if (job.enabled === false) continue;
+        await env.RFC_JOBS.put(`sync_trigger:${job.rfcName}`,
+          new Date().toISOString(), { expirationTtl: 300 });
+        queued.push(job.rfcName);
+      }
+      return new Response(JSON.stringify({
+        status: 'queued', count: queued.length, rfcNames: queued,
+        msg: 'All jobs queued — IIS will execute within 1 minute via poll'
+      }), {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
 
     // DELETE /sync/delete/:rfcName → remove job
@@ -1766,7 +1780,4 @@ init();
 
 
 
-// ─── Cloudflare CRON Handler ──────────────────────────────────────────────────
-export const scheduled = async (event, env, ctx) => {
-  ctx.waitUntil(runAllSyncs(env));
-};
+// CRON handled by IIS SyncController + Windows Task Scheduler (02:00 IST)
