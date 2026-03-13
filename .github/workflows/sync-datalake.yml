@@ -1,0 +1,23 @@
+name: Sync SAP to Data Lake (No Build)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'Controllers/**'
+      - 'setup/Sync-SAP-DataLake.ps1'
+
+jobs:
+  sync:
+    name: Create Table + Pull SAP Data + Expose API
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create SQL table + sync SAP data + verify API
+        shell: powershell
+        run: |
+          .\setup\Sync-SAP-DataLake.ps1 -CompanyCode "1000" -DateFrom "20250101" -DateTo "20260313"
