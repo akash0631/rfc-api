@@ -173,7 +173,6 @@ Generate a COMPLETE, production-ready ASP.NET Web API controller (.NET 4.7.2).
 
 RFC: ${spec.rfcName}
 Description: ${spec.description}
-SAP method: BaseController.${env.fn}
 SAP: ${env.host} / Client ${env.client}
 
 IMPORT params:
@@ -190,6 +189,18 @@ Route: [HttpPost] [Route("api/${spec.rfcName}")]
 Request model class at bottom of file.
 Error handling: RfcAbapException, CommunicationException, Exception → {Status:"E",Message:ex.Message}
 Check EX_RETURN after invoke — if TYPE=="E" return error.
+
+MANDATORY SAP CONNECTOR PATTERN — copy exactly, no variations:
+  RfcConfigParameters rfcPar = BaseController.${env.fn}();
+  RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+  RfcRepository rfcrep = dest.Repository;
+  IRfcFunction myfun = rfcrep.CreateFunction("${spec.rfcName}");
+  // SetValue calls here
+  myfun.Invoke(dest);
+  IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+
+NEVER use rfcConfigparameters.GetFunction() — that pattern does not exist.
+For TABLE output use: IRfcTable tbl = myfun.GetTable("TABLE_NAME"); then .AsEnumerable().Select(...)
 
 Return ONLY raw C#. No markdown.`, apiKey, 2500);
   return raw.replace(/```(?:csharp|cs)?\n?/g,'').replace(/```$/g,'').trim();
