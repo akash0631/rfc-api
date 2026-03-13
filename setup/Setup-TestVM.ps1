@@ -17,14 +17,13 @@ function Log($msg) {
     $ts = Get-Date -Format "HH:mm:ss"
     $line = "[$ts] $msg"
     Write-Host $line -ForegroundColor Cyan
-    Add-Content $LOG $line
+    "$line" | Out-File -FilePath $LOG -Append -Encoding UTF8
 }
 
-function OK($msg)  { Write-Host "  OK: $msg" -ForegroundColor Green;  Add-Content $LOG "  OK: $msg" }
-function ERR($msg) { Write-Host "  !! $msg" -ForegroundColor Red;    Add-Content $LOG "  !! $msg" }
-function SKIP($msg){ Write-Host "  -- $msg (skipped)" -ForegroundColor Gray; Add-Content $LOG "  -- SKIP: $msg" }
+function OK($msg)  { Write-Host "  OK: $msg" -ForegroundColor Green;  "  OK: $msg"   | Out-File -FilePath $LOG -Append -Encoding UTF8 }
+function ERR($msg) { Write-Host "  !! $msg" -ForegroundColor Red;    "  !! $msg"    | Out-File -FilePath $LOG -Append -Encoding UTF8 }
+function SKIP($msg){ Write-Host "  -- $msg (skipped)" -ForegroundColor Gray; "  -- SKIP: $msg" | Out-File -FilePath $LOG -Append -Encoding UTF8 }
 
-Start-Transcript -Path $LOG -Append -NoClobber | Out-Null
 
 Write-Host ""
 Write-Host "  =================================================" -ForegroundColor Yellow
@@ -199,5 +198,3 @@ Write-Host "   SETUP COMPLETE — log saved to $LOG" -ForegroundColor Green
 Write-Host "   Next: push a commit to GitHub to trigger deploy" -ForegroundColor White
 Write-Host "  =================================================" -ForegroundColor Green
 Write-Host ""
-
-Stop-Transcript | Out-Null
