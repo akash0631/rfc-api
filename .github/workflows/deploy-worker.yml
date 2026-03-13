@@ -21,29 +21,26 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 33b6cfffad5dd935e73e9061a56f1506
-          command: deploy
+        run: wrangler deploy
+        env:
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
 
       - name: Set ANTHROPIC_API_KEY secret
-        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 33b6cfffad5dd935e73e9061a56f1506
-          command: secret put ANTHROPIC_API_KEY --name v2-rfc-pipeline
+        run: echo "${{ secrets.ANTHROPIC_API_KEY }}" | wrangler secret put ANTHROPIC_API_KEY
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
 
-      - name: Set GITHUB_TOKEN_SECRET secret
-        if: ${{ secrets.PIPELINE_GITHUB_TOKEN != '' }}
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 33b6cfffad5dd935e73e9061a56f1506
-          command: secret put GITHUB_TOKEN --name v2-rfc-pipeline
+      - name: Set GITHUB_TOKEN secret
+        run: echo "${{ secrets.PIPELINE_GITHUB_TOKEN }}" | wrangler secret put GITHUB_TOKEN
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
