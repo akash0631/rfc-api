@@ -1,0 +1,70 @@
+name: Deploy to Test VM (192.168.151.46)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-test:
+    name: Build & Deploy to Test VM
+    runs-on: [self-hosted, test-vm]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Restore NuGet packages
+        shell: cmd
+        run: |
+          if not exist "C:\nuget\nuget.exe" (
+            powershell -Command "New-Item -ItemType Directory -Force -Path C:\nuget; Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile C:\nuget\nuget.exe"
+          )
+          C:\nuget\nuget.exe restore Vendor_SRM_Routing_Application.sln -NonInteractive
+
+      - name: Build (Release)
+        shell: cmd
+        run: |
+          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
+
+      - name: Copy DLLs to IIS
+        shell: cmd
+        run: |
+          robocopy bin\Release\ "C:\inetpub\wwwroot\Store Tracker\bin\" *.dll *.pdb *.config /XO /NJH /NJS
+          if %ERRORLEVEL% LEQ 7 exit /b 0
+
+      - name: Copy Web.config to IIS root
+        shell: cmd
+        run: |
+          copy /Y Web.config "C:\inetpub\wwwroot\Store Tracker\Web.config"
+
+      - name: Recycle IIS App Pool
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          Restart-WebAppPool "StoreTracker"
+          Write-Host "App pool recycled"
+
+      - name: Test RFC endpoint
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 5
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost/swagger" -UseBasicParsing -TimeoutSec 10
+            Write-Host "Swagger UI: HTTP $($r.StatusCode) - OK"
+          } catch {
+            Write-Host "Swagger check: $_"
+          }
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost/api/Sync/jobs" -UseBasicParsing -TimeoutSec 10
+            Write-Host "Sync API: HTTP $($r.StatusCode) - OK"
+          } catch {
+            Write-Host "Sync API check: $_"
+          }
+
+      - name: Summary
+        shell: powershell
+        run: |
+          Write-Host ""
+          Write-Host "Deploy complete on TEST VM (192.168.151.46)" -ForegroundColor Green
+          Write-Host "Swagger: http://192.168.151.46/swagger" -ForegroundColor Cyan
+          Write-Host "RFC API: http://192.168.151.46/api/{RFC_NAME}" -ForegroundColor Cyan
