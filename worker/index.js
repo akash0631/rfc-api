@@ -1018,16 +1018,23 @@ function addColRow(defaultAction) {
   var row = document.createElement('div');
   row.className = 'col-row';
   row.id = id;
-  var selAdd = defaultAction === 'ADD' ? ' selected' : '';
-  var selRem = defaultAction === 'REMOVE' ? ' selected' : '';
-  row.innerHTML =
-    '<select onchange="toggleType(\'' + id + '\',this.value)">'
-    + '<option' + selAdd + '>ADD</option>'
-    + '<option' + selRem + '>REMOVE</option>'
-    + '</select>'
-    + '<input placeholder="COLUMN_NAME" oninput="this.value=this.value.toUpperCase()" />'
-    + '<select>' + opts + '</select>'
-    + '<button class="rm" onclick="document.getElementById(\'' + id + '\').remove()">\u00d7</button>';
+  var sel = document.createElement('select');
+  sel.setAttribute('onchange', "toggleType('" + id + "',this.value)");
+  sel.innerHTML = '<option' + (defaultAction === 'ADD' ? ' selected' : '') + '>ADD</option>'
+    + '<option' + (defaultAction === 'REMOVE' ? ' selected' : '') + '>REMOVE</option>';
+  var inp = document.createElement('input');
+  inp.placeholder = 'COLUMN_NAME';
+  inp.setAttribute('oninput', 'this.value=this.value.toUpperCase()');
+  var typeSel = document.createElement('select');
+  typeSel.innerHTML = opts;
+  var btn = document.createElement('button');
+  btn.className = 'rm';
+  btn.setAttribute('onclick', "document.getElementById('" + id + "').remove()");
+  btn.textContent = '\u00d7';
+  row.appendChild(sel);
+  row.appendChild(inp);
+  row.appendChild(typeSel);
+  row.appendChild(btn);
   document.getElementById('col-rows').appendChild(row);
   toggleType(id, defaultAction);
 }
