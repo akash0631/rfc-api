@@ -323,6 +323,62 @@ async function runPipeline(text, sapEnv, jobId, env) {
   }
 }
 
+
+// ─── Manage Data Lake Columns ─────────────────────────────────────────────────
+async function manageColumns(tableName, operations, token) {
+  // operations: [{action:'ADD'|'REMOVE', column:'COL_NAME', sqlType:'NVARCHAR(255)'}]
+  const tbl = tableName.trim().toUpperCase();
+
+  // Build ALTER TABLE SQL
+  const sqlLines = operations.map(op => {
+    if (op.action === 'ADD') {
+      return `ALTER TABLE dbo.${tbl} ADD ${op.column.trim().toUpperCase()} ${op.sqlType||'NVARCHAR(255)'} NULL;`;
+    } else {
+      return `ALTER TABLE dbo.${tbl} DROP COLUMN ${op.column.trim().toUpperCase()};`;
+    }
+  });
+  const ts = new Date().toISOString().replace(/[-:T]/g,'').slice(0,14);
+  const actionSummary = operations.map(o=>`${o.action} ${o.column.trim().toUpperCase()}`).join(', ');
+  const sql = `-- V2 Retail Data Lake · Column Migration\n-- Table : dbo.${tbl}\n-- Change: ${actionSummary}\n-- Date  : ${new Date().toISOString().slice(0,10)}\n-- Run this on the Azure SQL Server connected via VPN\n\nUSE [V2_DataLake];\nGO\n\n${sqlLines.join('\n')}\nGO\n`;
+
+  // Push SQL migration file to GitHub
+  const migPath = `DataPipelines/${tbl}/migrations/${ts}_columns.sql`;
+  const r = await ghPut(migPath, sql, null, `[columns] ${actionSummary} on ${tbl}`, token);
+
+  // Update dab-config.json: add/remove field mappings
+  const {content, sha} = await ghGet('dab-config.json', token);
+  let dabUpdated = false;
+  if (content) {
+    const cfg = JSON.parse(content);
+    cfg.entities = cfg.entities || {};
+    // Try to find the entity (exact or case-insensitive match)
+    let entityKey = Object.keys(cfg.entities).find(k => k.toUpperCase() === tbl) || tbl;
+    if (!cfg.entities[entityKey]) {
+      cfg.entities[entityKey] = {
+        source:{object:`dbo.${tbl}`,type:'table','key-fields':['ID']},
+        permissions:[{role:'anonymous',actions:[{action:'read'}]}],
+        rest:{enabled:true,path:`/api/${tbl}`},graphql:{enabled:false}
+      };
+    }
+    const ent = cfg.entities[entityKey];
+    if (!ent.mappings) ent.mappings = {};
+    for (const op of operations) {
+      const col = op.column.trim().toUpperCase();
+      if (op.action === 'ADD') {
+        ent.mappings[col] = col;
+      } else {
+        delete ent.mappings[col];
+      }
+    }
+    if (Object.keys(ent.mappings).length === 0) delete ent.mappings;
+    await ghPut('dab-config.json', JSON.stringify(cfg,null,2), sha,
+      `[dab] update field mappings for ${tbl} · ${actionSummary}`, token);
+    dabUpdated = true;
+  }
+
+  return {sql, migPath, commitUrl: r.commitUrl, commitSha: r.commitSha, dabUpdated};
+}
+
 // ─── HTML Upload UI ───────────────────────────────────────────────────────────
 const HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -391,18 +447,40 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
 .ep-box span{color:var(--muted);font-size:10px;display:block}
 .btn-reset{background:none;border:1.5px solid var(--border);border-radius:9px;padding:10px 22px;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--sub);cursor:pointer;transition:.15s}
 .btn-reset:hover{border-color:#4361ee;color:#4361ee}
+.tab-link{color:#94a3b8;text-decoration:none;font-size:12px;font-weight:600;padding:5px 11px;border-radius:6px;transition:.15s}
+.tab-link:hover{color:#fff;background:rgba(255,255,255,.08)}
+.tab-link.active{color:#fff;background:rgba(67,97,238,.25);border:1px solid rgba(67,97,238,.4)}
+.col-row{display:grid;grid-template-columns:90px 1fr 160px 32px;gap:8px;align-items:center;margin-bottom:8px}
+.col-row select,.col-row input{border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-family:var(--sans);font-size:13px;background:var(--white);color:var(--text);width:100%}
+.col-row select:focus,.col-row input:focus{outline:none;border-color:var(--accent)}
+.col-row .rm{background:none;border:1.5px solid var(--border);border-radius:8px;width:32px;height:36px;cursor:pointer;font-size:16px;color:var(--muted);display:grid;place-items:center}
+.col-row .rm:hover{border-color:var(--red);color:var(--red)}
+.col-hdr{display:grid;grid-template-columns:90px 1fr 160px 32px;gap:8px;margin-bottom:6px}
+.col-hdr span{font-size:9.5px;font-family:var(--mono);font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.add-row-btn{background:none;border:1.5px dashed var(--border);border-radius:8px;width:100%;padding:9px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s;margin-top:4px}
+.add-row-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--al)}
+.tbl-input{border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:14px;font-weight:600;width:100%;background:var(--white);color:var(--text)}
+.tbl-input:focus{outline:none;border-color:var(--accent)}
+.sql-out{background:#13141f;color:#9aa5d4;padding:16px;border-radius:10px;font-family:var(--mono);font-size:11.5px;line-height:1.7;overflow-x:auto;white-space:pre;margin-bottom:14px}
+.copy-btn{background:var(--al);border:1px solid #c7d2fe;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;font-family:var(--sans)}
+.copy-btn:hover{background:#c7d2fe}
 .err-box{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;color:var(--red);font-size:11.5px;font-family:var(--mono);margin-top:10px}
 </style>
 </head>
 <body>
 <div class="top">
   <div class="brand"><div class="bdot"></div><div class="bname">V2 Retail · <span>RFC Pipeline</span></div><div class="btag">LIVE</div></div>
-  <div class="nav">
-    <a href="/swagger">Swagger UI →</a>
+  <div class="nav" style="display:flex;align-items:center;gap:4px">
+    <a id="tab-deploy" class="tab-link active" href="javascript:void(0)" onclick="showTab('deploy')">⚡ Deploy RFC</a>
+    <a id="tab-columns" class="tab-link" href="javascript:void(0)" onclick="showTab('columns')">🗃️ Manage Columns</a>
+    <a href="/swagger" style="margin-left:8px">Swagger →</a>
   </div>
 </div>
 
 <div class="app" id="app">
+
+  <!-- ── DEPLOY RFC TAB ── -->
+  <div id="panel-deploy">
   <div class="hdr">
     <div class="pill"><div class="dot"></div>UPLOAD · PARSE · DEPLOY · DONE</div>
     <h1>SAP RFC <em>→ Live API</em></h1>
@@ -483,9 +561,140 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
       </div>
     </div>
   </div>
+  </div><!-- /panel-deploy -->
+
+  <!-- ── MANAGE COLUMNS TAB ── -->
+  <div id="panel-columns" style="display:none">
+    <div class="hdr">
+      <div class="pill"><div class="dot"></div>TABLE · ADD / REMOVE COLUMNS · PUSH SQL</div>
+      <h1>Data Lake <em>Column Manager</em></h1>
+      <p>add or remove columns from any rfc data lake table instantly</p>
+    </div>
+
+    <div id="col-form">
+      <div class="card">
+        <div class="ct">Table / RFC Name</div>
+        <input class="tbl-input" id="colTable" placeholder="e.g. ET_ZADVANCE_PAYMENT or ZADVANCE_PAYMENT_RFC" />
+        <div style="font-size:10.5px;color:var(--muted);font-family:var(--mono);margin-top:6px">SQL table name in the data lake — auto-prefixes ET_ if needed</div>
+      </div>
+
+      <div class="card">
+        <div class="ct">Column Changes</div>
+        <div class="col-hdr">
+          <span>Action</span><span>Column Name</span><span>SQL Type (ADD only)</span><span></span>
+        </div>
+        <div id="col-rows"></div>
+        <button class="add-row-btn" onclick="addColRow()">+ Add another column</button>
+      </div>
+
+      <button class="btn" id="colBtn" onclick="submitColumns()">
+        ⚡ Generate SQL &amp; Push to GitHub
+      </button>
+      <div class="err-box" id="colErr" style="display:none"></div>
+    </div>
+
+    <div id="col-result" style="display:none">
+      <div class="card">
+        <div class="ct">Migration SQL — Run on Azure SQL Server</div>
+        <div class="sql-out" id="sqlOut"></div>
+        <button class="copy-btn" onclick="copySql()">📋 Copy SQL</button>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;font-family:var(--mono)">Run on SQL Server at 192.168.144.x (via Azure VPN)</div>
+      </div>
+      <div class="card">
+        <div class="ct">What Changed</div>
+        <div id="colActions" style="font-size:13px;line-height:2.2;font-family:var(--mono);color:var(--sub)"></div>
+      </div>
+      <button class="btn-reset" style="width:100%;margin-top:10px" onclick="resetColumns()">+ Manage Another Table</button>
+    </div>
+  </div><!-- /panel-columns -->
+
 </div>
 
 <script>
+// ── TAB SWITCHING
+function showTab(tab) {
+  ['deploy','columns'].forEach(t => {
+    document.getElementById('panel-'+t).style.display = t===tab ? 'block' : 'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+}
+
+// ── COLUMN MANAGER
+const SQL_TYPES = ['NVARCHAR(255)','NVARCHAR(50)','NVARCHAR(MAX)','INT','BIGINT','DECIMAL(18,2)','DECIMAL(10,4)','DATE','DATETIME','BIT','FLOAT','MONEY','UNIQUEIDENTIFIER'];
+let colRowCount = 0;
+function addColRow(defaultAction) {
+  defaultAction = defaultAction || 'ADD';
+  colRowCount++;
+  const id = 'cr'+colRowCount;
+  const opts = SQL_TYPES.map(t=>'<option>'+t+'</option>').join('');
+  const row = document.createElement('div');
+  row.className='col-row'; row.id=id;
+  row.innerHTML = '<select onchange="toggleType(''+id+'',this.value)"><option'+(defaultAction==='ADD'?' selected':'')+'>ADD</option><option'+(defaultAction==='REMOVE'?' selected':'')+'>REMOVE</option></select>'
+    + '<input placeholder="COLUMN_NAME" oninput="this.value=this.value.toUpperCase()" />'
+    + '<select>'+opts+'</select>'
+    + '<button class="rm" onclick="document.getElementById(''+id+'').remove()">×</button>';
+  document.getElementById('col-rows').appendChild(row);
+  toggleType(id, defaultAction);
+}
+function toggleType(rowId, action) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  const ts = row.querySelectorAll('select')[1];
+  ts.style.opacity = action==='REMOVE'?'0.3':'1';
+  ts.disabled = action==='REMOVE';
+}
+async function submitColumns() {
+  const table = document.getElementById('colTable').value.trim();
+  if (!table) { showColErr('Please enter a table name'); return; }
+  const rows = [...document.querySelectorAll('#col-rows .col-row')];
+  const operations = rows.map(row => {
+    const sels=row.querySelectorAll('select'), inp=row.querySelector('input');
+    return {action:sels[0].value, column:inp.value.trim(), sqlType:sels[1].value};
+  }).filter(op=>op.column);
+  if (!operations.length) { showColErr('Add at least one column name'); return; }
+  document.getElementById('colBtn').disabled=true;
+  document.getElementById('colBtn').innerHTML='<span class="spin"></span> Pushing to GitHub...';
+  document.getElementById('colErr').style.display='none';
+  try {
+    const r = await fetch('/columns',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tableName:table,operations})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error||'Failed');
+    showColResult(d, operations);
+  } catch(e) {
+    showColErr(e.message);
+    document.getElementById('colBtn').disabled=false;
+    document.getElementById('colBtn').innerHTML='⚡ Generate SQL &amp; Push to GitHub';
+  }
+}
+function showColErr(msg){const el=document.getElementById('colErr');el.textContent=msg;el.style.display='block';}
+function showColResult(d, operations) {
+  document.getElementById('col-form').style.display='none';
+  document.getElementById('col-result').style.display='block';
+  document.getElementById('sqlOut').textContent = d.sql;
+  let html='';
+  operations.forEach(op=>{
+    html+=(op.action==='ADD'?'<span style="color:var(--green)">✅ ADD</span>':'<span style="color:var(--red)">🗑️ REMOVE</span>')+' <b>'+op.column+'</b>'+(op.action==='ADD'?' <span style="color:var(--muted)">'+op.sqlType+'</span>':'')+'<br>';
+  });
+  if(d.commitUrl) html+='<br>📦 <a href="'+d.commitUrl+'" target="_blank" style="color:var(--accent)">View GitHub commit →</a><br>';
+  if(d.dabUpdated) html+='🔄 DAB config updated in GitHub<br>';
+  html+='<br><span style="color:var(--muted);font-size:10.5px">Migration saved to: '+d.migPath+'</span>';
+  document.getElementById('colActions').innerHTML=html;
+}
+function copySql(){
+  navigator.clipboard.writeText(document.getElementById('sqlOut').textContent)
+    .then(()=>{const b=document.querySelector('.copy-btn');b.textContent='✓ Copied!';setTimeout(()=>b.textContent='📋 Copy SQL',2000);});
+}
+function resetColumns(){
+  document.getElementById('col-result').style.display='none';
+  document.getElementById('col-form').style.display='block';
+  document.getElementById('colTable').value='';
+  document.getElementById('col-rows').innerHTML='';
+  document.getElementById('colBtn').disabled=false;
+  document.getElementById('colBtn').innerHTML='⚡ Generate SQL &amp; Push to GitHub';
+  colRowCount=0; addColRow();
+}
+window.addEventListener('DOMContentLoaded',()=>addColRow());
+
 let selectedFile = null;
 let selectedEnv  = 'dev';
 let pollTimer    = null;
@@ -667,6 +876,29 @@ export default {
       if (!job) return new Response(JSON.stringify({error:'Job not found'}),
         {status:404, headers:{'Content-Type':'application/json'}});
       return new Response(job, {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+    }
+
+    // POST /columns → manage data lake columns
+    if (url.pathname === '/columns' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const { tableName, operations } = body;
+        if (!tableName) return new Response(JSON.stringify({error:'tableName required'}),
+          {status:400,headers:{'Content-Type':'application/json'}});
+        if (!operations || !operations.length) return new Response(JSON.stringify({error:'operations required'}),
+          {status:400,headers:{'Content-Type':'application/json'}});
+        const result = await manageColumns(tableName, operations, env.GITHUB_TOKEN);
+        return new Response(JSON.stringify(result),
+          {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+      } catch(e) {
+        return new Response(JSON.stringify({error:e.message}),
+          {status:500,headers:{'Content-Type':'application/json'}});
+      }
+    }
+
+    // OPTIONS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,GET','Access-Control-Allow-Headers':'Content-Type'}});
     }
 
     return new Response('Not Found', {status:404});
