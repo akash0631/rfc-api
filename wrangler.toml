@@ -1,0 +1,18 @@
+name = "v2-rfc-pipeline"
+main = "worker/index.js"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[kv_namespaces]]
+binding = "RFC_JOBS"
+id = "2c53c2f286464d529c358d33106cbc7b"
+
+[vars]
+GITHUB_REPO = "akash0631/rfc-api"
+GITHUB_BRANCH = "master"
+DAB_APP_URL = "https://my-dab-app.azurewebsites.net"
+CF_PAGES_URL = "https://v2-rfc-portal.pages.dev"
+
+# Secrets (set via: wrangler secret put ANTHROPIC_API_KEY)
+# ANTHROPIC_API_KEY   ← set as secret
+# GITHUB_TOKEN        ← set as secret
