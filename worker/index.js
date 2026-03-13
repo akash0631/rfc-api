@@ -110,21 +110,21 @@ function read32(b,o){return (b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0;}
 // ─── GitHub helpers ───────────────────────────────────────────────────────────
 async function ghGet(path, token) {
   const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`,
-    {headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json'}});
+    {headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json','User-Agent':'V2-RFC-Pipeline'}});
   if (r.status===404) return {content:null,sha:null,exists:false};
   const d = await r.json();
   const content = d.content ? atob(d.content.replace(/\n/g,'')) : null;
   return {content, sha:d.sha, exists:true};
 }
 async function ghPut(path, content, sha, message, token) {
-  const encoded = btoa(unescape(encodeURIComponent(content)));
+  const encoded = btoa(String.fromCharCode(...new Uint8Array(new TextEncoder().encode(content))));
   const body = {message, content:encoded, branch:GITHUB_BRANCH};
   if (sha) body.sha = sha;
   const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`,
-    {method:'PUT', headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json','Content-Type':'application/json'},
+    {method:'PUT', headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json','Content-Type':'application/json','User-Agent':'V2-RFC-Pipeline'},
      body:JSON.stringify(body)});
   const d = await r.json();
-  if (!r.ok) throw new Error(d.message||`GitHub PUT failed: ${r.status}`);
+  if (!r.ok) throw new Error(`GitHub PUT ${r.status}: ${d.message||JSON.stringify(d).slice(0,200)}`);
   return {commitSha: d.commit?.sha?.slice(0,7), commitUrl:`https://github.com/${GITHUB_REPO}/commit/${d.commit?.sha}`};
 }
 
@@ -819,7 +819,7 @@ const SWAGGER_HTML = `<!DOCTYPE html>
 
 // ─── Worker handler ───────────────────────────────────────────────────────────
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // GET / → upload UI
@@ -861,9 +861,8 @@ export default {
       }
 
       // Run pipeline in background (non-blocking)
-      const ctx = { waitUntil: (p) => p };
-      try { env.ctx?.waitUntil(runPipeline(text, sapEnv, jobId, env)); } catch(e) {}
-      runPipeline(text, sapEnv, jobId, env); // fire and forget
+      // Use ctx.waitUntil so the Worker stays alive for the full pipeline
+      ctx.waitUntil(runPipeline(text, sapEnv, jobId, env));
 
       return new Response(JSON.stringify({jobId, status:'running'}),
         {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
