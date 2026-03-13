@@ -876,9 +876,15 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
            ondrop="handleDrop(event)">
         <div class="drop-icon">📄</div>
         <div class="drop-title">Drop your RFC document here</div>
-        <div class="drop-sub">Supports .docx · .txt · .md</div>
+        <div class="drop-sub">or <strong style="color:var(--accent);text-decoration:underline;cursor:pointer">click here to browse</strong></div>
+        <div class="drop-sub" style="margin-top:4px;font-size:10px;color:#94a3b8">.docx · .txt · .md</div>
         <input type="file" id="fileInput" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])" style="display:none">
       </div>
+      <button onclick="document.getElementById('fileInput').click()" 
+        style="margin-top:10px;width:100%;padding:10px;background:#f1f5f9;border:1.5px dashed #cbd5e1;
+        border-radius:8px;color:#475569;font-weight:600;cursor:pointer;font-size:13px">
+        📁 Browse Files
+      </button>
       <div class="file-sel" id="fileSel" style="display:none">
         <span>📎</span><span id="fileName"></span>
       </div>
@@ -902,7 +908,7 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
       </div>
     </div>
 
-    <button class="btn" id="deployBtn" disabled onclick="deploy()">
+    <button class="btn" id="deployBtn" onclick="deploy()" style="opacity:.45;pointer-events:none" id="deployBtn">
       ⚡ Deploy RFC → Live API
     </button>
     <div class="err-box" id="errBox" style="display:none"></div>
@@ -1077,7 +1083,10 @@ function handleFile(file) {
   document.getElementById('fileSel').style.display='flex';
   document.getElementById('fileName').textContent = file.name;
   document.getElementById('drop').classList.remove('over');
-  document.getElementById('deployBtn').disabled = false;
+  var btn = document.getElementById('deployBtn');
+  btn.style.opacity = '1';
+  btn.style.pointerEvents = 'auto';
+  btn.style.animation = 'pulse 0.3s ease';
 }
 function handleDrop(e) {
   e.preventDefault();
@@ -1092,7 +1101,7 @@ function selEnv(env) {
 }
 
 async function deploy() {
-  if (!selectedFile) return;
+  if (!selectedFile) { alert('Please select a .docx file first'); return; }
   document.getElementById('errBox').style.display='none';
   document.getElementById('upload-section').style.display='none';
   document.getElementById('progress-section').style.display='block';
