@@ -1013,17 +1013,21 @@ let colRowCount = 0;
 function addColRow(defaultAction) {
   defaultAction = defaultAction || 'ADD';
   colRowCount++;
-  const id = 'cr' + colRowCount;
-  const opts = SQL_TYPES.map(t => '<option>' + t + '</option>').join('');
-  const row = document.createElement('div');
+  var id = 'cr' + colRowCount;
+  var opts = SQL_TYPES.map(function(t){ return '<option>' + t + '</option>'; }).join('');
+  var row = document.createElement('div');
   row.className = 'col-row';
   row.id = id;
-  const selAdd = defaultAction === 'ADD' ? ' selected' : '';
-  const selRem = defaultAction === 'REMOVE' ? ' selected' : '';
-  row.innerHTML = `<select onchange="toggleType('${id}',this.value)"><option${selAdd}>ADD</option><option${selRem}>REMOVE</option></select>`
-    + `<input placeholder="COLUMN_NAME" oninput="this.value=this.value.toUpperCase()" />`
-    + `<select>${opts}</select>`
-    + `<button class="rm" onclick="document.getElementById('${id}').remove()">×</button>`;
+  var selAdd = defaultAction === 'ADD' ? ' selected' : '';
+  var selRem = defaultAction === 'REMOVE' ? ' selected' : '';
+  row.innerHTML =
+    '<select onchange="toggleType(\'' + id + '\',this.value)">'
+    + '<option' + selAdd + '>ADD</option>'
+    + '<option' + selRem + '>REMOVE</option>'
+    + '</select>'
+    + '<input placeholder="COLUMN_NAME" oninput="this.value=this.value.toUpperCase()" />'
+    + '<select>' + opts + '</select>'
+    + '<button class="rm" onclick="document.getElementById(\'' + id + '\').remove()">\u00d7</button>';
   document.getElementById('col-rows').appendChild(row);
   toggleType(id, defaultAction);
 }
