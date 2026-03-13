@@ -1,0 +1,47 @@
+name: Deploy Controllers to IIS (V2DC-ADDVERB)
+
+# Triggers whenever a new RFC controller is pushed to any Controllers/ subfolder
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Controllers/**'
+
+jobs:
+  deploy-iis:
+    name: Build & Deploy to V2DC-ADDVERB IIS
+    runs-on: self-hosted   # <-- runs on the runner installed on V2DC-ADDVERB
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore rfc-api.sln
+        shell: cmd
+
+      - name: Build solution (Release)
+        run: msbuild rfc-api.sln /p:Configuration=Release /p:Platform="Any CPU" /m
+        shell: cmd
+
+      - name: Deploy to IIS via Web Deploy (MsDeploy)
+        shell: cmd
+        run: |
+          "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" ^
+            -verb:sync ^
+            -source:package=".\publish\rfc-api.zip" ^
+            -dest:auto,computerName="localhost",authtype="NTLM" ^
+            -setParam:name="IIS Web Application Name",value="rfc-api" ^
+            -enableRule:AppOffline
+
+      - name: Notify success
+        if: success()
+        run: |
+          echo "Deployed successfully to V2DC-ADDVERB IIS at %date% %time%"
+          curl -s -X POST "https://v2-rfc-pipeline.akash-bab.workers.dev/notify" ^
+            -H "Content-Type: application/json" ^
+            -d "{\"event\":\"iis_deploy\",\"status\":\"success\",\"ref\":\"${{ github.sha }}\"}"
+        shell: cmd
