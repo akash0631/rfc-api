@@ -1561,6 +1561,32 @@
       "graphql": {
         "enabled": false
       }
+    },
+    "ET_ADVANCE_PAYMENT": {
+      "source": {
+        "object": "dbo.ET_ADVANCE_PAYMENT",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_ADVANCE_PAYMENT"
+      },
+      "graphql": {
+        "enabled": false
+      }
     }
   }
 }
