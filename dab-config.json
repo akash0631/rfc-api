@@ -1483,6 +1483,32 @@
       "graphql": {
         "enabled": false
       }
+    },
+    "ET_PROJECT_OVERVIEW": {
+      "source": {
+        "object": "dbo.ET_PROJECT_OVERVIEW",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_PROJECT_OVERVIEW"
+      },
+      "graphql": {
+        "enabled": false
+      }
     }
   }
 }
