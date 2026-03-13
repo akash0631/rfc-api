@@ -1457,6 +1457,32 @@
       "graphql": {
         "enabled": false
       }
+    },
+    "ET_ZTEST": {
+      "source": {
+        "object": "dbo.ET_ZTEST",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_ZTEST"
+      },
+      "graphql": {
+        "enabled": false
+      }
     }
   }
 }
