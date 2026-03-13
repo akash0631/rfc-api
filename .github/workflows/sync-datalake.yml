@@ -16,10 +16,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set PowerShell execution policy (best-effort)
-        continue-on-error: true
+      - name: Unlock PowerShell execution policy (CurrentUser via registry)
         shell: cmd
-        run: powershell.exe -Command "Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force"
+        run: |
+          reg add "HKCU\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell" /v ExecutionPolicy /t REG_SZ /d Unrestricted /f
+          echo Execution policy unlocked for current user
 
       - name: STEP 1 - Create SQL table ET_ZADVANCE_PAYMENT
         shell: powershell
@@ -88,10 +89,10 @@ jobs:
             $c.Parameters.AddWithValue('@tt', [string]$row.TRANSACT_TYPE)  | Out-Null
             $c.Parameters.AddWithValue('@dc', [string]$row.DEBIT_CREDIT)   | Out-Null
             $c.Parameters.AddWithValue('@al', [decimal]$(if ($null -ne $row.AMOUNT_IN_LC) {$row.AMOUNT_IN_LC} else {0})) | Out-Null
-            $c.Parameters.AddWithValue('@am', [decimal]$(if ($null -ne $row.AMOUNT) {$row.AMOUNT} else {0}))             | Out-Null
-            $c.Parameters.AddWithValue('@tx', [string]$row.TEXT)           | Out-Null
-            $c.Parameters.AddWithValue('@vn', [string]$row.VENDOR)         | Out-Null
-            $c.Parameters.AddWithValue('@pa', [decimal]$(if ($null -ne $row.PAYMENT_AMT) {$row.PAYMENT_AMT} else {0}))  | Out-Null
+            $c.Parameters.AddWithValue('@am', [decimal]$(if ($null -ne $row.AMOUNT) {$row.AMOUNT} else {0})) | Out-Null
+            $c.Parameters.AddWithValue('@tx', [string]$row.TEXT) | Out-Null
+            $c.Parameters.AddWithValue('@vn', [string]$row.VENDOR) | Out-Null
+            $c.Parameters.AddWithValue('@pa', [decimal]$(if ($null -ne $row.PAYMENT_AMT) {$row.PAYMENT_AMT} else {0})) | Out-Null
             try { $pd = [datetime]::ParseExact([string]$row.POSTING_DATE,'yyyyMMdd',$null); $c.Parameters.AddWithValue('@pd',$pd)|Out-Null }
             catch { $c.Parameters.AddWithValue('@pd',[DBNull]::Value)|Out-Null }
             $c.Parameters.AddWithValue('@rf','ZADVANCE_PAYMENT_RFC') | Out-Null
