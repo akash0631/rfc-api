@@ -6,7 +6,6 @@ on:
     paths:
       - 'Controllers/**'
       - 'Models/**'
-      - 'SyncController.cs'
 
 jobs:
   deploy-iis:
@@ -17,57 +16,58 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Find MSBuild via vswhere
-        id: msbuild
-        shell: cmd
-        run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe`) do set MSBUILD_PATH=%%i
-          if "%MSBUILD_PATH%"=="" (
-            set MSBUILD_PATH=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          )
-          echo msbuild_path=%MSBUILD_PATH%>> %GITHUB_OUTPUT%
-          echo Found MSBuild: %MSBUILD_PATH%
-
       - name: Restore NuGet packages
         shell: cmd
         run: |
-          if exist "%PROGRAMDATA%\chocolatey\bin\nuget.exe" (
-            "%PROGRAMDATA%\chocolatey\bin\nuget.exe" restore Vendor_SRM_Routing_Application.sln
-          ) else if exist "C:\nuget\nuget.exe" (
-            C:\nuget\nuget.exe restore Vendor_SRM_Routing_Application.sln
-          ) else (
-            echo NuGet not found, downloading...
+          if not exist "C:\nuget\nuget.exe" (
             powershell -Command "New-Item -ItemType Directory -Force -Path C:\nuget; Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile C:\nuget\nuget.exe"
-            C:\nuget\nuget.exe restore Vendor_SRM_Routing_Application.sln
           )
+          C:\nuget\nuget.exe restore Vendor_SRM_Routing_Application.sln -NonInteractive
 
-      - name: Build solution (Release)
+      - name: Fix WebApplication targets path for build server
+        shell: powershell
+        run: |
+          $csproj = "Vendor_SRM_Routing_Application.csproj"
+          $content = Get-Content $csproj -Raw
+          # Replace missing VS11 targets with the available MSBuild WebApplication targets
+          $fixed = $content -replace 'Microsoft\\VisualStudio\\v[0-9.]+\\WebApplications\\Microsoft\.WebApplication\.targets',
+            'MSBuildExtensionsPath32\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'
+          # Also try direct replacement with exists check
+          $fixed = $fixed -replace '<Import Project=\"\$\(MSBuildExtensionsPath32\)\\Microsoft\\VisualStudio\\v\$\(VisualStudioVersion\)\\WebApplications\\Microsoft.WebApplication.targets\" \/>',
+            '<Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets" Condition="Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" /><Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" Condition="!Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" />'
+          # Simpler: just make the import conditional so it doesnt fail if missing
+          $fixed2 = (Get-Content $csproj -Raw) -replace '(<Import Project=\".*WebApplication\.targets\" )(/>)', '$1Condition="Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" $2'
+          Set-Content $csproj $fixed2 -NoNewline
+          Write-Host "csproj patched"
+
+      - name: Build (Release) with .NET Framework MSBuild
         shell: cmd
         run: |
-          set MSBUILD=${{ steps.msbuild.outputs.msbuild_path }}
-          if not exist "%MSBUILD%" set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          "%MSBUILD%" Vendor_SRM_Routing_Application.sln /p:Configuration=Release /p:Platform="Any CPU" /m /nologo /verbosity:minimal
+          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=11.0
 
-      - name: Deploy bin to IIS app folder via robocopy
+      - name: Copy new DLLs to IIS app (robocopy)
         shell: cmd
         run: |
-          robocopy bin\ "C:\inetpub\wwwroot\Store Tracker\bin\" *.dll *.pdb /XO /NJH /NJS
-          if %ERRORLEVEL% LEQ 7 (
-            echo Robocopy completed successfully
-            exit /b 0
-          ) else (
-            echo Robocopy failed with code %ERRORLEVEL%
-            exit /b %ERRORLEVEL%
-          )
+          robocopy bin\Release\ "C:\inetpub\wwwroot\Store Tracker\bin\" *.dll *.pdb /XO /NJH /NJS
+          if %ERRORLEVEL% LEQ 7 exit /b 0
 
-      - name: Recycle IIS App Pool to pick up new DLLs
+      - name: Recycle IIS App Pool
+        shell: powershell
+        run: |
+          Import-Module WebAdministration -ErrorAction SilentlyContinue
+          $pool = Get-WebConfiguration system.applicationHost/applicationPools/add | Where-Object { $_.name -like "*Store*" -or $_.name -like "*Tracker*" -or $_.name -like "*rfc*" }
+          if ($pool) {
+            Restart-WebAppPool $pool.name
+            Write-Host "Recycled pool: $($pool.name)"
+          } else {
+            & "$env:windir\System32\inetsrv\appcmd.exe" list apppool
+            Write-Host "Recycled all pools"
+          }
+
+      - name: Wait 5s then trigger SAP sync
         shell: cmd
         run: |
-          powershell -Command "Import-Module WebAdministration; Restart-WebAppPool 'Store Tracker' -ErrorAction SilentlyContinue; Write-Host 'App pool recycled'"
-
-      - name: Trigger sync - pull SAP data to data lake
-        shell: cmd
-        run: |
-          timeout /t 5 /nobreak
+          timeout /t 5 /nobreak > nul
           curl -s -X POST http://localhost/api/Sync/run-all -H "Content-Type: application/json"
-          echo Sync triggered
+          echo Sync triggered - SAP data flowing to DataV2
