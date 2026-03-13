@@ -35,7 +35,7 @@ using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;`;
 // Reads ZIP entries to find word/document.xml and strips XML tags
 async function extractDocxText(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
-  const entries = parseZip(bytes);
+  const entries = await parseZip(bytes);
   const docXml = entries['word/document.xml'];
   if (!docXml) throw new Error('Not a valid .docx file (word/document.xml not found)');
   const xml = new TextDecoder().decode(docXml);
