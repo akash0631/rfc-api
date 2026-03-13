@@ -1382,36 +1382,6 @@ export default {
         {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
 
-    // POST /sync/run/:rfcName → manual single sync
-    const syncRunMatch = url.pathname.match(/^\/sync\/run\/(.+)$/);
-    if (syncRunMatch && request.method === 'POST') {
-      const rfcName = syncRunMatch[1];
-      const raw = await env.RFC_JOBS.get(`sync_job:${rfcName}`);
-      if (!raw) return new Response(JSON.stringify({error:'Job not found'}),
-        {status:404, headers:{'Content-Type':'application/json'}});
-      const job = JSON.parse(raw);
-      const result = await syncOne(job, env);
-      return new Response(JSON.stringify(result),
-        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-    }
-
-    // POST /sync/run-all → manual full sync
-    if (url.pathname === '/sync/run-all' && request.method === 'POST') {
-      const results = await runAllSyncs(env);
-      return new Response(JSON.stringify(results),
-        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-    }
-
-    // DELETE /sync/delete/:rfcName → remove job
-    const syncDelMatch = url.pathname.match(/^\/sync\/delete\/(.+)$/);
-    if (syncDelMatch && request.method === 'DELETE') {
-      const rfcName = syncDelMatch[1];
-      await env.RFC_JOBS.delete(`sync_job:${rfcName}`);
-      await env.RFC_JOBS.delete(`sync_result:${rfcName}`);
-      return new Response(JSON.stringify({ok:true}),
-        {headers:{'Content-Type':'application/json'}});
-    }
-
     // GET /explore → RFC Explorer (light theme)
     if (url.pathname === '/explore' || url.pathname === '/explore/') {
       const html = `<!DOCTYPE html>
