@@ -1509,6 +1509,32 @@
       "graphql": {
         "enabled": false
       }
+    },
+    "ET_FINANCE_DOCUMENTS": {
+      "source": {
+        "object": "dbo.ET_FINANCE_DOCUMENTS",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_FINANCE_DOCUMENTS"
+      },
+      "graphql": {
+        "enabled": false
+      }
     }
   }
 }
