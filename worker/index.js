@@ -142,7 +142,8 @@ async function claude(prompt, apiKey, maxTokens=2500) {
 }
 
 // ─── Parse RFC spec from text ─────────────────────────────────────────────────
-async function parseRfc(text, apiKey) {
+async function parseRfc(text, apiKey, filename='') {
+  const filenameHint = filename ? `\nHint: The filename is "${filename}" — use this to infer the RFC name if not explicit in the document.` : '';
   const raw = await claude(`You are parsing a SAP RFC specification document for V2 Retail.
 Extract the following and return ONLY valid JSON (no markdown, no explanation):
 {
@@ -156,7 +157,7 @@ Extract the following and return ONLY valid JSON (no markdown, no explanation):
   "suggestedSqlTable": "ET_RFCNAME (ET_ prefix, no _RFC suffix)"
 }
 RFC Document:
-${text.slice(0,5000)}`, apiKey, 800);
+${text.slice(0,5000)}${filenameHint}`, apiKey, 800);
   return JSON.parse(raw.replace(/```json\n?/g,'').replace(/```/g,'').trim());
 }
 
@@ -254,7 +255,7 @@ async function updateSwagger(spec, sapEnv, token) {
 }
 
 // ─── Full pipeline ────────────────────────────────────────────────────────────
-async function runPipeline(text, sapEnv, jobId, env) {
+async function runPipeline(text, sapEnv, jobId, env, filename='') {
   const apiKey   = env.ANTHROPIC_API_KEY;
   const ghToken  = env.GITHUB_TOKEN;
   const kv       = env.RFC_JOBS;
@@ -275,7 +276,7 @@ async function runPipeline(text, sapEnv, jobId, env) {
     // Step 1: Parse
     await log('parse','running','Extracting RFC spec with Claude AI...');
     let spec;
-    try { spec = await parseRfc(text, apiKey); }
+    try { spec = await parseRfc(text, apiKey, filename); }
     catch(e) { await log('parse','error',e.message); return; }
     await log('parse','done',`${spec.rfcName} · ${spec.category}`);
 
@@ -862,7 +863,7 @@ export default {
 
       // Run pipeline in background (non-blocking)
       // Use ctx.waitUntil so the Worker stays alive for the full pipeline
-      ctx.waitUntil(runPipeline(text, sapEnv, jobId, env));
+      ctx.waitUntil(runPipeline(text, sapEnv, jobId, env, file.name||''));
 
       return new Response(JSON.stringify({jobId, status:'running'}),
         {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
