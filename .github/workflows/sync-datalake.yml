@@ -21,18 +21,53 @@ jobs:
         shell: cmd
         run: powershell.exe -Command "Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force"
 
-      - name: STEP 1 - Create SQL table via sqlcmd
-        shell: cmd
+      - name: STEP 1 - Create SQL table ET_ZADVANCE_PAYMENT
+        shell: powershell
         run: |
-          sqlcmd -S 192.168.151.28,1433 -U sa -P vrl@55555 -d DataV2 -Q "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='ET_ZADVANCE_PAYMENT') BEGIN CREATE TABLE dbo.ET_ZADVANCE_PAYMENT (ID INT IDENTITY(1,1) PRIMARY KEY, DOCUMENT_TYPE NVARCHAR(10), COMPANY_CODE NVARCHAR(10), DOCUMENT_NUMBER NVARCHAR(20), FISCAL_YEAR NVARCHAR(10), LINE_ITEM NVARCHAR(10), POSTING_KEY NVARCHAR(10), ACCOUNT_TYPE NVARCHAR(10), SPECIAL_G_L_IND NVARCHAR(10), TRANSACT_TYPE NVARCHAR(20), DEBIT_CREDIT NVARCHAR(5), AMOUNT_IN_LC DECIMAL(18,2), AMOUNT DECIMAL(18,2), [TEXT] NVARCHAR(200), VENDOR NVARCHAR(20), PAYMENT_AMT DECIMAL(18,2), POSTING_DATE DATE, _RFC NVARCHAR(50) DEFAULT 'ZADVANCE_PAYMENT_RFC', _SYNC_AT DATETIME DEFAULT GETDATE()); PRINT 'Table created' END ELSE PRINT 'Table already exists'"
-          if %ERRORLEVEL% NEQ 0 (echo sqlcmd failed - trying PowerShell fallback) else (echo Table OK)
+          $cs = 'Server=192.168.151.28,1433;Database=DataV2;User Id=sa;Password=vrl@55555;TrustServerCertificate=True;'
+          $conn = New-Object System.Data.SqlClient.SqlConnection($cs)
+          $conn.Open()
+          Write-Host "Connected to DataV2"
+          $sql = @"
+          IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='ET_ZADVANCE_PAYMENT')
+          BEGIN
+            CREATE TABLE dbo.ET_ZADVANCE_PAYMENT (
+              ID            INT IDENTITY(1,1) PRIMARY KEY,
+              DOCUMENT_TYPE NVARCHAR(10),
+              COMPANY_CODE  NVARCHAR(10),
+              DOCUMENT_NUMBER NVARCHAR(20),
+              FISCAL_YEAR   NVARCHAR(10),
+              LINE_ITEM     NVARCHAR(10),
+              POSTING_KEY   NVARCHAR(10),
+              ACCOUNT_TYPE  NVARCHAR(10),
+              SPECIAL_G_L_IND NVARCHAR(10),
+              TRANSACT_TYPE NVARCHAR(20),
+              DEBIT_CREDIT  NVARCHAR(5),
+              AMOUNT_IN_LC  DECIMAL(18,2),
+              AMOUNT        DECIMAL(18,2),
+              [TEXT]        NVARCHAR(200),
+              VENDOR        NVARCHAR(20),
+              PAYMENT_AMT   DECIMAL(18,2),
+              POSTING_DATE  DATE,
+              _RFC          NVARCHAR(50) DEFAULT 'ZADVANCE_PAYMENT_RFC',
+              _SYNC_AT      DATETIME DEFAULT GETDATE()
+            )
+            PRINT 'Table created'
+          END
+          ELSE PRINT 'Table already exists'
+"@
+          $cmd = $conn.CreateCommand()
+          $cmd.CommandText = $sql
+          $cmd.ExecuteNonQuery() | Out-Null
+          $conn.Close()
+          Write-Host "STEP 1 complete - table ready"
 
       - name: STEP 2 - Call SAP RFC and save rows to file
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20250101","I_POSTING_DATE_HIGH":"20260313"}'
-          Write-Host "Calling SAP RFC at http://localhost/api/ZADVANCE_PAYMENT_RFC..."
+          Write-Host "Calling http://localhost/api/ZADVANCE_PAYMENT_RFC..."
           $resp = Invoke-RestMethod -Uri 'http://localhost/api/ZADVANCE_PAYMENT_RFC' -Method POST -Body $body -ContentType 'application/json' -TimeoutSec 120
           $rows = if ($resp.IT_FINAL) { $resp.IT_FINAL } else { $resp }
           if ($rows -isnot [array]) { $rows = @($rows) }
@@ -45,7 +80,7 @@ jobs:
         run: |
           $rows = Get-Content 'C:\datalake_rows.json' | ConvertFrom-Json
           if ($rows -isnot [array]) { $rows = @($rows) }
-          Write-Host "Inserting $($rows.Count) rows into DataV2..."
+          Write-Host "Inserting $($rows.Count) rows..."
           $cs = 'Server=192.168.151.28,1433;Database=DataV2;User Id=sa;Password=vrl@55555;TrustServerCertificate=True;'
           $conn = New-Object System.Data.SqlClient.SqlConnection($cs)
           $conn.Open()
@@ -66,11 +101,11 @@ jobs:
             $c.Parameters.AddWithValue('@sg', [string]$row.SPECIAL_G_L_IND)| Out-Null
             $c.Parameters.AddWithValue('@tt', [string]$row.TRANSACT_TYPE)  | Out-Null
             $c.Parameters.AddWithValue('@dc', [string]$row.DEBIT_CREDIT)   | Out-Null
-            $c.Parameters.AddWithValue('@al', [decimal]$(if ($row.AMOUNT_IN_LC) {$row.AMOUNT_IN_LC} else {0})) | Out-Null
-            $c.Parameters.AddWithValue('@am', [decimal]$(if ($row.AMOUNT) {$row.AMOUNT} else {0}))             | Out-Null
+            $c.Parameters.AddWithValue('@al', [decimal]$(if ($null -ne $row.AMOUNT_IN_LC) {$row.AMOUNT_IN_LC} else {0})) | Out-Null
+            $c.Parameters.AddWithValue('@am', [decimal]$(if ($null -ne $row.AMOUNT)       {$row.AMOUNT}       else {0})) | Out-Null
             $c.Parameters.AddWithValue('@tx', [string]$row.TEXT)           | Out-Null
             $c.Parameters.AddWithValue('@vn', [string]$row.VENDOR)         | Out-Null
-            $c.Parameters.AddWithValue('@pa', [decimal]$(if ($row.PAYMENT_AMT) {$row.PAYMENT_AMT} else {0}))   | Out-Null
+            $c.Parameters.AddWithValue('@pa', [decimal]$(if ($null -ne $row.PAYMENT_AMT)  {$row.PAYMENT_AMT}  else {0})) | Out-Null
             try {
               $pd = [datetime]::ParseExact([string]$row.POSTING_DATE,'yyyyMMdd',$null)
               $c.Parameters.AddWithValue('@pd', $pd) | Out-Null
@@ -90,4 +125,4 @@ jobs:
           timeout /t 4 /nobreak > nul
           curl -s "https://my-dab-app.azurewebsites.net/api/ET_ZADVANCE_PAYMENT?$top=3"
           echo.
-          echo API endpoint verified
+          echo SYNC COMPLETE
