@@ -30,7 +30,8 @@ echo $apiKey | npx wrangler secret put ANTHROPIC_API_KEY --name v2-rfc-pipeline
 
 # Set GitHub token (pre-filled)
 Write-Host "`n  [5/5] Setting GitHub token (pre-configured)..." -ForegroundColor Yellow
-echo "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" | npx wrangler secret put GITHUB_TOKEN --name v2-rfc-pipeline
+$GH_TOKEN = Read-Host "  Enter your GitHub token (ghp_...)"
+$GH_TOKEN | npx wrangler secret put GITHUB_TOKEN --name v2-rfc-pipeline
 
 Write-Host ""
 Write-Host "  ==========================================" -ForegroundColor Green

@@ -46,8 +46,8 @@ echo %ANTHROPIC_KEY% | call npx wrangler secret put ANTHROPIC_API_KEY --name v2-
 
 echo.
 echo  [5/5] Setting GitHub token...
-echo  (Using the existing token: ghp_6y2tX80IwS...)
-echo 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 | call npx wrangler secret put GITHUB_TOKEN --name v2-rfc-pipeline
+set /p GH_TOKEN="  Enter your GitHub token (ghp_...): "
+echo %GH_TOKEN% | call npx wrangler secret put GITHUB_TOKEN --name v2-rfc-pipeline
 
 echo.
 echo  ==========================================

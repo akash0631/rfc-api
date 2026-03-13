@@ -3,7 +3,7 @@
 
 module.exports = {
   github: {
-    token: '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',
+    token: process.env.GITHUB_TOKEN || ''  // set via: export GITHUB_TOKEN=ghp_...,
     repo: 'akash0631/rfc-api',
     branch: 'master',
     files: {
