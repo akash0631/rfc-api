@@ -16,3 +16,7 @@ CF_PAGES_URL = "https://v2-rfc-portal.pages.dev"
 # Secrets (set via: wrangler secret put ANTHROPIC_API_KEY)
 # ANTHROPIC_API_KEY   ← set as secret
 # GITHUB_TOKEN        ← set as secret
+
+# Data Lake CRON — runs daily at 02:00 IST (20:30 UTC)
+[triggers]
+crons = ["30 20 * * *"]
