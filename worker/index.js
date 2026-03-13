@@ -881,21 +881,22 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
   <div id="upload-section">
     <div class="card">
       <div class="ct">RFC Document</div>
-      <label for="fileInput" style="display:block;cursor:pointer">
-        <div class="drop" id="drop"
-             ondragover="event.preventDefault();this.classList.add('over')"
-             ondragleave="this.classList.remove('over')"
-             ondrop="handleDrop(event)">
-          <div class="drop-icon">📄</div>
-          <div class="drop-title">Drop your RFC document here</div>
-          <div class="drop-sub">or <strong style="color:var(--accent);text-decoration:underline;cursor:pointer">click here to browse</strong></div>
-          <div class="drop-sub" style="margin-top:4px;font-size:10px;color:#94a3b8">.docx · .txt · .md</div>
-        </div>
-      </label>
-      <input type="file" id="fileInput" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])" style="display:none">
-      <label for="fileInput" style="display:block;margin-top:10px;width:100%;padding:10px;background:#f1f5f9;border:1.5px dashed #cbd5e1;border-radius:8px;color:#475569;font-weight:600;cursor:pointer;font-size:13px;text-align:center;box-sizing:border-box">
+      <div class="drop" id="drop"
+           ondragover="event.preventDefault();this.classList.add('over')"
+           ondragleave="this.classList.remove('over')"
+           ondrop="handleDrop(event)">
+        <div class="drop-icon">📄</div>
+        <div class="drop-title">Drop your RFC document here</div>
+        <div class="drop-sub">or <strong style="color:var(--accent);text-decoration:underline;cursor:pointer">click here to browse</strong></div>
+        <div class="drop-sub" style="margin-top:4px;font-size:10px;color:#94a3b8">.docx · .txt · .md</div>
+        <input type="file" id="fileInput" accept=".docx,.txt,.md"
+               onchange="handleFile(this.files[0])"
+               style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0">
+      </div>
+      <button onclick="document.getElementById('fileInput').click()"
+        style="margin-top:10px;width:100%;padding:10px;background:#f1f5f9;border:1.5px dashed #cbd5e1;border-radius:8px;color:#475569;font-weight:600;cursor:pointer;font-size:13px">
         📁 Browse Files
-      </label>
+      </button>
       <div class="file-sel" id="fileSel" style="display:none">
         <span>📎</span><span id="fileName"></span>
       </div>
