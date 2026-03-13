@@ -1,3 +1,4 @@
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 
 param(
     [string]$CompanyCode  = "1000",
