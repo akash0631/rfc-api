@@ -881,7 +881,7 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
   <div id="upload-section">
     <div class="card">
       <div class="ct">RFC Document</div>
-      <div class="drop" id="drop" onclick="document.getElementById('fileInput').click()"
+      <div class="drop" id="drop"
            ondragover="event.preventDefault();this.classList.add('over')"
            ondragleave="this.classList.remove('over')"
            ondrop="handleDrop(event)">
@@ -889,7 +889,7 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
         <div class="drop-title">Drop your RFC document here</div>
         <div class="drop-sub">or <strong style="color:var(--accent);text-decoration:underline;cursor:pointer">click here to browse</strong></div>
         <div class="drop-sub" style="margin-top:4px;font-size:10px;color:#94a3b8">.docx · .txt · .md</div>
-        <input type="file" id="fileInput" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])" style="display:none">
+        <input type="file" id="fileInput" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])">
       </div>
       <button onclick="document.getElementById('fileInput').click()" 
         style="margin-top:10px;width:100%;padding:10px;background:#f1f5f9;border:1.5px dashed #cbd5e1;
