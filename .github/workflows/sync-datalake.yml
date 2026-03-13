@@ -19,7 +19,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set PowerShell execution policy
+      - name: Set PowerShell execution policy (best-effort)
+        continue-on-error: true
         shell: cmd
         run: powershell.exe -Command "Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force"
 
