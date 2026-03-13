@@ -380,6 +380,377 @@ async function manageColumns(tableName, operations, token) {
   return {sql, migPath, commitUrl: r.commitUrl, commitSha: r.commitSha, dabUpdated};
 }
 
+
+// ─── Data Lake Sync Engine ────────────────────────────────────────────────────
+const IIS_BASE = 'http://v2retail.net:9005';
+const DAB_BASE = 'https://my-dab-app.azurewebsites.net';
+
+function extractRows(data) {
+  if (Array.isArray(data)) return data;
+  // SAP controllers return {Status, Message, Data:{TABLE:[rows]}} or {Status, Data:[rows]}
+  const d = data.Data || data.data;
+  if (!d) return [];
+  if (Array.isArray(d)) return d;
+  // Find first array value in Data object (the main table)
+  for (const key of Object.keys(d)) {
+    if (Array.isArray(d[key]) && key !== 'EX_RETURN' && key !== 'ES_RETURN') return d[key];
+  }
+  return [];
+}
+
+async function syncOne(job, env) {
+  const { rfcName, tableName, params = {} } = job;
+  const ts = new Date().toISOString();
+  const result = { rfcName, tableName, startedAt: ts };
+
+  try {
+    // 1. Call IIS → SAP
+    const iisRes = await fetch(`${IIS_BASE}/api/${rfcName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(params).toString(),
+    });
+    if (!iisRes.ok) throw new Error(`IIS ${iisRes.status}: ${await iisRes.text()}`);
+    const sapData = await iisRes.json();
+
+    // Check SAP-level errors
+    if (sapData.Status === 'E') throw new Error(`SAP error: ${sapData.Message || JSON.stringify(sapData)}`);
+
+    const rows = extractRows(sapData);
+    result.rowsFetched = rows.length;
+
+    // 2. Upsert into Azure SQL via DAB REST API
+    let inserted = 0, failed = 0, failedRows = [];
+    for (const row of rows) {
+      const payload = { ...row, _SYNC_AT: ts, _RFC: rfcName };
+      const dabRes = await fetch(`${DAB_BASE}/api/${tableName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (dabRes.ok) {
+        inserted++;
+      } else {
+        failed++;
+        if (failedRows.length < 3) {
+          const err = await dabRes.text();
+          failedRows.push({ status: dabRes.status, error: err.slice(0, 200) });
+        }
+      }
+    }
+
+    result.inserted = inserted;
+    result.failed = failed;
+    result.failedSamples = failedRows;
+    result.status = failed === 0 ? 'ok' : rows.length === 0 ? 'empty' : 'partial';
+    result.finishedAt = new Date().toISOString();
+
+  } catch(e) {
+    result.status = 'error';
+    result.error = e.message;
+    result.finishedAt = new Date().toISOString();
+  }
+
+  // Store result (7-day TTL)
+  await env.RFC_JOBS.put(`sync_result:${rfcName}`,
+    JSON.stringify(result), { expirationTtl: 86400 * 7 });
+  return result;
+}
+
+async function runAllSyncs(env) {
+  const list = await env.RFC_JOBS.list({ prefix: 'sync_job:' });
+  const results = [];
+  for (const key of list.keys) {
+    const job = JSON.parse(await env.RFC_JOBS.get(key.name) || '{}');
+    if (job.enabled === false) continue;
+    const r = await syncOne(job, env);
+    results.push(r);
+  }
+  return results;
+}
+
+// ─── Sync Dashboard HTML ──────────────────────────────────────────────────────
+const SYNC_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V2 Retail · Data Lake Sync</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f5f7fc;--white:#fff;--border:#e4e8f0;--accent:#4361ee;--al:#eef1fd;
+  --green:#16a34a;--gl:#f0fdf4;--red:#dc2626;--rl:#fef2f2;--orange:#d97706;--ol:#fffbeb;
+  --text:#0f172a;--sub:#475569;--muted:#94a3b8;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --mono:Consolas,'Courier New',monospace}
+body{background:var(--bg);font-family:var(--sans);min-height:100vh}
+.top{background:#0f172a;height:52px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;position:sticky;top:0;z-index:50;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.brand{display:flex;align-items:center;gap:8px}
+.bdot{width:7px;height:7px;border-radius:50%;background:#34d399;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.bname{font-size:14px;font-weight:800;color:#fff}.bname span{color:#4361ee}
+.btag{font-size:10px;background:rgba(67,97,238,.2);border:1px solid rgba(67,97,238,.4);
+  color:#818cf8;padding:2px 8px;border-radius:999px;font-family:monospace}
+.nav a{color:#94a3b8;text-decoration:none;font-size:12px;font-weight:600;
+  padding:5px 11px;border-radius:6px;transition:.15s}
+.nav a:hover{color:#fff;background:rgba(255,255,255,.08)}
+.app{max-width:860px;margin:0 auto;padding:32px 16px 80px}
+.page-title{font-size:22px;font-weight:800;color:var(--text);margin-bottom:4px}
+.page-sub{font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:24px}
+.card{background:var(--white);border:1px solid var(--border);border-radius:14px;
+  padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin-bottom:14px}
+.ct{font-size:9px;font-family:var(--mono);font-weight:600;color:var(--muted);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;
+  display:flex;align-items:center;gap:8px}
+.ct::after{content:'';flex:1;height:1px;background:var(--border)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.form-grid.three{grid-template-columns:1fr 1fr 1fr}
+.field label{font-size:10.5px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;color:var(--muted);display:block;margin-bottom:5px}
+.field input,.field textarea{width:100%;background:var(--bg);border:1.5px solid var(--border);
+  border-radius:8px;padding:9px 12px;color:var(--text);font-size:12.5px;
+  font-family:var(--mono);outline:none;transition:.15s;resize:vertical}
+.field input:focus,.field textarea:focus{border-color:var(--accent);background:var(--white);
+  box-shadow:0 0 0 3px rgba(67,97,238,.08)}
+.field input::placeholder{color:var(--muted)}
+.hint{font-size:10.5px;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+.btn{padding:10px 18px;border:none;border-radius:8px;background:var(--accent);
+  color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:.15s;
+  display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:#3451d1}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:5px 12px;font-size:11.5px;border-radius:6px}
+.btn-ghost{background:none;border:1.5px solid var(--border);color:var(--sub)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--al)}
+.btn-danger{background:var(--rl);border:1.5px solid #fca5a5;color:var(--red)}
+.btn-danger:hover{background:#fee2e2}
+.btn-green{background:var(--green)}
+.btn-green:hover{background:#15803d}
+.jobs-table{width:100%;border-collapse:collapse}
+.jobs-table th{padding:8px 12px;font-size:9.5px;font-weight:700;letter-spacing:1.2px;
+  text-transform:uppercase;color:var(--muted);text-align:left;
+  border-bottom:1px solid var(--border);background:#fafbfd}
+.jobs-table td{padding:10px 12px;font-size:12.5px;border-bottom:1px solid var(--border);
+  color:var(--sub);vertical-align:middle}
+.jobs-table tr:last-child td{border-bottom:none}
+.jobs-table tr:hover td{background:#fafbff}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;
+  font-weight:700;padding:2px 8px;border-radius:4px;font-family:var(--mono)}
+.badge-ok{background:var(--gl);color:var(--green);border:1px solid #86efac}
+.badge-error{background:var(--rl);color:var(--red);border:1px solid #fca5a5}
+.badge-partial{background:var(--ol);color:var(--orange);border:1px solid #fcd34d}
+.badge-empty{background:var(--al);color:var(--accent);border:1px solid #c7d2fe}
+.badge-never{background:#f1f5f9;color:var(--muted);border:1px solid var(--border)}
+.rfcname{color:var(--accent);font-family:var(--mono);font-weight:600}
+.mono{font-family:var(--mono);font-size:11.5px}
+.actions{display:flex;gap:6px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;
+  border-top-color:transparent;border-radius:50%;animation:rot .6s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.run-all-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.schedule-note{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+.toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;
+  padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;
+  box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:999;display:none}
+.params-preview{font-size:10.5px;font-family:var(--mono);color:var(--muted);
+  max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty-state{text-align:center;padding:40px;color:var(--muted)}
+.empty-icon{font-size:36px;margin-bottom:10px}
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;text-align:center}
+.stat-num{font-size:24px;font-weight:800;color:var(--accent);font-family:var(--mono)}
+.stat-lbl{font-size:10.5px;color:var(--muted);margin-top:2px}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand"><div class="bdot"></div>
+    <div class="bname">V2 Retail · <span>Data Lake Sync</span></div>
+    <div class="btag">CRON 02:00 IST</div>
+  </div>
+  <div class="nav" style="display:flex;gap:4px">
+    <a href="/">⚡ Deploy RFC</a>
+    <a href="/explore">🔍 Explorer</a>
+    <a href="/sync" style="color:#fff;background:rgba(67,97,238,.25);border:1px solid rgba(67,97,238,.4);padding:5px 11px;border-radius:6px">🔄 Sync</a>
+  </div>
+</div>
+
+<div class="app">
+  <div class="page-title">Data Lake Sync</div>
+  <div class="page-sub">v2retail.net:9005 → Azure SQL (via DAB) · auto-runs daily 02:00 IST</div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="stat-num" id="st-total">–</div><div class="stat-lbl">Registered RFCs</div></div>
+    <div class="stat"><div class="stat-num" id="st-ok" style="color:#16a34a">–</div><div class="stat-lbl">Last Sync OK</div></div>
+    <div class="stat"><div class="stat-num" id="st-err" style="color:#dc2626">–</div><div class="stat-lbl">Last Sync Errors</div></div>
+  </div>
+
+  <!-- Register New RFC -->
+  <div class="card">
+    <div class="ct">Register RFC for Sync</div>
+    <div class="form-grid three">
+      <div class="field">
+        <label>RFC / Endpoint Name</label>
+        <input id="f-rfc" placeholder="ZADVANCE_PAYMENT_RFC" oninput="autoTable()">
+        <div class="hint">POST /api/{name} on IIS</div>
+      </div>
+      <div class="field">
+        <label>DAB Table Name</label>
+        <input id="f-table" placeholder="ET_ZADVANCE_PAYMENT">
+        <div class="hint">Azure SQL table via DAB</div>
+      </div>
+      <div class="field">
+        <label>Cron Label (optional)</label>
+        <input id="f-label" placeholder="Advance Payment Daily">
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label>Request Params (JSON) — leave {} for full pull</label>
+      <textarea id="f-params" rows="3" placeholder='{"I_COMPANY_CODE":"1000"}'>{}</textarea>
+      <div class="hint">These params are POSTed to the IIS endpoint each sync run</div>
+    </div>
+    <button class="btn" onclick="registerJob()">＋ Register RFC</button>
+  </div>
+
+  <!-- Job List -->
+  <div class="card">
+    <div class="run-all-bar">
+      <div class="ct" style="margin:0;flex:1">Registered Sync Jobs</div>
+      <button class="btn btn-sm btn-green" id="runAllBtn" onclick="runAll()" style="margin-left:16px">
+        ▶ Run All Now
+      </button>
+    </div>
+    <div id="jobs-container">
+      <div class="empty-state"><div class="empty-icon">🔄</div><div>Loading jobs…</div></div>
+    </div>
+    <div class="schedule-note" style="margin-top:12px">
+      ⏰ Auto-runs daily at 02:00 IST via Cloudflare CRON · Next run pulls fresh data from v2retail.net into Azure SQL
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let jobs = [];
+
+async function load() {
+  const r = await fetch('/sync/jobs');
+  jobs = await r.json();
+  renderJobs();
+  updateStats();
+}
+
+function updateStats() {
+  document.getElementById('st-total').textContent = jobs.length;
+  document.getElementById('st-ok').textContent = jobs.filter(j=>j.result?.status==='ok').length;
+  document.getElementById('st-err').textContent = jobs.filter(j=>j.result?.status==='error').length;
+}
+
+function renderJobs() {
+  const el = document.getElementById('jobs-container');
+  if (!jobs.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div>No sync jobs yet — register an RFC above</div></div>';
+    return;
+  }
+  el.innerHTML = '<table class="jobs-table"><thead><tr>'
+    + '<th>RFC Name</th><th>DAB Table</th><th>Params</th><th>Last Sync</th><th>Rows</th><th>Status</th><th></th>'
+    + '</tr></thead><tbody>'
+    + jobs.map(j => {
+      const r = j.result || {};
+      const statusBadge = r.status
+        ? \`<span class="badge badge-\${r.status}">\${r.status.toUpperCase()}</span>\`
+        : '<span class="badge badge-never">NEVER</span>';
+      const lastSync = r.finishedAt
+        ? new Date(r.finishedAt).toLocaleString('en-IN',{dateStyle:'short',timeStyle:'short'})
+        : '–';
+      const rows = r.rowsFetched !== undefined ? r.rowsFetched : '–';
+      const paramsStr = Object.keys(j.params||{}).length
+        ? JSON.stringify(j.params).slice(0,40)+'…' : '(full pull)';
+      return \`<tr>
+        <td class="rfcname">\${j.rfcName}</td>
+        <td class="mono">\${j.tableName}</td>
+        <td><div class="params-preview" title='\${JSON.stringify(j.params||{})}'>\${paramsStr}</div></td>
+        <td class="mono" style="font-size:11px">\${lastSync}</td>
+        <td class="mono">\${rows}</td>
+        <td>\${statusBadge}\${r.failed ? \` <span style="font-size:10px;color:#dc2626">(\${r.failed} err)</span>\`:''}
+          \${r.error ? \`<div style="font-size:10px;color:#dc2626;font-family:monospace;margin-top:3px">\${r.error.slice(0,80)}</div>\`:''}</td>
+        <td><div class="actions">
+          <button class="btn btn-sm btn-ghost" onclick="runOne('\${j.rfcName}', this)">▶ Run</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteJob('\${j.rfcName}')">✕</button>
+        </div></td>
+      </tr>\`;
+    }).join('')
+    + '</tbody></table>';
+}
+
+function autoTable() {
+  const rfc = document.getElementById('f-rfc').value.trim();
+  if (!rfc) return;
+  const tbl = 'ET_' + rfc.replace(/_RFC$/i,'').replace(/^Z/,'');
+  document.getElementById('f-table').value = tbl;
+}
+
+async function registerJob() {
+  const rfcName = document.getElementById('f-rfc').value.trim();
+  const tableName = document.getElementById('f-table').value.trim();
+  const label = document.getElementById('f-label').value.trim();
+  let params = {};
+  try { params = JSON.parse(document.getElementById('f-params').value||'{}'); }
+  catch(e) { toast('Invalid JSON params'); return; }
+  if (!rfcName||!tableName) { toast('RFC name and table required'); return; }
+  const r = await fetch('/sync/register', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({rfcName,tableName,label,params})});
+  if (r.ok) {
+    toast('✅ Registered '+rfcName);
+    document.getElementById('f-rfc').value='';
+    document.getElementById('f-table').value='';
+    document.getElementById('f-label').value='';
+    document.getElementById('f-params').value='{}';
+    await load();
+  } else { toast('Error: '+(await r.text())); }
+}
+
+async function runOne(rfcName, btn) {
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>';
+  const r = await fetch('/sync/run/'+rfcName, {method:'POST'});
+  const d = await r.json();
+  toast(d.status==='ok' ? '✅ '+rfcName+' — '+d.rowsFetched+' rows' : '⚠️ '+rfcName+': '+(d.error||d.status));
+  await load();
+  btn.disabled=false; btn.textContent='▶ Run';
+}
+
+async function runAll() {
+  const btn = document.getElementById('runAllBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Running…';
+  const r = await fetch('/sync/run-all', {method:'POST'});
+  const results = await r.json();
+  const ok = results.filter(x=>x.status==='ok').length;
+  toast(\`✅ \${ok}/\${results.length} syncs completed\`);
+  await load();
+  btn.disabled=false; btn.textContent='▶ Run All Now';
+}
+
+async function deleteJob(rfcName) {
+  if (!confirm('Remove '+rfcName+' from sync schedule?')) return;
+  await fetch('/sync/delete/'+rfcName, {method:'DELETE'});
+  toast('Removed '+rfcName);
+  await load();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display='block';
+  setTimeout(()=>el.style.display='none', 3500);
+}
+
+load();
+</script>
+</body>
+</html>`;
+
 // ─── HTML Upload UI ───────────────────────────────────────────────────────────
 const HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -901,7 +1272,145 @@ export default {
       return new Response(null, {headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,GET','Access-Control-Allow-Headers':'Content-Type'}});
     }
 
+
+    // ── SYNC ROUTES ───────────────────────────────────────────────────────────
+
+    // GET /sync → dashboard UI
+    if (url.pathname === '/sync' && request.method === 'GET') {
+      return new Response(SYNC_HTML, {headers:{'Content-Type':'text/html;charset=utf-8'}});
+    }
+
+    // POST /sync/register → add a new sync job
+    if (url.pathname === '/sync/register' && request.method === 'POST') {
+      try {
+        const { rfcName, tableName, label, params } = await request.json();
+        if (!rfcName || !tableName)
+          return new Response(JSON.stringify({error:'rfcName and tableName required'}),
+            {status:400, headers:{'Content-Type':'application/json'}});
+        const job = { rfcName, tableName, label: label||rfcName, params: params||{},
+          enabled: true, registeredAt: new Date().toISOString() };
+        await env.RFC_JOBS.put(`sync_job:${rfcName}`, JSON.stringify(job));
+        return new Response(JSON.stringify({ok:true,job}),
+          {headers:{'Content-Type':'application/json'}});
+      } catch(e) {
+        return new Response(JSON.stringify({error:e.message}),
+          {status:500, headers:{'Content-Type':'application/json'}});
+      }
+    }
+
+    // GET /sync/jobs → list all jobs with last results
+    if (url.pathname === '/sync/jobs' && request.method === 'GET') {
+      const list = await env.RFC_JOBS.list({prefix:'sync_job:'});
+      const jobs = await Promise.all(list.keys.map(async k => {
+        const job  = JSON.parse(await env.RFC_JOBS.get(k.name) || '{}');
+        const res  = await env.RFC_JOBS.get(`sync_result:${job.rfcName}`);
+        job.result = res ? JSON.parse(res) : null;
+        return job;
+      }));
+      return new Response(JSON.stringify(jobs),
+        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+    }
+
+    // POST /sync/run/:rfcName → manual single sync
+    const syncRunMatch = url.pathname.match(/^\/sync\/run\/(.+)$/);
+    if (syncRunMatch && request.method === 'POST') {
+      const rfcName = syncRunMatch[1];
+      const raw = await env.RFC_JOBS.get(`sync_job:${rfcName}`);
+      if (!raw) return new Response(JSON.stringify({error:'Job not found'}),
+        {status:404, headers:{'Content-Type':'application/json'}});
+      const job = JSON.parse(raw);
+      const result = await syncOne(job, env);
+      return new Response(JSON.stringify(result),
+        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+    }
+
+    // POST /sync/run-all → manual full sync
+    if (url.pathname === '/sync/run-all' && request.method === 'POST') {
+      const results = await runAllSyncs(env);
+      return new Response(JSON.stringify(results),
+        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+    }
+
+    // DELETE /sync/delete/:rfcName → remove job
+    const syncDelMatch = url.pathname.match(/^\/sync\/delete\/(.+)$/);
+    if (syncDelMatch && request.method === 'DELETE') {
+      const rfcName = syncDelMatch[1];
+      await env.RFC_JOBS.delete(`sync_job:${rfcName}`);
+      await env.RFC_JOBS.delete(`sync_result:${rfcName}`);
+      return new Response(JSON.stringify({ok:true}),
+        {headers:{'Content-Type':'application/json'}});
+    }
+
     // GET /explore → RFC Explorer
+
+
+    // ── SYNC ROUTES ───────────────────────────────────────────────────────────
+
+    // GET /sync → dashboard UI
+    if (url.pathname === '/sync' && request.method === 'GET') {
+      return new Response(SYNC_HTML, {headers:{'Content-Type':'text/html;charset=utf-8'}});
+    }
+
+    // POST /sync/register → add a new sync job
+    if (url.pathname === '/sync/register' && request.method === 'POST') {
+      try {
+        const { rfcName, tableName, label, params } = await request.json();
+        if (!rfcName || !tableName)
+          return new Response(JSON.stringify({error:'rfcName and tableName required'}),
+            {status:400, headers:{'Content-Type':'application/json'}});
+        const job = { rfcName, tableName, label: label||rfcName, params: params||{},
+          enabled: true, registeredAt: new Date().toISOString() };
+        await env.RFC_JOBS.put(`sync_job:${rfcName}`, JSON.stringify(job));
+        return new Response(JSON.stringify({ok:true,job}),
+          {headers:{'Content-Type':'application/json'}});
+      } catch(e) {
+        return new Response(JSON.stringify({error:e.message}),
+          {status:500, headers:{'Content-Type':'application/json'}});
+      }
+    }
+
+    // GET /sync/jobs → list all jobs with last results
+    if (url.pathname === '/sync/jobs' && request.method === 'GET') {
+      const list = await env.RFC_JOBS.list({prefix:'sync_job:'});
+      const jobs = await Promise.all(list.keys.map(async k => {
+        const job  = JSON.parse(await env.RFC_JOBS.get(k.name) || '{}');
+        const res  = await env.RFC_JOBS.get(`sync_result:${job.rfcName}`);
+        job.result = res ? JSON.parse(res) : null;
+        return job;
+      }));
+      return new Response(JSON.stringify(jobs),
+        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+    }
+
+    // POST /sync/run/:rfcName → manual single sync
+    const syncRunMatch = url.pathname.match(/^\/sync\/run\/(.+)$/);
+    if (syncRunMatch && request.method === 'POST') {
+      const rfcName = syncRunMatch[1];
+      const raw = await env.RFC_JOBS.get(`sync_job:${rfcName}`);
+      if (!raw) return new Response(JSON.stringify({error:'Job not found'}),
+        {status:404, headers:{'Content-Type':'application/json'}});
+      const job = JSON.parse(raw);
+      const result = await syncOne(job, env);
+      return new Response(JSON.stringify(result),
+        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+    }
+
+    // POST /sync/run-all → manual full sync
+    if (url.pathname === '/sync/run-all' && request.method === 'POST') {
+      const results = await runAllSyncs(env);
+      return new Response(JSON.stringify(results),
+        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+    }
+
+    // DELETE /sync/delete/:rfcName → remove job
+    const syncDelMatch = url.pathname.match(/^\/sync\/delete\/(.+)$/);
+    if (syncDelMatch && request.method === 'DELETE') {
+      const rfcName = syncDelMatch[1];
+      await env.RFC_JOBS.delete(`sync_job:${rfcName}`);
+      await env.RFC_JOBS.delete(`sync_result:${rfcName}`);
+      return new Response(JSON.stringify({ok:true}),
+        {headers:{'Content-Type':'application/json'}});
+    }
 
     // GET /explore → RFC Explorer (light theme)
     if (url.pathname === '/explore' || url.pathname === '/explore/') {
@@ -1285,3 +1794,9 @@ init();
   }
 };
 
+
+
+// ─── Cloudflare CRON Handler ──────────────────────────────────────────────────
+export const scheduled = async (event, env, ctx) => {
+  ctx.waitUntil(runAllSyncs(env));
+};
