@@ -10,7 +10,7 @@ using Newtonsoft.Json.Linq;
 namespace Vendor_SRM_Routing_Application.Controllers
 {
     /// <summary>
-    /// Data Lake Sync — runs SAP RFC calls (via local IIS) and upserts into Azure SQL via DAB.
+    /// Data Lake Sync — v2 — runs SAP RFC calls (via local IIS) and upserts into Azure SQL via DAB.
     /// Triggered by Windows Task Scheduler at 02:00 IST daily.
     /// Job configs + results stored in Cloudflare KV so the CF Worker dashboard can read them.
     /// </summary>
