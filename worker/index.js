@@ -1013,14 +1013,17 @@ let colRowCount = 0;
 function addColRow(defaultAction) {
   defaultAction = defaultAction || 'ADD';
   colRowCount++;
-  const id = 'cr'+colRowCount;
-  const opts = SQL_TYPES.map(t=>'<option>'+t+'</option>').join('');
+  const id = 'cr' + colRowCount;
+  const opts = SQL_TYPES.map(t => '<option>' + t + '</option>').join('');
   const row = document.createElement('div');
-  row.className='col-row'; row.id=id;
-  row.innerHTML = '<select onchange="toggleType(''+id+'',this.value)"><option'+(defaultAction==='ADD'?' selected':'')+'>ADD</option><option'+(defaultAction==='REMOVE'?' selected':'')+'>REMOVE</option></select>'
-    + '<input placeholder="COLUMN_NAME" oninput="this.value=this.value.toUpperCase()" />'
-    + '<select>'+opts+'</select>'
-    + '<button class="rm" onclick="document.getElementById(''+id+'').remove()">×</button>';
+  row.className = 'col-row';
+  row.id = id;
+  const selAdd = defaultAction === 'ADD' ? ' selected' : '';
+  const selRem = defaultAction === 'REMOVE' ? ' selected' : '';
+  row.innerHTML = `<select onchange="toggleType('${id}',this.value)"><option${selAdd}>ADD</option><option${selRem}>REMOVE</option></select>`
+    + `<input placeholder="COLUMN_NAME" oninput="this.value=this.value.toUpperCase()" />`
+    + `<select>${opts}</select>`
+    + `<button class="rm" onclick="document.getElementById('${id}').remove()">×</button>`;
   document.getElementById('col-rows').appendChild(row);
   toggleType(id, defaultAction);
 }
