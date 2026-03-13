@@ -49,7 +49,7 @@ async function extractDocxText(arrayBuffer) {
     .trim();
 }
 
-function parseZip(bytes) {
+async function parseZip(bytes) {
   const entries = {};
   // Find End of Central Directory
   let eocd = -1;
@@ -330,9 +330,8 @@ const HTML = `<!DOCTYPE html>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>V2 Retail · RFC Pipeline</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#f5f7fc;--white:#fff;--border:#e4e8f0;--accent:#4361ee;--al:#eef1fd;--green:#16a34a;--gl:#f0fdf4;--red:#dc2626;--text:#0f172a;--sub:#475569;--muted:#94a3b8;--sans:'Plus Jakarta Sans',sans-serif;--mono:'JetBrains Mono',monospace}
+:root{--bg:#f5f7fc;--white:#fff;--border:#e4e8f0;--accent:#4361ee;--al:#eef1fd;--green:#16a34a;--gl:#f0fdf4;--red:#dc2626;--text:#0f172a;--sub:#475569;--muted:#94a3b8;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;--mono:Consolas,'Courier New',monospace}
 body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column}
 .top{background:#0f172a;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50;box-shadow:0 2px 12px rgba(0,0,0,.3)}
 .brand{display:flex;align-items:center;gap:8px}
