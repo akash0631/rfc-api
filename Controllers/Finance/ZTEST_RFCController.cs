@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZTEST_RFC")]
-        public object ZTEST_RFC(ZTEST_RFCRequest request)
+        public IHttpActionResult ZTEST_RFC([FromBody] ZTEST_RFCRequest request)
         {
             try
             {
@@ -25,79 +25,84 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZTEST_RFC");
-                
+
                 myfun.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
                 myfun.SetValue("I_DATE", request.I_DATE);
-                
+
                 myfun.Invoke(dest);
                 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
                 
-                if (EX_RETURN.GetString("TYPE") == "E")
+                if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return new
+                    return Ok(new
                     {
                         Status = "E",
                         Message = EX_RETURN.GetString("MESSAGE"),
-                        Data = (object)null
-                    };
+                        Data = new { ET_RESULT = new List<object>() }
+                    });
                 }
-                
+
                 IRfcTable tbl = myfun.GetTable("ET_RESULT");
-                var resultData = tbl.AsEnumerable().Select(row =>
+                var resultData = new List<Dictionary<string, object>>();
+
+                if (tbl != null)
                 {
-                    var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < row.Metadata.FieldCount; i++)
+                    resultData = tbl.AsEnumerable().Select(row =>
                     {
-                        var field = row.Metadata[i];
-                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                        var rowDict = new Dictionary<string, object>();
+                        var metadata = row.GetMetadata();
+                        
+                        for (int i = 0; i < metadata.FieldCount; i++)
                         {
-                            rowData[field.Name] = row.GetValue(field.Name);
+                            var field = metadata[i];
+                            if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                            {
+                                rowDict[field.Name] = row.GetValue(field.Name);
+                            }
                         }
-                    }
-                    return rowData;
-                }).ToList();
-                
-                return new
+                        
+                        return rowDict;
+                    }).ToList();
+                }
+
+                return Ok(new
                 {
                     Status = "S",
                     Message = "Success",
-                    Data = new
-                    {
-                        ET_RESULT = resultData
-                    }
-                };
+                    Data = new { ET_RESULT = resultData }
+                });
             }
             catch (RfcAbapException ex)
             {
-                return new
+                return Ok(new
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = (object)null
-                };
+                    Data = new { ET_RESULT = new List<object>() }
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return new
+                return Ok(new
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = (object)null
-                };
+                    Data = new { ET_RESULT = new List<object>() }
+                });
             }
             catch (Exception ex)
             {
-                return new
+                return Ok(new
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = (object)null
-                };
+                    Data = new { ET_RESULT = new List<object>() }
+                });
             }
         }
     }
-    
+
     public class ZTEST_RFCRequest
     {
         public string I_COMPANY_CODE { get; set; }
