@@ -5,117 +5,57 @@ jobs:
   fix:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Read RFC Collector config
+      - name: Mount .36 and xcopy Store Tracker IIS app
+        shell: cmd
+        run: |
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE_EXIT: %ERRORLEVEL%
+          echo === .36 Store Tracker bin DLLs ===
+          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin" /B 2>nul
+          echo === Copying Store Tracker to .46 ===
+          xcopy /E /Y /I "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker" "C:\inetpub\wwwroot\Store Tracker"
+          echo XCOPY_EXIT: %ERRORLEVEL%
+          echo === .46 Store Tracker bin DLLs ===
+          dir "C:\inetpub\wwwroot\Store Tracker\bin" /B 2>nul
+          net use \\192.168.151.36\C$ /delete /y 2>nul
+
+      - name: Update RFC Collector appsettings to use localhost IIS
         shell: powershell
         run: |
           $cfg = "C:\RfcCollector\appsettings.json"
-          Write-Host "=== appsettings.json ==="
-          if (Test-Path $cfg) { Get-Content $cfg } else { Write-Host "NOT FOUND at $cfg" }
-
-      - name: Mount .36 and xcopy full Store Tracker to .46
-        shell: powershell
-        run: |
-          $pass = ConvertTo-SecureString "vrl@55555" -AsPlainText -Force
-          $cred = New-Object System.Management.Automation.PSCredential("Administrator", $pass)
-          
-          # Mount .36
-          try {
-            New-PSDrive -Name X -PSProvider FileSystem -Root "\\192.168.151.36\C$" -Credential $cred -ErrorAction Stop
-            Write-Host "Mounted .36 as X:"
-          } catch {
-            Write-Host "PSDrive failed: $_ - trying net use"
-            net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          }
-          
-          $src = "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker"
-          $dst = "C:\inetpub\wwwroot\Store Tracker"
-          
-          Write-Host "=== Source DLLs on .36 ==="
-          Get-ChildItem "$src\bin" -Filter "*.dll" -ErrorAction SilentlyContinue | Select-Object Name, Length | Sort-Object Name
-          
-          Write-Host "=== Copying ==="
-          if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force }
-          Copy-Item -Path "$src\*" -Destination $dst -Recurse -Force -ErrorAction Continue
-          Write-Host "Copy exit: $LASTEXITCODE"
-          
-          Write-Host "=== .46 Store Tracker bin DLLs ==="
-          Get-ChildItem "$dst\bin" -Filter "*.dll" -ErrorAction SilentlyContinue | Select-Object Name, Length | Sort-Object Name
-          
-          Write-Host "=== SAP NCo on .46 ==="
-          Get-ChildItem "$dst\bin" -Filter "*sap*" -ErrorAction SilentlyContinue | Select-Object Name
-          Get-ChildItem "$dst\bin" -Filter "*SAP*" -ErrorAction SilentlyContinue | Select-Object Name
-          
-          # Cleanup
-          Remove-PSDrive X -ErrorAction SilentlyContinue
-          net use \\192.168.151.36\C$ /delete /y 2>$null
-
-      - name: Update RFC Collector appsettings to localhost
-        shell: powershell
-        run: |
-          $cfg = "C:\RfcCollector\appsettings.json"
-          $json = Get-Content $cfg | ConvertFrom-Json
-          Write-Host "BEFORE: IIS_HOST=$($json.IIS_HOST)  IIS_PORT=$($json.IIS_PORT)"
+          Write-Host "=== BEFORE ==="
+          Get-Content $cfg
+          $json = Get-Content $cfg -Raw | ConvertFrom-Json
           $json.IIS_HOST = "127.0.0.1"
           $json.IIS_PORT = "80"
-          $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
-          $check = Get-Content $cfg | ConvertFrom-Json
-          Write-Host "AFTER:  IIS_HOST=$($check.IIS_HOST)  IIS_PORT=$($check.IIS_PORT)"
+          $json | ConvertTo-Json -Depth 10 | Set-Content $cfg -Encoding UTF8
+          Write-Host "=== AFTER ==="
+          Get-Content $cfg
 
       - name: Restart RFC Collector service
         shell: powershell
         run: |
-          Restart-Service RfcCollector -Force -ErrorAction Stop
-          Start-Sleep 8
+          Restart-Service RfcCollector -Force
+          Start-Sleep 10
           Write-Host "RfcCollector state:" (Get-Service RfcCollector).Status
 
-      - name: Ensure Store Tracker IIS site is started
+      - name: Restart Store Tracker IIS app pool
         shell: powershell
         run: |
-          Import-Module WebAdministration -ErrorAction SilentlyContinue
-          $site = Get-Website "Store Tracker" -ErrorAction SilentlyContinue
-          if ($site) {
-            Write-Host "Site state before:" $site.State
-            Start-Website "Store Tracker" -ErrorAction SilentlyContinue
-            Restart-WebAppPool ($site.applicationPool) -ErrorAction SilentlyContinue
-            Start-Sleep 5
-            Write-Host "Site state after:" (Get-Website "Store Tracker").State
-          } else {
-            Write-Host "Store Tracker site not found — listing all sites:"
-            Get-Website | Select Name, State, PhysicalPath, @{n="Port";e={$_.bindings.collection[0].bindingInformation}}
-          }
+          Import-Module WebAdministration
+          Get-Website | Select Name, State, PhysicalPath | Format-Table
+          Restart-WebAppPool "DefaultAppPool" -ErrorAction SilentlyContinue
+          Start-Sleep 6
+          Get-Website "Store Tracker" -ErrorAction SilentlyContinue | Select Name, State
 
-      - name: Test RFC end-to-end on .46
+      - name: Test RFC Collector end-to-end
         shell: powershell
         run: |
-          $ErrorActionPreference = "Continue"
-          Start-Sleep 5
           $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
-          
-          # Test RFC Collector directly
           try {
             $r = Invoke-WebRequest -Uri "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "RFC Collector HTTP $($r.StatusCode):"
+            Write-Host "RFC Collector /fetch HTTP $($r.StatusCode):"
             Write-Host ($r.Content.Substring(0,[Math]::Min(600,$r.Content.Length)))
           } catch {
-            Write-Host "RFC Collector ERROR: $_"
-          }
-          
-          # Test IIS directly
-          try {
-            $b2 = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"}'
-            $r2 = Invoke-WebRequest -Uri "http://localhost:80/api/ZADVANCE_PAYMENT_RFC" -Method POST -Body $b2 -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "IIS HTTP $($r2.StatusCode):"
-            Write-Host ($r2.Content.Substring(0,[Math]::Min(400,$r2.Content.Length)))
-          } catch {
-            Write-Host "IIS ERROR: $_"
-          }
-
-          # Test putway BIN val
-          $body3 = '{"rfc":"ZVND_PUTWAY_BIN_VAL_RFC","params":{"IM_USER":"TEST01","IM_PLANT":"DC01","IM_BIN":"BIN-001"},"targetTable":"ET_ZVND_PUTWAY_BIN_VAL","targetDb":"claudetestv2","maxRows":5}'
-          try {
-            $r3 = Invoke-WebRequest -Uri "http://localhost:9090/fetch" -Method POST -Body $body3 -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "PUTWAY BIN VAL HTTP $($r3.StatusCode):"
-            Write-Host ($r3.Content.Substring(0,[Math]::Min(400,$r3.Content.Length)))
-          } catch {
-            Write-Host "PUTWAY BIN VAL ERROR: $_"
+            Write-Host "FETCH ERROR: $_"
           }
