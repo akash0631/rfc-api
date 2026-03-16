@@ -1,3 +1,4 @@
+using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
@@ -7,125 +8,205 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
+using Vendor_SRM_Routing_Application.Models.HU_Creation;
+using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
 namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 {
-    /// <summary>
-    /// API Controller for ZADVANCE_PAYMENT_RFC
-    /// Technical Details: Fetches advance payment documents for a company code
-    ///                    within a posting date range.
-    ///
-    /// IMPORT:
-    ///   I_COMPANY_CODE      TYPE BUKRS   — Company Code
-    ///   I_POSTING_DATE_LOW  TYPE BUDAT   — Posting Date From
-    ///   I_POSTING_DATE_HIGH TYPE BUDAT   — Posting Date To
-    ///
-    /// EXPORT:
-    ///   EX_RETURN           TYPE BAPIRET2
-    ///
-    /// TABLES (output):
-    ///   IT_FINAL            TYPE ZADVANCE_TT  (structure: ZADVANCE_ST, 16 fields)
-    ///     DOCUMENT_TYPE, COMPANY_CODE, DOCUMENT_NUMBER, FISCAL_YEAR,
-    ///     LINE_ITEM, POSTING_KEY, ACCOUNT_TYPE, SPECIAL_G_L_IND,
-    ///     TRANSACT_TYPE, DEBIT_CREDIT, AMOUNT_IN_LC, AMOUNT,
-    ///     TEXT, VENDOR, PAYMENT_AMT, POSTING_DATE
-    /// </summary>
-    public class ZADVANCE_PAYMENT_RFCController : BaseController
+    public class ZAdvancePaymentRfcController : BaseController
     {
         [HttpPost]
-        public async Task<HttpResponseMessage> Post([FromBody] ZADVANCE_PAYMENT_RFCRequest request)
+        [Route("api/ZAdvancePaymentRfc/Execute")]
+        public async Task<IHttpActionResult> ExecuteRfc([FromBody] ZAdvancePaymentRequest request)
         {
-            return await Task.Run(() =>
+            try
             {
-                try
+                if (request == null)
                 {
-                    if (request.I_COMPANY_CODE != null)
-                    {
-                        RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
-                        RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                        RfcRepository rfcrep = dest.Repository;
-
-                        IRfcFunction myfun = rfcrep.CreateFunction("ZADVANCE_PAYMENT_RFC");
-
-                        // ── IMPORT parameters ──────────────────────────────
-                        myfun.SetValue("I_COMPANY_CODE",      request.I_COMPANY_CODE);
-                        myfun.SetValue("I_POSTING_DATE_LOW",  request.I_POSTING_DATE_LOW);
-                        myfun.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
-
-                        myfun.Invoke(dest);
-
-                        // ── EXPORT ─────────────────────────────────────────
-                        IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                        string SAP_TYPE    = EX_RETURN.GetValue("TYPE").ToString();
-                        string SAP_Message = EX_RETURN.GetValue("MESSAGE").ToString();
-
-                        if (SAP_TYPE == "E")
-                        {
-                            return Request.CreateResponse(HttpStatusCode.OK, new
-                            {
-                                Status  = false,
-                                Message = SAP_Message
-                            });
-                        }
-
-                        // ── TABLE: IT_FINAL (ZADVANCE_TT / ZADVANCE_ST) ───
-                        IRfcTable itFinal = myfun.GetTable("IT_FINAL");
-                        var meta = itFinal.Metadata.LineType;
-
-                        var itFinalList = itFinal.AsEnumerable().Select(r =>
-                        {
-                            var d = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-                            for (int i = 0; i < meta.FieldCount; i++)
-                            {
-                                var f = meta[i];
-                                if (f.DataType == RfcDataType.STRUCTURE || f.DataType == RfcDataType.TABLE)
-                                    continue;
-                                try   { d[f.Name] = r.GetString(f.Name); }
-                                catch { d[f.Name] = null; }
-                            }
-                            return d;
-                        }).ToList();
-
-                        return Request.CreateResponse(HttpStatusCode.OK, new
-                        {
-                            Status  = true,
-                            Message = SAP_Message,
-                            Data    = new
-                            {
-                                IT_FINAL = itFinalList
-                            }
-                        });
-                    }
-                    else
-                    {
-                        return Request.CreateResponse(HttpStatusCode.OK, new
-                        {
-                            Status  = false,
-                            Message = "Request Not Valid — I_COMPANY_CODE is required"
-                        });
-                    }
+                    return BadRequest("Request cannot be null");
                 }
-                catch (Exception ex)
+
+                // Validate required parameters
+                if (string.IsNullOrEmpty(request.I_COMPANY_CODE))
                 {
-                    return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                    return BadRequest("I_COMPANY_CODE is required");
+                }
+
+                if (string.IsNullOrEmpty(request.I_POSTING_DATE_LOW))
+                {
+                    return BadRequest("I_POSTING_DATE_LOW is required");
+                }
+
+                if (string.IsNullOrEmpty(request.I_POSTING_DATE_HIGH))
+                {
+                    return BadRequest("I_POSTING_DATE_HIGH is required");
+                }
+
+                // Validate date format and range
+                DateTime postingDateLow, postingDateHigh;
+                if (!DateTime.TryParseExact(request.I_POSTING_DATE_LOW, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out postingDateLow))
+                {
+                    return BadRequest("I_POSTING_DATE_LOW must be in YYYYMMDD format");
+                }
+
+                if (!DateTime.TryParseExact(request.I_POSTING_DATE_HIGH, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out postingDateHigh))
+                {
+                    return BadRequest("I_POSTING_DATE_HIGH must be in YYYYMMDD format");
+                }
+
+                if (postingDateLow > postingDateHigh)
+                {
+                    return BadRequest("I_POSTING_DATE_LOW cannot be greater than I_POSTING_DATE_HIGH");
+                }
+
+                var rfcParameters = new Dictionary<string, object>
+                {
+                    { "I_COMPANY_CODE", request.I_COMPANY_CODE },
+                    { "I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW },
+                    { "I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH }
+                };
+
+                var result = await Task.Run(() => rfcConfigparameters("ZADVANCE_PAYMENT_RFC", rfcParameters));
+
+                if (result != null && result.ContainsKey("IT_CREDIT"))
+                {
+                    var itCreditData = result["IT_CREDIT"] as IRfcTable;
+                    var creditList = new List<AdvancePaymentCredit>();
+
+                    if (itCreditData != null)
                     {
-                        Status  = false,
-                        Message = ex.Message
+                        foreach (IRfcStructure row in itCreditData)
+                        {
+                            var creditItem = new AdvancePaymentCredit
+                            {
+                                DOCUMENT_TYPE = row.GetString("DOCUMENT_TYPE"),
+                                COMPANY_CODE = row.GetString("COMPANY_CODE"),
+                                DOCUMENT_NUMBER = row.GetString("DOCUMENT_NUMBER"),
+                                FISCAL_YEAR = row.GetString("FISCAL_YEAR"),
+                                LINE_ITEM = row.GetString("LINE_ITEM"),
+                                POSTING_KEY = row.GetString("POSTING_KEY"),
+                                ACCOUNT_TYPE = row.GetString("ACCOUNT_TYPE"),
+                                SPECIAL_G_L_IND = row.GetString("SPECIAL_G_L_IND"),
+                                TRANSACT_TYPE = row.GetString("TRANSACT_TYPE"),
+                                DEBIT_CREDIT = row.GetString("DEBIT_CREDIT"),
+                                AMOUNT_IN_LC = row.GetDecimal("AMOUNT_IN_LC"),
+                                AMOUNT = row.GetDecimal("AMOUNT"),
+                                TEXT = row.GetString("TEXT"),
+                                VENDOR = row.GetString("VENDOR"),
+                                PAYMENT_AMT = row.GetDecimal("PAYMENT_AMT"),
+                                POSTING_DATE = row.GetString("POSTING_DATE")
+                            };
+                            creditList.Add(creditItem);
+                        }
+                    }
+
+                    var response = new ZAdvancePaymentResponse
+                    {
+                        Status = "Success",
+                        Message = "Advance payment data retrieved successfully",
+                        Data = new ZAdvancePaymentData
+                        {
+                            IT_CREDIT = creditList
+                        }
+                    };
+
+                    return Ok(response);
+                }
+                else
+                {
+                    return Ok(new ZAdvancePaymentResponse
+                    {
+                        Status = "Success",
+                        Message = "No advance payment data found for the specified criteria",
+                        Data = new ZAdvancePaymentData
+                        {
+                            IT_CREDIT = new List<AdvancePaymentCredit>()
+                        }
                     });
                 }
-            });
+            }
+            catch (RfcCommunicationException rfcEx)
+            {
+                return Ok(new ZAdvancePaymentResponse
+                {
+                    Status = "Error",
+                    Message = $"SAP RFC Communication Error: {rfcEx.Message}",
+                    Data = null
+                });
+            }
+            catch (RfcLogonException logonEx)
+            {
+                return Ok(new ZAdvancePaymentResponse
+                {
+                    Status = "Error",
+                    Message = $"SAP RFC Logon Error: {logonEx.Message}",
+                    Data = null
+                });
+            }
+            catch (RfcAbapException abapEx)
+            {
+                return Ok(new ZAdvancePaymentResponse
+                {
+                    Status = "Error",
+                    Message = $"SAP ABAP Error: {abapEx.Key} - {abapEx.Message}",
+                    Data = null
+                });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new ZAdvancePaymentResponse
+                {
+                    Status = "Error",
+                    Message = $"Unexpected error: {ex.Message}",
+                    Data = null
+                });
+            }
+        }
+
+        [HttpGet]
+        [Route("api/ZAdvancePaymentRfc/Health")]
+        public IHttpActionResult HealthCheck()
+        {
+            return Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow, Controller = "ZAdvancePaymentRfc" });
         }
     }
 
-    public class ZADVANCE_PAYMENT_RFCRequest
+    public class ZAdvancePaymentRequest
     {
-        /// <summary>TYPE: BUKRS — Company Code (required)</summary>
         public string I_COMPANY_CODE { get; set; }
-
-        /// <summary>TYPE: BUDAT — Posting Date From (format: YYYYMMDD)</summary>
         public string I_POSTING_DATE_LOW { get; set; }
-
-        /// <summary>TYPE: BUDAT — Posting Date To (format: YYYYMMDD)</summary>
         public string I_POSTING_DATE_HIGH { get; set; }
+    }
+
+    public class ZAdvancePaymentResponse
+    {
+        public string Status { get; set; }
+        public string Message { get; set; }
+        public ZAdvancePaymentData Data { get; set; }
+    }
+
+    public class ZAdvancePaymentData
+    {
+        public List<AdvancePaymentCredit> IT_CREDIT { get; set; }
+    }
+
+    public class AdvancePaymentCredit
+    {
+        public string DOCUMENT_TYPE { get; set; }
+        public string COMPANY_CODE { get; set; }
+        public string DOCUMENT_NUMBER { get; set; }
+        public string FISCAL_YEAR { get; set; }
+        public string LINE_ITEM { get; set; }
+        public string POSTING_KEY { get; set; }
+        public string ACCOUNT_TYPE { get; set; }
+        public string SPECIAL_G_L_IND { get; set; }
+        public string TRANSACT_TYPE { get; set; }
+        public string DEBIT_CREDIT { get; set; }
+        public decimal AMOUNT_IN_LC { get; set; }
+        public decimal AMOUNT { get; set; }
+        public string TEXT { get; set; }
+        public string VENDOR { get; set; }
+        public decimal PAYMENT_AMT { get; set; }
+        public string POSTING_DATE { get; set; }
     }
 }
