@@ -7,6 +7,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -126,6 +129,66 @@
     .spin{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:rot .6s linear infinite;}
     @keyframes rot{to{transform:rotate(360deg)}}
     @media(max-width:520px){.two,.env-g{grid-template-columns:1fr;}}
+
+    /* Upload Section Styles */
+    .upload-zone{border:2px dashed var(--border2);border-radius:10px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg);}
+    .upload-zone:hover,.upload-zone.drag-over{border-color:var(--accent);background:var(--al);}
+    .upload-zone.has-file{border-color:var(--green);background:var(--gl);border-style:solid;}
+    .upload-icon{font-size:32px;margin-bottom:10px;color:var(--muted);}
+    .upload-zone.has-file .upload-icon{color:var(--green);}
+    .upload-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;}
+    .upload-sub{font-size:11px;color:var(--muted);font-family:var(--mono);}
+    .file-info{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:12px;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:8px;}
+    .file-icon{font-size:20px;}
+    .file-details{text-align:left;}
+    .file-name{font-size:12px;font-weight:600;color:var(--text);word-break:break-all;}
+    .file-size{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;}
+    .file-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px 8px;border-radius:4px;transition:all .15s;}
+    .file-remove:hover{background:#fee2e2;color:var(--red);}
+    .upload-input{display:none;}
+    .doc-content{margin-top:12px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;max-height:150px;overflow-y:auto;font-size:11px;font-family:var(--mono);color:var(--sub);white-space:pre-wrap;word-break:break-word;}
+    .doc-status{display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;border-radius:7px;font-size:11px;font-family:var(--mono);}
+    .doc-status.reading{background:#eff6ff;border:1px solid #bfdbfe;color:var(--accent);}
+    .doc-status.ready{background:var(--gl);border:1px solid #86efac;color:var(--green);}
+    .doc-status.error{background:#fef2f2;border:1px solid #fca5a5;color:var(--red);}
+    .ai-badge{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:600;font-family:var(--mono);}
+    .api-key-input{margin-top:12px;}
+    .api-key-input input{width:100%;padding:8px 10px;font-size:11px;}
+    .test-env-banner{background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border:2px solid #f59e0b;border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;gap:12px;}
+    .test-env-banner .icon{font-size:24px;}
+    .test-env-banner .text{flex:1;}
+    .test-env-banner .title{font-size:13px;font-weight:700;color:#92400e;margin-bottom:3px;}
+    .test-env-banner .sub{font-size:11px;color:#a16207;font-family:var(--mono);}
+    .env-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;margin-left:auto;}
+    .env-badge.dev{background:#f0fdf4;border:2px solid #16a34a;color:#16a34a;}
+    .env-badge.quality{background:#fffbeb;border:2px solid #d97706;color:#d97706;}
+    .env-badge.production{background:#fef2f2;border:2px solid #dc2626;color:#dc2626;}
+    .push-targets{margin-top:14px;padding:14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;}
+    .push-targets-title{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;}
+    .push-log{margin-top:12px;background:#13141f;border-radius:8px;padding:12px 14px;max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;}
+    .push-log-row{font-family:var(--mono);font-size:11px;display:flex;gap:8px;}
+    .push-log-ts{color:#4a5080;flex-shrink:0;}
+    .push-log-msg{color:#9aa5d4;}
+    .push-log-msg.ok{color:#4ade80;}
+    .push-log-msg.err{color:#f87171;}
+    .api-details{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:18px;margin-top:16px;text-align:left;}
+    .api-section{margin-bottom:16px;}
+    .api-section:last-child{margin-bottom:0;}
+    .api-section-title{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
+    .api-endpoint{display:flex;align-items:center;gap:10px;background:#13141f;border-radius:8px;padding:12px 14px;}
+    .api-method{background:#4361ee;color:#fff;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);}
+    .api-url{color:#9aa5d4;font-family:var(--mono);font-size:13px;flex:1;word-break:break-all;}
+    .api-copy{background:#1c1e30;border:none;color:#4a5080;padding:6px 12px;border-radius:5px;font-size:10px;font-family:var(--mono);cursor:pointer;transition:all .15s;}
+    .api-copy:hover{background:var(--accent);color:#fff;}
+    .params-table{width:100%;border-collapse:collapse;font-size:12px;}
+    .params-table th{text-align:left;padding:8px 10px;background:var(--bg);border:1px solid var(--border);font-weight:600;color:var(--sub);}
+    .params-table td{padding:8px 10px;border:1px solid var(--border);font-family:var(--mono);}
+    .params-table tr:nth-child(even) td{background:#fafbfc;}
+    .param-name{color:var(--accent);font-weight:500;}
+    .param-type{color:var(--muted);font-size:11px;}
+    .sample-request{background:#13141f;border-radius:8px;padding:14px;font-family:var(--mono);font-size:11px;color:#9aa5d4;white-space:pre-wrap;overflow-x:auto;position:relative;}
+    .sample-copy{position:absolute;top:8px;right:8px;background:#1c1e30;border:none;color:#4a5080;padding:4px 10px;border-radius:4px;font-size:10px;font-family:var(--mono);cursor:pointer;transition:all .15s;}
+    .sample-copy:hover{background:var(--accent);color:#fff;}
   </style>
 </head>
 <body>
@@ -147,7 +210,6 @@
 
 <script type="text/babel">
 const GITHUB_REPO = "akash0631/rfc-api";
-const GITHUB_TOKEN = ""; // Set via Cloudflare Worker secret
 const SWAGGER_FILE = "v2_sap_api_explorer.html";
 const DAB_CONFIG_FILE = "dab-config.json";
 const DAB_APP_URL = "https://my-dab-app.azurewebsites.net";
@@ -165,14 +227,15 @@ const ENV_OPTIONS = [
   {label:"Production",fn:"rfcConfigparametersproduction()",ip:"192.168.144.170",client:"600", color:"#dc2626",bg:"#fef2f2",bdr:"#fca5a5"},
 ];
 
-const ghH = {Authorization:`token ${GITHUB_TOKEN}`,Accept:"application/vnd.github.v3+json","Content-Type":"application/json"};
-const ghGet = p => fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${p}`,{headers:ghH});
-const ghPut = (p,content,sha,msg) => fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${p}`,{
-  method:"PUT",headers:ghH,
-  body:JSON.stringify({message:msg,content:btoa(unescape(encodeURIComponent(content))),...(sha?{sha}:{})})
+// GitHub API functions - will use dynamic token from state
+const createGhHeaders = (token) => ({
+  // Use Bearer for new fine-grained tokens (ghp_) or token for classic PATs
+  Authorization: token.startsWith('ghp_') ? `Bearer ${token}` : `token ${token}`,
+  Accept: "application/vnd.github.v3+json",
+  "Content-Type": "application/json"
 });
 
-const {useState} = React;
+const {useState, useRef} = React;
 
 function App() {
   const [step, setStep]     = useState(1);
@@ -192,20 +255,285 @@ function App() {
   const [stages, setStages] = useState({github:"idle",swagger:"idle",dab:"idle"});
   const [details, setDet]   = useState({commit:null,commitUrl:null,notes:{}});
   const [pushing, setPush]  = useState(false);
+  
+  // Upload state
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [docContent, setDocContent] = useState("");
+  const [docStatus, setDocStatus] = useState("idle"); // idle, reading, ready, error
+  const [docError, setDocError] = useState("");
+  const [apiKey, setApiKey] = useState(localStorage.getItem('anthropic_api_key') || "");
+  const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || "");
+  const [githubTestStatus, setGithubTestStatus] = useState("idle"); // idle, testing, ok, error
+  const [githubTestMsg, setGithubTestMsg] = useState("");
+  const [pushLog, setPushLog] = useState([]);
+  const fileInputRef = useRef(null);
+
+  const log = (msg, type='info') => {
+    const ts = new Date().toLocaleTimeString();
+    setPushLog(prev => [...prev, {ts, msg, type}]);
+    console.log(`[${ts}] ${msg}`);
+  };
+
+  // Safe base64 encode that handles all Unicode/special chars
+  const safeBase64 = (str) => {
+    try {
+      return btoa(unescape(encodeURIComponent(str)));
+    } catch(e) {
+      // Fallback: encode byte by byte
+      const bytes = new TextEncoder().encode(str);
+      let binary = '';
+      bytes.forEach(b => binary += String.fromCharCode(b));
+      return btoa(binary);
+    }
+  };
+
+  // Test GitHub connection
+  const testGithubConnection = async () => {
+    if (!githubToken) {
+      setGithubTestStatus("error");
+      setGithubTestMsg("Please enter a GitHub token first");
+      return;
+    }
+    
+    setGithubTestStatus("testing");
+    setGithubTestMsg("");
+    
+    try {
+      const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}`, {
+        headers: createGhHeaders(githubToken)
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setGithubTestStatus("ok");
+        setGithubTestMsg(`Connected to ${data.full_name} (${data.private ? 'private' : 'public'})`);
+      } else {
+        setGithubTestStatus("error");
+        setGithubTestMsg(data.message || `Error: ${res.status}`);
+      }
+    } catch (err) {
+      setGithubTestStatus("error");
+      setGithubTestMsg(err.message);
+    }
+  };
+
+  // GitHub API functions with dynamic token
+  const ghGet = (path) => fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`, {
+    headers: createGhHeaders(githubToken)
+  });
+  
+  const ghPut = (path, content, sha, msg) => fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`, {
+    method: "PUT",
+    headers: createGhHeaders(githubToken),
+    body: JSON.stringify({
+      message: msg,
+      content: safeBase64(content),
+      ...(sha ? { sha } : {})
+    })
+  });
+
+  // Save API key to localStorage
+  const handleApiKeyChange = (e) => {
+    const key = e.target.value;
+    setApiKey(key);
+    localStorage.setItem('anthropic_api_key', key);
+  };
+
+  // Save GitHub token to localStorage
+  const handleGithubTokenChange = (e) => {
+    const token = e.target.value;
+    setGithubToken(token);
+    localStorage.setItem('github_token', token);
+    setGithubTestStatus("idle");
+    setGithubTestMsg("");
+  };
+
+  // Read document content based on file type
+  const readDocumentContent = async (file) => {
+    setDocStatus("reading");
+    setDocError("");
+    setDocContent("");
+    
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      let content = "";
+      
+      if (ext === 'txt') {
+        content = await file.text();
+      } else if (ext === 'docx' || ext === 'doc') {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        content = result.value;
+      } else if (ext === 'pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let text = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          text += textContent.items.map(item => item.str).join(' ') + '\n';
+        }
+        content = text;
+      } else {
+        throw new Error(`Unsupported file type: .${ext}`);
+      }
+      
+      if (content.trim()) {
+        setDocContent(content.trim());
+        setDocStatus("ready");
+        // Try to auto-extract RFC details from document
+        autoExtractRFCDetails(content);
+      } else {
+        throw new Error("Document appears to be empty");
+      }
+    } catch (err) {
+      setDocStatus("error");
+      setDocError(err.message);
+    }
+  };
+
+  // Auto-extract RFC details from document content
+  const autoExtractRFCDetails = (content) => {
+    // Try to find RFC name patterns
+    const rfcMatch = content.match(/(?:RFC|BAPI|Z)[A-Z0-9_]+(?:_RFC)?/i);
+    if (rfcMatch && !rfcName) {
+      setRfc(rfcMatch[0].toUpperCase());
+    }
+    
+    // Try to extract description
+    const descMatch = content.match(/(?:description|purpose|objective)[:\s]*([^\n]+)/i);
+    if (descMatch && !desc) {
+      setDesc(descMatch[1].trim().substring(0, 200));
+    }
+    
+    // Try to extract parameters
+    const paramMatches = content.matchAll(/(?:I_|IV_|IM_)([A-Z0-9_]+)(?:\s*[\-:]\s*|\s+)(?:TYPE\s+)?([A-Z0-9_]+)?/gi);
+    const extractedParams = [];
+    for (const match of paramMatches) {
+      extractedParams.push({ name: `I_${match[1]}`.toUpperCase(), type: match[2]?.toUpperCase() || "CHAR" });
+    }
+    if (extractedParams.length > 0 && params.length === 1 && !params[0].name) {
+      setPar(extractedParams.length > 0 ? extractedParams : [{name:"",type:""}]);
+    }
+    
+    // Try to detect output table
+    const tableMatch = content.match(/(?:ET_|IT_|LT_)([A-Z0-9_]+)/i);
+    if (tableMatch) {
+      setTP(tableMatch[0].toUpperCase());
+    }
+  };
+
+  const handleFileSelect = (file) => {
+    if (file) {
+      setUploadedFile({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        file: file
+      });
+      // Automatically read document content
+      readDocumentContent(file);
+    }
+  };
+
+  const handleFileInputChange = (e) => {
+    const file = e.target.files?.[0];
+    handleFileSelect(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    handleFileSelect(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const removeFile = () => {
+    setUploadedFile(null);
+    setDocContent("");
+    setDocStatus("idle");
+    setDocError("");
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const getFileIcon = (filename) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    if (['doc', 'docx'].includes(ext)) return '📄';
+    if (['pdf'].includes(ext)) return '📕';
+    if (['xls', 'xlsx'].includes(ext)) return '📊';
+    if (['txt'].includes(ext)) return '📝';
+    if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return '🖼️';
+    return '📎';
+  };
 
   const setSt = (k,v) => setStages(s=>({...s,[k]:v}));
   const setN  = (k,v) => setDet(d=>({...d,notes:{...d.notes,[k]:v}}));
 
   const generate = async () => {
+    if (!apiKey) {
+      setGErr("Please enter your Anthropic API key");
+      return;
+    }
+    
     setGen(true); setGErr(""); setCode("");
+    
+    // If no RFC name but document content exists, try to extract it
+    let finalRfcName = rfcName;
+    if (!finalRfcName && docContent) {
+      const rfcMatch = docContent.match(/(?:RFC|BAPI|Z)[A-Z0-9_]+(?:_RFC)?/i);
+      if (rfcMatch) {
+        finalRfcName = rfcMatch[0].toUpperCase();
+        setRfc(finalRfcName);
+      } else {
+        finalRfcName = "GENERATED_RFC";
+        setRfc(finalRfcName);
+      }
+    }
+    
     const vp = params.filter(p=>p.name);
+    
+    // Build prompt with document content if available
+    const docSection = docContent ? `
+UPLOADED DOCUMENT CONTENT (RFC Specification):
+---
+${docContent.substring(0, 8000)}
+---
+IMPORTANT: Analyze the above document carefully to extract:
+- Exact RFC function name (use this as the controller name)
+- All IMPORT parameters with their SAP types
+- EXPORT parameters and tables
+- Business logic and validation rules
+- Any specific error handling requirements
+` : "";
+    
     const prompt = `You are a senior C# .NET developer for V2 Retail SAP RFC API (ASP.NET Web API, .NET 4.7.2).
-Generate a complete controller for RFC: ${rfcName}
+${docSection}
+Generate a complete controller for RFC: ${finalRfcName || "Extract from document"}
 Description: ${desc||"SAP RFC controller"}
 SAP method: BaseController.${env}
 IMPORT parameters:
-${vp.map(p=>`- ${p.name} (TYPE: ${p.type||"CHAR"})`).join("\n")||"- (none)"}
+${vp.map(p=>`- ${p.name} (TYPE: ${p.type||"CHAR"})`).join("\n")||"- Extract from document or use (none)"}
 Output: ${outType==="table"?`Returns TABLE ${tableP} — dynamic metadata loop, skip STRUCTURE/TABLE types, response: {Status,Message,Data:{${tableP}:[...]}}`:"EX_RETURN only — {Status,Message}"}
+
+${docContent ? "Use the document content above to generate accurate parameter handling, validation, and business logic. Extract all parameters from the document." : ""}
+
 EXACT usings:
 using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
@@ -224,15 +552,22 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
 
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]})
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:4000,messages:[{role:"user",content:prompt}]})
       });
       const d = await res.json();
+      if (d.error) throw new Error(d.error.message || "API Error");
       const raw = d.content?.find(b=>b.type==="text")?.text||"";
       const cleaned = raw.replace(/```(?:csharp|cs)?\n?/g,"").replace(/```/g,"").trim();
       if(!cleaned) throw new Error("No code returned");
       setCode(cleaned);
-      setSql(`ET_${rfcName.replace(/_RFC$/,"")}`);
+      setSql(`ET_${finalRfcName.replace(/_RFC$/,"")}`);
       setStep(2);
     } catch(e){setGErr(e.message);}
     setGen(false);
@@ -241,16 +576,45 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
   const pushController = async () => {
     const fp = `${folder}/${rfcName}Controller.cs`;
     setSt("github","run");
-    const cr = await ghGet(fp);
-    const sha = cr.ok?(await cr.json()).sha:null;
-    const eo = ENV_OPTIONS.find(e=>e.fn===env);
-    const res = await ghPut(fp,code,sha,`Add ${rfcName} controller [${eo?.label}]\n\nAuto-generated via RFC Portal`);
-    const d = await res.json();
-    if(!res.ok) throw new Error(d.message||"GitHub push failed");
-    const cSha = d.commit?.sha?.slice(0,7);
-    setDet(x=>({...x,commit:cSha,commitUrl:`https://github.com/${GITHUB_REPO}/commit/${d.commit?.sha}`}));
-    setSt("github","ok");
-    return cSha;
+    setPushLog([]);
+    
+    try {
+      if (!githubToken) throw new Error("GitHub token is not set.");
+      if (!rfcName) throw new Error("RFC Name is empty.");
+      if (!code) throw new Error("No generated code found.");
+      
+      log(`Pushing → ${GITHUB_REPO}/${fp}`);
+      log(`RFC: ${rfcName} | Env: ${ENV_OPTIONS.find(e=>e.fn===env)?.label} | Code: ${code.length} chars`);
+      
+      // Step 1: check if file already exists
+      const cr = await ghGet(fp);
+      log(`File check: HTTP ${cr.status}${cr.status===404?' (new file)':' (updating existing)'}`);
+      let sha = null;
+      if (cr.ok) { sha = (await cr.json()).sha; log(`Existing SHA: ${sha}`); }
+      else if (cr.status !== 404) {
+        const errBody = await cr.json();
+        throw new Error(`GitHub GET failed (${cr.status}): ${errBody.message}`);
+      }
+
+      // Step 2: push file
+      log('Encoding content and pushing...');
+      const eo = ENV_OPTIONS.find(e=>e.fn===env);
+      const res = await ghPut(fp, code, sha, `Add ${rfcName} controller [${eo?.label}]\n\nAuto-generated via RFC Portal`);
+      const d = await res.json();
+      log(`PUT response: HTTP ${res.status}`);
+
+      if (!res.ok) throw new Error(`GitHub push failed (${res.status}): ${d.message}`);
+
+      const cSha = d.commit?.sha?.slice(0,7);
+      log(`✓ Pushed! Commit: ${cSha}`, 'ok');
+      setDet(x=>({...x,commit:cSha,commitUrl:`https://github.com/${GITHUB_REPO}/commit/${d.commit?.sha}`}));
+      setSt("github","ok");
+      return cSha;
+    } catch (err) {
+      log(`✗ ${err.message}`, 'err');
+      setSt("github","err");
+      throw err;
+    }
   };
 
   const pushSwagger = async (cSha) => {
@@ -292,15 +656,63 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
     } catch(e){setN("dab",e.message);setSt("dab","err");}
   };
 
+  const triggerDeployment = async (rfcNameToLog) => {
+    log('Triggering GitHub Actions deployment workflow...');
+    try {
+      // Trigger deploy-iis.yml via workflow_dispatch
+      const res = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/deploy-iis.yml/dispatches`,
+        {
+          method: 'POST',
+          headers: createGhHeaders(githubToken),
+          body: JSON.stringify({ ref: 'main', inputs: { rfc_name: rfcNameToLog } })
+        }
+      );
+      if (res.status === 204) {
+        log('✓ Deploy workflow triggered — IIS will rebuild & recycle in ~1-2 min', 'ok');
+        setN("github", "Deploy triggered → IIS rebuilding...");
+      } else if (res.status === 404) {
+        // Try master branch
+        const res2 = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/deploy-iis.yml/dispatches`,
+          {
+            method: 'POST',
+            headers: createGhHeaders(githubToken),
+            body: JSON.stringify({ ref: 'master', inputs: { rfc_name: rfcNameToLog } })
+          }
+        );
+        if (res2.status === 204) {
+          log('✓ Deploy workflow triggered on master branch', 'ok');
+          setN("github", "Deploy triggered → IIS rebuilding...");
+        } else {
+          const d = await res2.json();
+          log(`⚠ Workflow dispatch failed (${res2.status}): ${d.message} — push succeeded, deploy must run manually`, 'err');
+        }
+      } else {
+        const d = await res.json();
+        log(`⚠ Workflow dispatch: ${res.status} ${d.message}`, 'err');
+      }
+    } catch(e) {
+      log(`⚠ Deploy trigger error: ${e.message}`, 'err');
+    }
+  };
+
   const handlePush = async () => {
     setPush(true);
     setStages({github:"idle",swagger:"idle",dab:"idle"});
     setDet({commit:null,commitUrl:null,notes:{}});
+    setPushLog([]);
     try {
       const sha=await pushController();
       await Promise.all([doSwag&&pushSwagger(sha),doDab&&pushDab(sha)].filter(Boolean));
+      // Trigger IIS deployment automatically after successful push
+      await triggerDeployment(rfcName);
       setStep(3);
-    } catch(e){setSt("github","err");setN("github",e.message);}
+    } catch(e){
+      setSt("github","err");
+      setN("github",e.message);
+      log(`✗ Push aborted: ${e.message}`,'err');
+    }
     setPush(false);
   };
 
@@ -310,6 +722,11 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
     setPar([{name:"",type:""}]);setCode("");setGErr("");
     setStages({github:"idle",swagger:"idle",dab:"idle"});
     setDet({commit:null,commitUrl:null,notes:{}});
+    setUploadedFile(null);
+    setDocContent("");
+    setDocStatus("idle");
+    setDocError("");
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const icon=(k)=>{
@@ -416,13 +833,136 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
           </div>}
         </div>
 
+        <div className="card">
+          <div className="ct">Upload Document <span className="ai-badge">🤖 AI-Powered</span></div>
+          <p className="hint">Upload RFC specification document - AI will analyze and extract parameters automatically</p>
+          <div 
+            className={`upload-zone ${dragOver ? 'drag-over' : ''} ${uploadedFile ? 'has-file' : ''}`}
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+          >
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              className="upload-input"
+              accept=".doc,.docx,.pdf,.txt"
+              onChange={handleFileInputChange}
+            />
+            <div className="upload-icon">{uploadedFile ? '✅' : '📂'}</div>
+            <div className="upload-title">
+              {uploadedFile ? 'File uploaded successfully!' : 'Click to upload or drag & drop'}
+            </div>
+            <div className="upload-sub">
+              {uploadedFile ? 'Click to replace with another file' : 'Supports DOC, DOCX, PDF, TXT'}
+            </div>
+          </div>
+          {uploadedFile && (
+            <div className="file-info">
+              <div className="file-icon">{getFileIcon(uploadedFile.name)}</div>
+              <div className="file-details">
+                <div className="file-name">{uploadedFile.name}</div>
+                <div className="file-size">{formatFileSize(uploadedFile.size)}</div>
+              </div>
+              <button className="file-remove" onClick={(e) => { e.stopPropagation(); removeFile(); }} title="Remove file">×</button>
+            </div>
+          )}
+          {docStatus === "reading" && (
+            <div className="doc-status reading">
+              <span className="spin"></span> Reading document content...
+            </div>
+          )}
+          {docStatus === "ready" && (
+            <div className="doc-status ready">
+              ✓ Document analyzed - {docContent.length} characters extracted
+            </div>
+          )}
+          {docStatus === "error" && (
+            <div className="doc-status error">
+              ✗ Error: {docError}
+            </div>
+          )}
+          {docContent && (
+            <div className="doc-content">
+              <strong>Document Preview:</strong><br/>
+              {docContent.substring(0, 500)}{docContent.length > 500 ? '...' : ''}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="ct">Cloud AI & GitHub Configuration</div>
+          <div className="field">
+            <label>Anthropic API Key * (for AI Code Generation)</label>
+            <input 
+              className="fi" 
+              type="password"
+              value={apiKey} 
+              onChange={handleApiKeyChange} 
+              placeholder="sk-ant-api03-..."
+            />
+            <div className="hint" style={{marginTop:4}}>Claude AI will analyze your document and generate RFC code. Get key at <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{color:"var(--accent)"}}>console.anthropic.com</a></div>
+          </div>
+          <div className="field" style={{marginTop:14}}>
+            <label>GitHub Personal Access Token * (for Push Operations)</label>
+            <div style={{display:'flex',gap:'8px'}}>
+              <input 
+                className="fi" 
+                style={{flex:1}}
+                type="password"
+                value={githubToken} 
+                onChange={handleGithubTokenChange} 
+                placeholder="ghp_xxxxxxxxxxxx..."
+              />
+              <button 
+                className="btn-g" 
+                style={{width:'auto',margin:0,padding:'8px 14px',fontSize:'11px'}}
+                onClick={testGithubConnection}
+                disabled={githubTestStatus === "testing"}
+              >
+                {githubTestStatus === "testing" ? <span className="spin"/> : "Test"}
+              </button>
+            </div>
+            <div className="hint" style={{marginTop:4}}>Required for pushing to GitHub, Swagger & DAB Config. Create at <a href="https://github.com/settings/tokens/new?scopes=repo&description=RFC%20Portal" target="_blank" rel="noreferrer" style={{color:"var(--accent)"}}>GitHub Settings → Tokens</a> (select 'repo' scope)</div>
+            {githubTestStatus === "ok" && (
+              <div className="doc-status ready" style={{marginTop:8}}>✓ {githubTestMsg}</div>
+            )}
+            {githubTestStatus === "error" && (
+              <div className="doc-status error" style={{marginTop:8}}>✗ {githubTestMsg}</div>
+            )}
+          </div>
+          {(!apiKey || !githubToken) && (
+            <div className="doc-status error" style={{marginTop:12}}>
+              ⚠ Both API keys are required for full automation
+            </div>
+          )}
+          {apiKey && githubToken && (
+            <div className="doc-status ready" style={{marginTop:12}}>
+              ✓ Cloud AI configured - Ready to generate and push automatically
+            </div>
+          )}
+        </div>
+
         {genErr&&<div className="err-bar">⚠ {genErr}</div>}
-        <button className="btn-p" disabled={!rfcName||generating||params.every(p=>!p.name)} onClick={generate}>
-          {generating?<><span className="spin"/>Generating...</>:"Generate Controller →"}
+        <button className="btn-p" disabled={!apiKey||generating||(!rfcName && !docContent)} onClick={generate}>
+          {generating?<><span className="spin"/>{docContent ? 'Analyzing Document & Generating...' : 'Generating...'}</>:
+           docContent ? "🤖 Generate from Document →" : "Generate Controller →"}
         </button>
       </>}
 
       {step===2&&code&&<>
+        <div className="test-env-banner">
+          <div className="icon">⚠️</div>
+          <div className="text">
+            <div className="title">Test Environment Mode</div>
+            <div className="sub">Code will be pushed to GitHub repository for testing. Review before production deployment.</div>
+          </div>
+          <div className={`env-badge ${eo?.label?.toLowerCase()}`}>
+            {eo?.label} · {eo?.ip}
+          </div>
+        </div>
+        
         <div className="card">
           <div className="ct">Generated Controller</div>
           <div className="code-w">
@@ -433,42 +973,188 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
             <div className="code-pre">{code}</div>
           </div>
 
-          <div className="pg-rows">
-            <div className={`pg-r ${stages.github==="idle"?"":stages.github==="run"?"run":stages.github==="ok"?"ok":"err"}`}>
-              <div className="pg-icon">{icon("github")}</div>
-              <div>
-                <div>GitHub → {folder}/{rfcName}Controller.cs</div>
-                {details.commit&&<div className="pg-sub">✓ <a href={details.commitUrl} target="_blank" rel="noreferrer" style={{color:"inherit"}}>{details.commit}</a></div>}
-                {details.notes?.github&&<div className="pg-sub">{details.notes.github}</div>}
+          <div className="push-targets">
+            <div className="push-targets-title">Push Targets (Test Environment)</div>
+            <div className="pg-rows">
+              <div className={`pg-r ${stages.github==="idle"?"":stages.github==="run"?"run":stages.github==="ok"?"ok":"err"}`}>
+                <div className="pg-icon">{icon("github")}</div>
+                <div>
+                  <div>GitHub → {folder}/{rfcName}Controller.cs</div>
+                  <div className="pg-sub">Repository: {GITHUB_REPO}</div>
+                  {details.commit&&<div className="pg-sub">✓ <a href={details.commitUrl} target="_blank" rel="noreferrer" style={{color:"inherit"}}>{details.commit}</a></div>}
+                  {details.notes?.github&&<div className="pg-sub">{details.notes.github}</div>}
+                </div>
+              </div>
+              {doSwag&&<div className={`pg-r ${stages.swagger==="idle"?"":stages.swagger==="run"?"run":stages.swagger==="ok"?"ok":"err"}`}>
+                <div className="pg-icon">{icon("swagger")}</div>
+                <div>
+                  <div>Swagger → {SWAGGER_FILE}</div>
+                  <div className="pg-sub">API documentation update</div>
+                  {details.notes?.swagger&&<div className="pg-sub">{details.notes.swagger}</div>}
+                </div>
+              </div>}
+              {doDab&&<div className={`pg-r ${stages.dab==="idle"?"":stages.dab==="run"?"run":stages.dab==="ok"?"ok":"err"}`}>
+                <div className="pg-icon">{icon("dab")}</div>
+                <div>
+                  <div>DAB Config → <code style={{fontSize:10}}>{sqlTbl||`ET_${rfcName.replace(/_RFC$/,"")}`}</code></div>
+                  <div className="pg-sub">Data API Builder configuration</div>
+                  {details.notes?.dab&&<div className="pg-sub">{details.notes.dab}</div>}
+                </div>
+              </div>}
+              <div className="pg-r">
+                <div className="pg-icon"><span style={{fontSize:14}}>🔄</span></div>
+                <div>
+                  <div>IIS Deploy → GitHub Actions <code style={{fontSize:10}}>deploy-iis.yml</code></div>
+                  <div className="pg-sub">Auto-triggered after push · builds & recycles app pool</div>
+                  {details.notes?.github && details.notes.github.includes("triggered") && (
+                    <div className="pg-sub" style={{color:'var(--green)'}}>✓ {details.notes.github}</div>
+                  )}
+                </div>
               </div>
             </div>
-            {doSwag&&<div className={`pg-r ${stages.swagger==="idle"?"":stages.swagger==="run"?"run":stages.swagger==="ok"?"ok":"err"}`}>
-              <div className="pg-icon">{icon("swagger")}</div>
-              <div><div>Swagger → {SWAGGER_FILE}</div>{details.notes?.swagger&&<div className="pg-sub">{details.notes.swagger}</div>}</div>
-            </div>}
-            {doDab&&<div className={`pg-r ${stages.dab==="idle"?"":stages.dab==="run"?"run":stages.dab==="ok"?"ok":"err"}`}>
-              <div className="pg-icon">{icon("dab")}</div>
-              <div><div>DAB Config → <code style={{fontSize:10}}>{sqlTbl||`ET_${rfcName.replace(/_RFC$/,"")}`}</code></div>{details.notes?.dab&&<div className="pg-sub">{details.notes.dab}</div>}</div>
-            </div>}
           </div>
 
-          <button className="btn-p" disabled={pushing} onClick={handlePush}>
-            {pushing?<><span className="spin"/>Pushing all...</>:"↑ Push GitHub + Swagger + DAB Config"}
+          {!githubToken && (
+            <div className="err-bar" style={{marginBottom:12}}>
+              ⚠ GitHub Token required for push operations. Go back and add your token in the configuration section.
+            </div>
+          )}
+
+          {pushLog.length > 0 && (
+            <div className="push-log">
+              {pushLog.map((l,i) => (
+                <div key={i} className="push-log-row">
+                  <span className="push-log-ts">{l.ts}</span>
+                  <span className={`push-log-msg ${l.type==='ok'?'ok':l.type==='err'?'err':''}`}>{l.msg}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button className="btn-p" disabled={pushing || !githubToken} onClick={handlePush}>
+            {pushing?<><span className="spin"/>Pushing to Test Environment...</>:"↑ Push to GitHub + Swagger + DAB Config (Test)"}
           </button>
-          <button className="btn-g" onClick={()=>setStep(1)}>← Back</button>
+          <button className="btn-g" onClick={()=>setStep(1)}>← Back to Configure</button>
         </div>
       </>}
 
       {step===3&&<div className="card">
-        <div className="suc">
-          <div className="suc-icon">🚀</div>
-          <h2>All pushed!</h2>
-          <p>{rfcName}Controller.cs is live</p>
+        <div className="test-env-banner" style={{marginBottom:0,borderRadius:'10px 10px 0 0'}}>
+          <div className="icon">✅</div>
+          <div className="text">
+            <div className="title">Successfully Pushed to Test Environment</div>
+            <div className="sub">Code pushed to GitHub · IIS rebuild triggered · API live in ~1-2 min</div>
+          </div>
+          <div className={`env-badge ${eo?.label?.toLowerCase()}`}>
+            {eo?.label}
+          </div>
+        </div>
+        <div className="suc" style={{borderTop:'none',paddingTop:20}}>
+          <h2 style={{marginTop:0}}>{rfcName}Controller.cs is live!</h2>
+          <p>Deployed to test environment</p>
           {details.commit&&<a className="chip g" href={details.commitUrl} target="_blank" rel="noreferrer">✓ Commit {details.commit}</a>}
           {doDab&&stages.dab==="ok"&&<a className="chip b" href={`${DAB_APP_URL}/api/${sqlTbl||`ET_${rfcName.replace(/_RFC$/,"")}`}`} target="_blank" rel="noreferrer">📡 DAB entity →</a>}
-          <div><div className="ep-box">POST /api/{rfcName}</div></div>
-          <button className="btn-p" style={{maxWidth:200,margin:"0 auto"}} onClick={reset}>+ Add Another RFC</button>
+          <a className="chip b" href={`https://github.com/${GITHUB_REPO}/actions/workflows/deploy-iis.yml`} target="_blank" rel="noreferrer">⚙ Watch IIS Deploy →</a>
         </div>
+        
+        <div className="api-details">
+          <div className="api-section">
+            <div className="api-section-title">API Endpoint</div>
+            <div className="api-endpoint">
+              <span className="api-method">POST</span>
+              <span className="api-url">/api/{rfcName}</span>
+              <button className="api-copy" onClick={()=>{navigator.clipboard.writeText(`/api/${rfcName}`);alert('Endpoint copied!')}}>Copy</button>
+            </div>
+          </div>
+          
+          <div className="api-section">
+            <div className="api-section-title">Request Parameters</div>
+            {params.filter(p=>p.name).length > 0 ? (
+              <table className="params-table">
+                <thead>
+                  <tr>
+                    <th>Parameter Name</th>
+                    <th>SAP Type</th>
+                    <th>Required</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {params.filter(p=>p.name).map((p,i) => (
+                    <tr key={i}>
+                      <td><span className="param-name">{p.name}</span></td>
+                      <td><span className="param-type">{p.type || "CHAR"}</span></td>
+                      <td>Yes</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{color:'var(--muted)',fontSize:'12px',fontStyle:'italic'}}>
+                Parameters extracted from document - check generated code for details
+              </div>
+            )}
+          </div>
+          
+          <div className="api-section">
+            <div className="api-section-title">Sample Request (JSON)</div>
+            <div className="sample-request">
+              <button className="sample-copy" onClick={()=>{
+                const sampleJson = JSON.stringify(
+                  Object.fromEntries(
+                    params.filter(p=>p.name).length > 0 
+                      ? params.filter(p=>p.name).map(p=>[p.name, `<${p.type || 'string'}>`])
+                      : [["param1", "<value>"]]
+                  ), null, 2
+                );
+                navigator.clipboard.writeText(sampleJson);
+                alert('Sample JSON copied!');
+              }}>Copy</button>
+{`{
+${params.filter(p=>p.name).length > 0 
+  ? params.filter(p=>p.name).map(p => `  "${p.name}": "<${p.type || 'string'}>"`).join(',\n')
+  : '  "param1": "<value>"'
+}
+}`}
+            </div>
+          </div>
+          
+          <div className="api-section">
+            <div className="api-section-title">Expected Response</div>
+            <div className="sample-request">
+{`{
+  "Status": "S",
+  "Message": "Success",
+  "Data": {
+    "${tableP}": [
+      { /* ... row data ... */ }
+    ]
+  }
+}`}
+            </div>
+          </div>
+          
+          <div className="api-section">
+            <div className="api-section-title">Test with cURL</div>
+            <div className="sample-request">
+              <button className="sample-copy" onClick={()=>{
+                const curlCmd = `curl -X POST "http://localhost:<port>/api/${rfcName}" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify(Object.fromEntries(params.filter(p=>p.name).map(p=>[p.name, "value"])))}'`;
+                navigator.clipboard.writeText(curlCmd);
+                alert('cURL command copied!');
+              }}>Copy</button>
+{`curl -X POST "http://localhost:<port>/api/${rfcName}" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify(Object.fromEntries(
+    params.filter(p=>p.name).length > 0 
+      ? params.filter(p=>p.name).map(p=>[p.name, "value"])
+      : [["param1", "value"]]
+  ))}'`}
+            </div>
+          </div>
+        </div>
+        
+        <button className="btn-p" style={{maxWidth:280,margin:"20px auto 0"}} onClick={reset}>+ Add Another RFC</button>
       </div>}
     </div>
   );
