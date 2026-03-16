@@ -4,20 +4,23 @@ jobs:
   check:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Check .NET versions
-        shell: powershell
+      - name: Check environment
+        shell: cmd
         run: |
-          Write-Host "=== .NET Runtimes ==="
-          dotnet --list-runtimes 2>$null || Write-Host "dotnet not found"
-          Write-Host "=== .NET SDKs ==="
-          dotnet --list-sdks 2>$null || Write-Host "no sdks"
-          Write-Host "=== IIS Check ==="
-          Get-Service W3SVC -ErrorAction SilentlyContinue | Select Name,Status
-          Write-Host "=== SAP NCo DLLs ==="
-          Get-ChildItem "C:\","D:\","C:\Windows\System32" -Recurse -Filter "sapnco*.dll" -ErrorAction SilentlyContinue | Select FullName | head -10
-          Write-Host "=== SAP NCo in GAC ==="
-          gacutil /l sapnco 2>$null || Get-ChildItem "C:\Windows\assembly" -Recurse -Filter "*sapnco*" -ErrorAction SilentlyContinue | Select FullName
-          Write-Host "=== Existing services on common ports ==="
-          netstat -ano | findstr "LISTENING" | findstr ":80 \|:8080\|:9090\|:5000\|:3000"
-          Write-Host "=== C:\inetpub check ==="
-          dir "C:\inetpub\wwwroot" -ErrorAction SilentlyContinue
+          echo === .NET Runtimes ===
+          dotnet --list-runtimes
+          echo === .NET SDKs ===
+          dotnet --list-sdks
+          echo === IIS Service ===
+          sc query W3SVC
+          echo === SAP NCo DLLs ===
+          dir C:\Windows\System32\sapnco*.dll 2>nul
+          dir C:\Windows\assembly\GAC_64\sapnco 2>nul
+          dir C:\Windows\assembly\GAC_MSIL\sapnco 2>nul
+          echo === Open Ports ===
+          netstat -ano | findstr LISTENING
+          echo === inetpub ===
+          dir C:\inetpub\wwwroot 2>nul
+          echo === Program Files .NET ===
+          dir "C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App" 2>nul
+          echo === DONE ===
