@@ -6,62 +6,82 @@ jobs:
     runs-on: [self-hosted, test-vm]
     timeout-minutes: 20
     steps:
-      - name: Step 1 - Verify MSDeploy
-        shell: cmd
-        run: |
-          dir "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" 2>nul && echo MSDEPLOY_OK || echo MSDEPLOY_MISSING
-
-      - name: Step 2 - Pull from .36 via MSDeploy (cmd shell - no quoting issues)
+      - name: Pull app files from .36 and copy NCo DLLs
         shell: cmd
         run: |
           if not exist C:\mirror mkdir C:\mirror
-          echo Pulling Store Tracker from .36...
-          "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" -verb:sync -source:apphostconfig="Store Tracker",computername="https://V2DC-ADDVERB:8172/msdeploy.axd",username="V2DC-ADDVERB\Administrator",password="vrl@55555",authtype="Basic",includeAcls="False" -dest:package="C:\mirror\StoreTracker.zip" -allowUntrusted
-          echo MSDeploy exit: %ERRORLEVEL%
+          echo === Pulling app content from .36 (skip SSL bindings) ===
+          "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" ^
+            -verb:sync ^
+            -source:apphostconfig="Store Tracker",computername="https://V2DC-ADDVERB:8172/msdeploy.axd",username="V2DC-ADDVERB\Administrator",password="vrl@55555",authtype="Basic",includeAcls="False" ^
+            -dest:package="C:\mirror\StoreTracker.zip" ^
+            -allowUntrusted ^
+            -skip:objectName=binding ^
+            -skip:objectName=sslCert ^
+            -skip:objectName=sslBinding
+          echo MSDeploy pull exit: %ERRORLEVEL%
           if exist C:\mirror\StoreTracker.zip (
-            echo SUCCESS - Package created
+            echo SUCCESS
             dir C:\mirror\StoreTracker.zip
           ) else (
-            echo FAILED - No package
+            echo FAILED - trying iisApp provider instead...
+            "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" ^
+              -verb:sync ^
+              -source:iisApp="Store Tracker",computername="https://V2DC-ADDVERB:8172/msdeploy.axd",username="V2DC-ADDVERB\Administrator",password="vrl@55555",authtype="Basic",includeAcls="False" ^
+              -dest:package="C:\mirror\StoreTracker.zip" ^
+              -allowUntrusted
+            echo iisApp pull exit: %ERRORLEVEL%
           )
 
-      - name: Step 3 - Copy SAP NCo DLLs from .36 file share
+      - name: Copy SAP NCo DLLs from .36
         shell: cmd
         run: |
-          echo Connecting to .36 file share...
           net use \\192.168.151.36\C$ vrl@55555 /user:V2DC-ADDVERB\Administrator
-          echo Net use exit: %ERRORLEVEL%
+          echo Net use: %ERRORLEVEL%
+          echo === NCo DLLs on .36 System32 ===
+          dir \\192.168.151.36\C$\Windows\System32\sapnco*.dll 2>nul || echo NOT_FOUND_IN_SYSTEM32
+          echo === NCo DLLs on .36 bin ===
+          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco*.dll" 2>nul || echo NOT_FOUND_IN_BIN
           echo.
-          echo Searching for SAP NCo DLLs on .36...
-          dir \\192.168.151.36\C$\Windows\System32\sapnco*.dll 2>nul
-          dir \\192.168.151.36\C$\Windows\System32\rscp4n.dll 2>nul
+          echo === Copying NCo DLLs ===
+          copy /Y \\192.168.151.36\C$\Windows\System32\sapnco.dll C:\Windows\System32\ 2>nul && echo OK: sapnco.dll
+          copy /Y \\192.168.151.36\C$\Windows\System32\sapnco_utils.dll C:\Windows\System32\ 2>nul && echo OK: sapnco_utils.dll
+          copy /Y \\192.168.151.36\C$\Windows\System32\rscp4n.dll C:\Windows\System32\ 2>nul && echo OK: rscp4n.dll
+          copy /Y \\192.168.151.36\C$\Windows\System32\icudt51l.dll C:\Windows\System32\ 2>nul && echo OK: icudt51l.dll
+          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco.dll" C:\Windows\System32\ 2>nul && echo OK: bin\sapnco.dll
+          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco_utils.dll" C:\Windows\System32\ 2>nul && echo OK: bin\sapnco_utils.dll
           echo.
-          echo Checking Store Tracker bin on .36...
-          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco*.dll" 2>nul
+          echo === Store Tracker bin on .36 (all DLLs) ===
+          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\*.dll" /B 2>nul
           echo.
-          echo Copying NCo DLLs...
-          copy /Y \\192.168.151.36\C$\Windows\System32\sapnco.dll C:\Windows\System32\ 2>nul && echo Copied sapnco.dll || echo sapnco.dll not found in System32
-          copy /Y \\192.168.151.36\C$\Windows\System32\sapnco_utils.dll C:\Windows\System32\ 2>nul && echo Copied sapnco_utils.dll || echo sapnco_utils.dll not found
-          copy /Y \\192.168.151.36\C$\Windows\System32\rscp4n.dll C:\Windows\System32\ 2>nul && echo Copied rscp4n.dll || echo rscp4n.dll not found
-          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco.dll" C:\Windows\System32\ 2>nul && echo Copied sapnco.dll from bin || echo sapnco.dll not in bin
-          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco_utils.dll" C:\Windows\System32\ 2>nul && echo Copied sapnco_utils.dll from bin || echo not in bin
           net use \\192.168.151.36\C$ /delete /y 2>nul
-          echo.
-          echo NCo DLLs now on .46:
-          dir C:\Windows\System32\sapnco*.dll 2>nul || echo NONE
+          echo === NCo on .46 ===
+          dir C:\Windows\System32\sapnco*.dll 2>nul || echo NONE_ON_.46
 
-      - name: Step 4 - Deploy package to .46 IIS
+      - name: Deploy to .46 IIS
         shell: cmd
         run: |
           if not exist C:\mirror\StoreTracker.zip (
-            echo No package found - skipping IIS deploy
-            exit 0
+            echo No package - deploying from file share directly...
+            net use \\192.168.151.36\C$ vrl@55555 /user:V2DC-ADDVERB\Administrator
+            xcopy /E /Y /I "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker" "C:\inetpub\wwwroot\Store Tracker"
+            net use \\192.168.151.36\C$ /delete /y 2>nul
+            echo Xcopy exit: %ERRORLEVEL%
+          ) else (
+            echo Deploying package to .46 Store Tracker IIS...
+            "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" ^
+              -verb:sync ^
+              -source:package="C:\mirror\StoreTracker.zip" ^
+              -dest:apphostconfig="Store Tracker" ^
+              "-setParam:name=IIS Web Application Name,value=Store Tracker" ^
+              -allowUntrusted
+            echo Deploy exit: %ERRORLEVEL%
           )
-          echo Deploying to .46 Store Tracker IIS site...
-          "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" -verb:sync -source:package="C:\mirror\StoreTracker.zip" -dest:apphostconfig="Store Tracker" "-setParam:name=IIS Web Application Name,value=Store Tracker" -allowUntrusted
-          echo Deploy exit: %ERRORLEVEL%
+          echo.
+          echo Store Tracker bin on .46:
+          dir "C:\inetpub\wwwroot\Store Tracker\bin" /B 2>nul | head -20
 
-      - name: Step 5 - Test .46 RFC endpoint
+      - name: Test RFC on .46
         shell: powershell
         run: |
           $ErrorActionPreference = "Continue"
@@ -69,9 +89,10 @@ jobs:
           try {
             $b = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260315"}'
             $r = Invoke-WebRequest "http://localhost/api/ZADVANCE_PAYMENT_RFC" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
-            Write-Host "RFC .46: HTTP $($r.StatusCode) - $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))"
+            Write-Host "RFC on .46: HTTP $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(300,$r.Content.Length)))
           } catch { Write-Host "RFC: $_" }
           try {
             $r = Invoke-WebRequest "http://localhost/swagger" -UseBasicParsing -TimeoutSec 8
-            Write-Host "Swagger .46: HTTP $($r.StatusCode)"
+            Write-Host "Swagger: HTTP $($r.StatusCode)"
           } catch { Write-Host "Swagger: $_" }
