@@ -1,28 +1,26 @@
 {
-  "$schema": "https://github.com/Azure/data-api-builder/releases/download/v1.2.10/dab.draft.schema.json",
+  "$schema": "https://github.com/Azure/data-api-builder/releases/download/v0.10.23/dab.draft.schema.json",
   "data-source": {
     "database-type": "mssql",
-    "connection-string": "Server=192.168.151.46,1433\\CRMDEV;Database=DataV2;User Id=sa;Password=vrl@55555;TrustServerCertificate=true;Encrypt=false;"
+    "connection-string": "Server=192.168.151.46,1433;Database=DataV2;User Id=sa;Password=vrl@55555;TrustServerCertificate=true;Encrypt=false;Connection Timeout=30;"
   },
   "runtime": {
     "rest": {
       "enabled": true,
-      "path": "/api"
+      "path": "/api",
+      "request-body-strict": true
     },
     "graphql": {
       "enabled": false
     },
     "host": {
+      "mode": "development",
       "cors": {
         "origins": [
           "*"
         ],
         "allow-credentials": false
-      },
-      "authentication": {
-        "provider": "StaticWebApps"
-      },
-      "mode": "production"
+      }
     }
   },
   "entities": {
