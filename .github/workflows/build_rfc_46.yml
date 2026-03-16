@@ -1,4 +1,5 @@
 name: Build RFC app on .46
+# v2
 on:
   workflow_dispatch:
   push:
