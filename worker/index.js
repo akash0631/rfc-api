@@ -1807,6 +1807,239 @@ init();
       return new Response(html, {headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-cache'}});
     }
 
+    // GET /sap-fetch → SAP Fetch UI
+    if (url.pathname === '/sap-fetch' || url.pathname === '/sap-fetch/') {
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V2 Retail · SAP Fetch</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f4f6fb;--white:#fff;--border:#e2e6ef;--accent:#2563eb;--accent-bg:#eff4ff;
+  --green:#16a34a;--green-bg:#f0fdf4;--red:#dc2626;--red-bg:#fef2f2;
+  --text:#1a2035;--sub:#475569;--muted:#7a8499;--dim:#b0b8cc;
+  --mono:Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+body{background:var(--bg);font-family:var(--sans);color:var(--text);min-height:100vh}
+.top{background:#1a2035;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+.brand{display:flex;align-items:center;gap:8px;color:#fff;font-weight:700;font-size:15px}
+.bdot{width:7px;height:7px;border-radius:50%;background:#34d399;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.badge{font-family:var(--mono);font-size:10px;background:rgba(255,255,255,.15);color:#a5f3fc;padding:2px 8px;border-radius:4px;font-weight:400}
+.main{max-width:960px;margin:0 auto;padding:28px 20px}
+h2{font-size:22px;font-weight:700;margin-bottom:4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+.card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.card-title{font-size:10px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+label{font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--sub);display:block;margin-bottom:5px}
+input,select{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--text);font-size:13px;font-family:var(--sans);outline:none;transition:.15s}
+input:focus,select:focus{border-color:var(--accent);background:var(--white);box-shadow:0 0 0 3px rgba(37,99,235,.07)}
+input::placeholder{color:var(--dim)}
+.cols-wrap{margin-top:12px}
+.cols-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.col-chip{display:flex;align-items:center;gap:5px;background:var(--accent-bg);border:1px solid #bfcfff;color:var(--accent);padding:4px 10px;border-radius:5px;font-size:12px;font-family:var(--mono);cursor:pointer;user-select:none}
+.col-chip.off{background:#f8f9fc;border-color:var(--border);color:var(--muted)}
+.col-chip input[type=checkbox]{display:none}
+.btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s;margin-top:4px}
+.btn:hover{background:#1d4ed8}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.result{margin-top:16px;padding:14px;border-radius:8px;font-size:13px;display:none;word-break:break-all}
+.result.ok{background:var(--green-bg);border:1px solid #bbf7d0;color:var(--green)}
+.result.err{background:var(--red-bg);border:1px solid #fecaca;color:var(--red)}
+.result.info{background:var(--accent-bg);border:1px solid #bfcfff;color:var(--accent)}
+.stat-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px}
+.stat{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:12px 18px;text-align:center;flex:1;min-width:100px}
+.stat .n{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--accent)}
+.stat .l{font-size:11px;color:var(--muted);margin-top:2px}
+.rows-table{width:100%;border-collapse:collapse;font-size:11.5px;font-family:var(--mono);margin-top:12px}
+.rows-table th{background:var(--bg);padding:6px 10px;text-align:left;border-bottom:1px solid var(--border);color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase}
+.rows-table td{padding:6px 10px;border-bottom:1px solid var(--border);color:var(--sub)}
+.rows-table tr:last-child td{border-bottom:none}
+.rows-table tr:hover td{background:#fafbff}
+.scroll-x{overflow-x:auto}
+#rowCount{font-size:11px;color:var(--muted);margin-bottom:4px}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand"><div class="bdot"></div>V2 Retail · SAP Fetch <span class="badge">claudetestv2 @ 192.168.151.46</span></div>
+  <div style="color:#94a3b8;font-size:12px">Relay: v2-rfc-relay.azurewebsites.net</div>
+</div>
+
+<div class="main">
+  <h2>SAP RFC → SQL Fetch</h2>
+  <p class="sub">Select an RFC, set parameters, choose columns, then fetch data from SAP into <strong>claudetestv2</strong>.</p>
+
+  <div class="card">
+    <div class="card-title">1. Select RFC</div>
+    <div class="grid2">
+      <div>
+        <label>RFC Function</label>
+        <select id="rfcSelect" onchange="onRfcChange()">
+          <option value="ZADVANCE_PAYMENT_RFC" data-table="ET_ZADVANCE_PAYMENT"
+            data-cols="DOCUMENT_TYPE,COMPANY_CODE,DOCUMENT_NUMBER,FISCAL_YEAR,LINE_ITEM,POSTING_KEY,ACCOUNT_TYPE,SPECIAL_G_L_IND,TRANSACT_TYPE,DEBIT_CREDIT,AMOUNT_IN_LC,AMOUNT,TEXT,VENDOR,PAYMENT_AMT,POSTING_DATE"
+            data-params="I_COMPANY_CODE,I_POSTING_DATE_LOW,I_POSTING_DATE_HIGH">
+            ZADVANCE_PAYMENT_RFC — Advance Payment Documents
+          </option>
+        </select>
+      </div>
+      <div>
+        <label>Target Table</label>
+        <input id="targetTable" value="ET_ZADVANCE_PAYMENT" placeholder="SQL table name">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">2. Parameters</div>
+    <div id="paramsGrid" class="grid3"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">3. Options</div>
+    <div class="grid2">
+      <div>
+        <label>Max Rows</label>
+        <input id="maxRows" type="number" value="1000" min="1" max="50000">
+      </div>
+      <div>
+        <label>Target Database</label>
+        <input id="targetDb" value="claudetestv2">
+      </div>
+    </div>
+    <div class="cols-wrap">
+      <label>Columns to fetch (click to toggle)</label>
+      <div id="colsGrid" class="cols-grid"></div>
+    </div>
+  </div>
+
+  <button class="btn" id="fetchBtn" onclick="doFetch()">⚡ Fetch from SAP → Store in SQL</button>
+
+  <div class="stat-row" id="statsRow" style="display:none">
+    <div class="stat"><div class="n" id="sFetched">0</div><div class="l">Fetched</div></div>
+    <div class="stat"><div class="n" id="sStored">0</div><div class="l">Stored</div></div>
+    <div class="stat"><div class="n" id="sTotal">0</div><div class="l">SAP Total</div></div>
+  </div>
+
+  <div id="result" class="result"></div>
+
+  <div id="previewWrap" style="display:none;margin-top:16px">
+    <div id="rowCount"></div>
+    <div class="scroll-x"><table class="rows-table" id="previewTable"></table></div>
+  </div>
+</div>
+
+<script>
+const RELAY = 'https://v2-rfc-relay.azurewebsites.net';
+
+function onRfcChange() {
+  const sel = document.getElementById('rfcSelect');
+  const opt = sel.options[sel.selectedIndex];
+  document.getElementById('targetTable').value = opt.dataset.table || '';
+
+  // Build params inputs
+  const params = (opt.dataset.params || '').split(',').filter(Boolean);
+  const grid = document.getElementById('paramsGrid');
+  grid.innerHTML = params.map(p => {
+    const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    const val = p.includes('LOW') ? '20260101' : p.includes('HIGH') ? today : p.includes('CODE') ? '1000' : '';
+    return \\\`<div><label>\\\${p}</label><input id="p_\\\${p}" value="\\\${val}" placeholder="\\\${p}"></div>\\\`;
+  }).join('');
+
+  // Build column chips
+  const cols = (opt.dataset.cols || '').split(',').filter(Boolean);
+  const cg = document.getElementById('colsGrid');
+  cg.innerHTML = cols.map(c =>
+    \\\`<label class="col-chip" id="chip_\\\${c}"><input type="checkbox" checked id="chk_\\\${c}" onchange="toggleChip('\\\${c}')">\\\${c}</label>\\\`
+  ).join('');
+}
+
+function toggleChip(col) {
+  const chk = document.getElementById('chk_'+col);
+  const chip = document.getElementById('chip_'+col);
+  chip.className = 'col-chip' + (chk.checked ? '' : ' off');
+}
+
+async function doFetch() {
+  const sel = document.getElementById('rfcSelect');
+  const opt = sel.options[sel.selectedIndex];
+  const paramNames = (opt.dataset.params || '').split(',').filter(Boolean);
+  const params = {};
+  for (const p of paramNames) {
+    params[p] = document.getElementById('p_'+p)?.value?.trim() || '';
+  }
+  const cols = Array.from(document.querySelectorAll('[id^=chk_]'))
+    .filter(c => c.checked).map(c => c.id.replace('chk_',''));
+
+  const btn = document.getElementById('fetchBtn');
+  const res = document.getElementById('result');
+  btn.disabled = true; btn.textContent = 'Fetching from SAP...';
+  res.style.display = 'none';
+  document.getElementById('statsRow').style.display = 'none';
+  document.getElementById('previewWrap').style.display = 'none';
+
+  try {
+    const r = await fetch(RELAY+'/relay-rfc', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        rfc: sel.value,
+        params,
+        columns: cols,
+        maxRows: parseInt(document.getElementById('maxRows').value)||1000,
+        targetTable: document.getElementById('targetTable').value,
+        targetDb: document.getElementById('targetDb').value,
+      })
+    });
+    const d = await r.json();
+
+    if (!r.ok || d.error) {
+      res.className='result err';
+      res.textContent = '✗ ' + (d.error || JSON.stringify(d));
+      res.style.display='block';
+    } else {
+      document.getElementById('sFetched').textContent = d.fetched || 0;
+      document.getElementById('sStored').textContent = d.stored || 0;
+      document.getElementById('sTotal').textContent = d.total_sap || 0;
+      document.getElementById('statsRow').style.display = 'flex';
+
+      res.className='result ok';
+      res.textContent = '✓ Fetched '+d.fetched+' rows from SAP, stored '+d.stored+' in claudetestv2.'
+        + (d.truncated ? ' (SAP had more — increase Max Rows to get all)' : '')
+        + (d.message ? ' SAP: '+d.message : '');
+      res.style.display='block';
+
+      if (d.rows && d.rows.length > 0) {
+        const keys = Object.keys(d.rows[0]);
+        const head = '<thead><tr>'+keys.map(k=>'<th>'+k+'</th>').join('')+'</tr></thead>';
+        const body = '<tbody>'+d.rows.slice(0,50).map(row =>
+          '<tr>'+keys.map(k=>'<td>'+(row[k]??'')+'</td>').join('')+'</tr>'
+        ).join('')+'</tbody>';
+        document.getElementById('previewTable').innerHTML = head+body;
+        document.getElementById('rowCount').textContent =
+          'Showing first '+Math.min(50,d.rows.length)+' of '+d.rows.length+' rows';
+        document.getElementById('previewWrap').style.display='block';
+      }
+    }
+  } catch(e) {
+    res.className='result err';
+    res.textContent='✗ Network error: '+e.message;
+    res.style.display='block';
+  }
+
+  btn.disabled=false; btn.textContent='⚡ Fetch from SAP → Store in SQL';
+}
+
+// Init on load
+onRfcChange();
+</script>
+</body>
+</html>`;
+      return new Response(html, {headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-cache'}});
+    }
+
     return new Response('Not Found', {status:404});
   }
 };
