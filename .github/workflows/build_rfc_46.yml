@@ -1,5 +1,5 @@
 name: Build RFC app on .46
-# v9-182915
+# v10-183619
 on:
   push:
     paths:
@@ -8,47 +8,31 @@ jobs:
   build:
     runs-on: [self-hosted, test-vm]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Stub VS17 targets (clean XML, no BOM)
-        shell: powershell
-        run: |
-          $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
-          $f = "$d\Microsoft.WebApplication.targets"
-          if (-not (Test-Path $d)) { New-Item -ItemType Directory $d -Force | Out-Null }
-          $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish" /><Target Name="Package" /></Project>'
-          [System.IO.File]::WriteAllText($f, $xml, [System.Text.Encoding]::UTF8)
-          Write-Host "Targets written: $(Test-Path $f)"
-          Get-Content $f
-
-      - name: Build RFC app
+      - name: Deploy existing build output + wire + test (no checkout needed)
         shell: cmd
         run: |
-          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
-          echo BUILD_EXIT: %ERRORLEVEL%
-          if %ERRORLEVEL% NEQ 0 (
-            "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /nologo /verbosity:normal /p:VisualStudioVersion=17.0 2>&1 | findstr /I "error"
-            exit /b 1
-          )
-          dir bin\Release\Vendor*.dll /B 2>nul
-          dir bin\Release\*.dll /B 2>nul | find /c ".dll"
-
-      - name: Deploy to C:\RfcApp
-        shell: cmd
-        run: |
+          echo === Look for existing bin/Release on runner ===
+          dir "C:\actions-runner\_work\rfc-api\rfc-api\bin\Release" /B 2>nul | find /c ".dll"
+          echo === Copy to C:\RfcApp ===
           if not exist C:\RfcApp mkdir C:\RfcApp
-          xcopy /E /Y /I bin\Release C:\RfcApp
-          copy /Y Web.config C:\RfcApp\ 2>nul
-          dir C:\RfcApp\Vendor*.dll /B 2>nul
+          xcopy /E /Y /I "C:\actions-runner\_work\rfc-api\rfc-api\bin\Release" C:\RfcApp
+          copy /Y "C:\actions-runner\_work\rfc-api\rfc-api\Web.config" C:\RfcApp\ 2>nul
+          echo DLLs in C:\RfcApp:
           dir C:\RfcApp\*.dll /B 2>nul | find /c ".dll"
+          dir C:\RfcApp\Vendor*.dll /B 2>nul
 
-      - name: Wire RFC Collector and smoke test
+      - name: Wire RFC Collector to localhost:8888
         shell: cmd
         run: |
-          powershell -NoProfile -Command "\$j=Get-Content C:\RfcCollector\appsettings.json|ConvertFrom-Json;\$j.IIS_HOST='127.0.0.1';\$j.IIS_PORT='8888';\$j|ConvertTo-Json -Depth 10|Set-Content C:\RfcCollector\appsettings.json;Write-Host Updated"
-          powershell -NoProfile -Command "Import-Module WebAdministration;Restart-WebAppPool RfcApiPool -EA SilentlyContinue;Start-Sleep 6"
-          net stop RfcCollector & timeout /t 4 /nobreak & net start RfcCollector
+          powershell -NoProfile -Command "\$j=Get-Content C:\RfcCollector\appsettings.json|ConvertFrom-Json;\$j.IIS_HOST='127.0.0.1';\$j.IIS_PORT='8888';\$j|ConvertTo-Json -Depth 10|Set-Content C:\RfcCollector\appsettings.json;Write-Host(Get-Content C:\RfcCollector\appsettings.json)"
+          powershell -NoProfile -Command "Import-Module WebAdministration;Restart-WebAppPool RfcApiPool -EA SilentlyContinue;Start-Sleep 6;Write-Host pool-recycled"
+          net stop RfcCollector
+          timeout /t 4 /nobreak
+          net start RfcCollector
           timeout /t 14 /nobreak
           sc query RfcCollector | findstr STATE
+
+      - name: Smoke test RFC Collector -> IIS 8888 -> SAP
+        shell: cmd
+        run: |
           powershell -NoProfile -Command "\$b='{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}';try{\$r=Invoke-WebRequest http://localhost:9090/fetch -Method POST -Body \$b -ContentType application/json -UseBasicParsing -TimeoutSec 60;Write-Host FETCH-HTTP \$r.StatusCode;Write-Host(\$r.Content.Substring(0,[Math]::Min(2000,\$r.Content.Length)))}catch{Write-Host FETCH-ERROR \$_.Exception.Message}"
