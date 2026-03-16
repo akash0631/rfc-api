@@ -6,54 +6,37 @@ jobs:
   fix-service:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Fix env vars and start service
+      - name: Stop service
+        shell: cmd
+        run: |
+          sc stop RfcCollector 2>nul
+          timeout /t 4 /nobreak >nul
+          echo Service stopped
+
+      - name: Write env vars to registry using reg.exe
+        shell: cmd
+        run: |
+          reg add "HKLM\SYSTEM\CurrentControlSet\Services\RfcCollector" /v Environment /t REG_MULTI_SZ /d "IIS_HOST=192.168.151.36\0IIS_PORT=80\0SQL_SERVER=192.168.151.46\0SQL_USER=sa\0SQL_PASS=vrl@55555\0SQL_DB=claudetestv2\0ASPNETCORE_URLS=http://0.0.0.0:9090\0" /f
+          echo Registry env vars written
+
+      - name: Start service and health check
+        shell: cmd
+        run: |
+          sc start RfcCollector
+          timeout /t 15 /nobreak >nul
+          sc query RfcCollector
+          curl -s http://localhost:9090/ || echo Not ready yet
+          timeout /t 8 /nobreak >nul
+          curl -s http://localhost:9090/ || echo Still not ready
+          netstat -ano | findstr ":9090"
+
+      - name: Ensure firewall open
         shell: powershell
         run: |
-          # The service already exists - just fix the env vars registry entry
-          Stop-Service RfcCollector -Force -ErrorAction SilentlyContinue
-          Start-Sleep 3
-
-          # Correct way: cast as [string[]] and use -Type MultiString
-          [string[]]$envVars = @(
-            "IIS_HOST=192.168.151.36",
-            "IIS_PORT=80",
-            "SQL_SERVER=192.168.151.46",
-            "SQL_USER=sa",
-            "SQL_PASS=vrl@55555",
-            "SQL_DB=claudetestv2",
-            "ASPNETCORE_URLS=http://0.0.0.0:9090"
-          )
-          Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" `
-            -Name Environment -Value $envVars -Type MultiString
-          Write-Host "Registry env vars set"
-
-          # Start the service
-          sc.exe start RfcCollector
-          Start-Sleep 12
-
-          $svc = Get-Service RfcCollector -ErrorAction SilentlyContinue
-          Write-Host "Service status: $($svc.Status)"
-
-          # Health check
-          for ($i=1; $i -le 8; $i++) {
-            try {
-              $r = Invoke-WebRequest -Uri "http://localhost:9090/" -UseBasicParsing -TimeoutSec 5
-              Write-Host "HEALTHY: $($r.Content)"
-              break
-            } catch {
-              Write-Host "Attempt $i: not ready yet"
-              Start-Sleep 4
-            }
-            if ($i -eq 8) {
-              Write-Host "--- Startup log ---"
-              if (Test-Path "C:\RfcCollector\rfc.log") { Get-Content "C:\RfcCollector\rfc.log" -Tail 20 }
-            }
-          }
-
-          # Ensure firewall open
-          if (-not (Get-NetFirewallRule -DisplayName "RfcCollector-9090" -EA SilentlyContinue)) {
+          if (-not (Get-NetFirewallRule -DisplayName "RfcCollector-9090" -ErrorAction SilentlyContinue)) {
             New-NetFirewallRule -DisplayName "RfcCollector-9090" -Direction Inbound -Protocol TCP -LocalPort 9090 -Action Allow
+            Write-Host "Firewall rule created"
+          } else {
+            Write-Host "Firewall rule already exists"
           }
-          
-          netstat -ano | findstr ":9090"
-          Write-Host "Done"
+          Write-Host "DONE - RFC Collector service running on port 9090"
