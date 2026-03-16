@@ -1,5 +1,5 @@
 name: Build RFC app on .46
-# v4-20260316-180941
+# v5-181050
 on:
   push:
     paths:
@@ -10,74 +10,62 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Stub VS17 targets + build + deploy + test
+      - name: Write VS17 targets stub via cmd
+        shell: cmd
+        run: |
+          if not exist "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications" mkdir "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          if not exist "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets" (
+            echo ^<?xml version="1.0" encoding="utf-8"?^> > "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+            echo ^<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"^> >> "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+            echo ^<Target Name="WebPublish" /^> >> "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+            echo ^<Target Name="Package" /^> >> "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+            echo ^</Project^> >> "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+            echo TARGETS: stub written
+          ) else (
+            echo TARGETS: already present
+          )
+          type "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+
+      - name: Build with MSBuild
+        shell: cmd
+        run: |
+          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
+          echo BUILD_EXIT: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 (
+            "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /nologo /verbosity:normal /p:VisualStudioVersion=17.0 2>&1 | findstr /I "error"
+            exit /b 1
+          )
+          echo === Vendor DLLs in output ===
+          dir bin\Release\Vendor*.dll /B 2>nul
+          echo === SAP DLLs in output ===
+          dir bin\Release\*sap*.dll /B 2>nul
+
+      - name: Deploy to C:\RfcApp and wire RFC Collector
+        shell: cmd
+        run: |
+          if not exist C:\RfcApp mkdir C:\RfcApp
+          xcopy /E /Y /I bin\Release C:\RfcApp
+          xcopy /Y Web.config C:\RfcApp\ 2>nul
+          echo DLLs in C:\RfcApp:
+          dir C:\RfcApp\*.dll /B 2>nul | find /c ".dll"
+          echo === Updating RFC Collector appsettings ===
+          powershell -Command "\$j = Get-Content C:\RfcCollector\appsettings.json | ConvertFrom-Json; \$j.IIS_HOST='127.0.0.1'; \$j.IIS_PORT='8888'; \$j | ConvertTo-Json -Depth 10 | Set-Content C:\RfcCollector\appsettings.json; Write-Host 'Config updated'"
+          echo === Recycling IIS app pool ===
+          powershell -Command "Import-Module WebAdministration; Restart-WebAppPool RfcApiPool; Start-Sleep 6; Write-Host 'Pool recycled'"
+          echo === Restarting RFC Collector ===
+          net stop RfcCollector && timeout /t 3 /nobreak && net start RfcCollector
+          timeout /t 12 /nobreak
+          sc query RfcCollector | findstr STATE
+
+      - name: Smoke test end-to-end
         shell: powershell
         run: |
-          Set-StrictMode -Off
-          $ErrorActionPreference = "Continue"
-
-          # 1. Stub missing targets
-          $targetsDir = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
-          if (-not (Test-Path $targetsDir)) { New-Item -ItemType Directory $targetsDir -Force | Out-Null }
-          $targetsFile = "$targetsDir\Microsoft.WebApplication.targets"
-          if (-not (Test-Path $targetsFile)) {
-            Set-Content $targetsFile @'
-<?xml version="1.0" encoding="utf-8"?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup><WebPublishMethod Condition="'$(WebPublishMethod)'==''">FileSystem</WebPublishMethod></PropertyGroup>
-  <Target Name="WebPublish" /><Target Name="Package" />
-</Project>
-'@
-            Write-Host "TARGETS: stub written"
-          } else {
-            Write-Host "TARGETS: already present"
-          }
-
-          # 2. Build
-          $msbuild = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
-          Write-Host "BUILD: starting"
-          $proc = Start-Process $msbuild -ArgumentList "Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0" -Wait -PassThru -NoNewWindow
-          Write-Host "BUILD EXIT: $($proc.ExitCode)"
-
-          # 3. Show build output
-          $binPath = "$env:GITHUB_WORKSPACE\bin\Release"
-          $dllCount = (Get-ChildItem $binPath -Filter "*.dll" -ErrorAction SilentlyContinue).Count
-          Write-Host "BUILD DLLs: $dllCount"
-          Get-ChildItem $binPath -Filter "Vendor*" -ErrorAction SilentlyContinue | Select Name | Format-Table
-
-          if ($proc.ExitCode -ne 0) {
-            Write-Host "BUILD FAILED — showing MSBuild errors:"
-            & $msbuild Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /nologo /verbosity:detailed /p:VisualStudioVersion=17.0 2>&1 | Select-String -Pattern "error|Error|FAILED" | Select -First 20
-            exit 1
-          }
-
-          # 4. Deploy to C:\RfcApp
-          $dst = "C:\RfcApp"
-          if (-not (Test-Path $dst)) { New-Item -ItemType Directory $dst -Force | Out-Null }
-          Copy-Item "$binPath\*" $dst -Recurse -Force
-          Copy-Item "$env:GITHUB_WORKSPACE\Web.config" $dst -Force -ErrorAction SilentlyContinue
-          Write-Host "DEPLOY DLLs in C:\RfcApp: $((Get-ChildItem $dst -Filter '*.dll' -Recurse).Count)"
-
-          # 5. Wire RFC Collector to localhost:8888
-          $cfg = "C:\RfcCollector\appsettings.json"
-          $json = Get-Content $cfg | ConvertFrom-Json
-          $json.IIS_HOST = "127.0.0.1"; $json.IIS_PORT = "8888"
-          $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
-          Write-Host "CONFIG: IIS_HOST=127.0.0.1 IIS_PORT=8888"
-
-          # 6. Recycle IIS pool + restart service
-          Import-Module WebAdministration
-          Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
-          Start-Sleep 6
-          Restart-Service RfcCollector -Force
-          Start-Sleep 12
-          Write-Host "SERVICE: $((Get-Service RfcCollector).Status)"
-
-          # 7. Smoke test
+          Start-Sleep 5
           $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
           try {
             $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
-            Write-Host "FETCH: HTTP $($r.StatusCode)"
+            Write-Host "FETCH HTTP $($r.StatusCode):"
             Write-Host ($r.Content.Substring(0,[Math]::Min(2000,$r.Content.Length)))
           } catch {
             Write-Host "FETCH ERROR: $($_.Exception.Message)"
