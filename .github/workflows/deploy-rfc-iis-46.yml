@@ -1,0 +1,166 @@
+name: Deploy RFC App to .46 IIS
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy SAP NCo from .36 and install to GAC
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          
+          # Try to copy NCo DLLs from .36 via network share or IIS bin folder
+          $srcPaths = @(
+            "\\192.168.151.36\c$\Windows\assembly",
+            "\\192.168.151.36\c$\Windows\System32",
+            "\\192.168.151.36\c$\inetpub\wwwroot\Store Tracker\bin",
+            "\\192.168.151.36\c$\Program Files\SAP"
+          )
+          
+          $destDir = "C:\RfcApp\bin"
+          if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
+          
+          $found = $false
+          foreach ($src in $srcPaths) {
+            try {
+              $files = Get-ChildItem $src -Recurse -Filter "sapnco*.dll" -ErrorAction SilentlyContinue
+              if ($files) {
+                $files | ForEach-Object {
+                  Copy-Item $_.FullName -Destination $destDir -Force
+                  Write-Host "Copied: $($_.Name) from $src"
+                  $found = $true
+                }
+              }
+            } catch { Write-Host "Cannot access $src - $_" }
+          }
+          
+          if (-not $found) {
+            Write-Host "NCo DLLs not found via network - checking local GAC..."
+            Get-ChildItem "C:\Windows\assembly" -Recurse -Filter "*sapnco*" -ErrorAction SilentlyContinue | Select FullName
+          }
+
+      - name: Setup IIS site for RFC app on port 8888
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          
+          $siteName = "RfcApiApp"
+          $appPoolName = "RfcApiPool"
+          $physPath = "C:\RfcApp"
+          
+          if (-not (Test-Path $physPath)) { New-Item -ItemType Directory -Path $physPath | Out-Null }
+          if (-not (Test-Path "$physPath\bin")) { New-Item -ItemType Directory -Path "$physPath\bin" | Out-Null }
+          
+          # Create app pool if not exists
+          if (-not (Test-Path "IIS:\AppPools\$appPoolName")) {
+            New-WebAppPool -Name $appPoolName
+            Set-ItemProperty "IIS:\AppPools\$appPoolName" -Name managedRuntimeVersion -Value "v4.0"
+            Set-ItemProperty "IIS:\AppPools\$appPoolName" -Name processModel.loadUserProfile -Value $true
+            Write-Host "App pool created: $appPoolName"
+          }
+          
+          # Remove existing site if any
+          if (Get-Website -Name $siteName -ErrorAction SilentlyContinue) {
+            Remove-Website -Name $siteName
+          }
+          
+          # Create site on port 8888
+          New-Website -Name $siteName -Port 8888 -PhysicalPath $physPath -ApplicationPool $appPoolName
+          Start-Website -Name $siteName
+          
+          Write-Host "IIS site '$siteName' created on port 8888 at $physPath"
+          Get-Website -Name $siteName | Select Name, State, PhysicalPath
+
+      - name: Build RFC app with MSBuild
+        shell: powershell
+        run: |
+          $msbuild = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+          $proj = "Vendor_SRM_Routing_Application.sln"
+          
+          # Restore NuGet packages
+          Write-Host "Restoring NuGet..."
+          $nuget = Get-Command nuget -ErrorAction SilentlyContinue
+          if (-not $nuget) {
+            Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "C:\nuget.exe" -UseBasicParsing
+            $env:PATH += ";C:\"
+          }
+          nuget restore $proj -NonInteractive 2>&1 | Select-Object -Last 10
+          
+          # Build
+          Write-Host "Building with MSBuild..."
+          & $msbuild $proj /p:Configuration=Release /p:Platform="Any CPU" /p:DeployOnBuild=false /t:Build /v:minimal 2>&1 | Select-Object -Last 20
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed - trying Framework build..."
+            & $msbuild "Vendor_SRM_Routing_Application.csproj" /p:Configuration=Release /t:Build /v:minimal 2>&1 | Select-Object -Last 20
+          }
+
+      - name: Deploy built files to IIS
+        shell: powershell
+        run: |
+          $srcBin = ".\bin\Release"
+          $dest = "C:\RfcApp"
+          
+          # Copy all compiled files
+          if (Test-Path $srcBin) {
+            Copy-Item "$srcBin\*" -Destination "$dest\bin" -Recurse -Force
+            Write-Host "Copied bin files"
+          }
+          
+          # Copy web config, views, scripts
+          foreach ($item in @("Web.config", "Web.Release.config", "Global.asax", "Global.asax.cs", "Views", "Scripts", "Content")) {
+            if (Test-Path ".\$item") {
+              Copy-Item ".\$item" -Destination $dest -Recurse -Force
+              Write-Host "Copied: $item"
+            }
+          }
+          
+          # Copy packages (NuGet dlls)
+          if (Test-Path ".\packages") {
+            Get-ChildItem ".\packages" -Recurse -Filter "*.dll" | ForEach-Object {
+              Copy-Item $_.FullName -Destination "$dest\bin" -Force -ErrorAction SilentlyContinue
+            }
+          }
+          
+          Write-Host "Deploy complete. Files in C:\RfcApp\bin: $((Get-ChildItem C:\RfcApp\bin -ErrorAction SilentlyContinue).Count)"
+
+      - name: Open firewall and test
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          
+          # Open port 8888
+          if (-not (Get-NetFirewallRule -DisplayName "RfcApp-8888" -ErrorAction SilentlyContinue)) {
+            New-NetFirewallRule -DisplayName "RfcApp-8888" -Direction Inbound -Protocol TCP -LocalPort 8888 -Action Allow
+            Write-Host "Firewall rule created for 8888"
+          }
+          
+          # Restart IIS site
+          Import-Module WebAdministration
+          Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
+          Start-Sleep 5
+          
+          # Test swagger
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost:8888/swagger" -UseBasicParsing -TimeoutSec 10
+            Write-Host "SWAGGER OK: HTTP $($r.StatusCode)"
+          } catch {
+            Write-Host "Swagger test: $_"
+          }
+          
+          # Test ZADVANCE endpoint
+          $body = ConvertTo-Json @{I_COMPANY_CODE="1000"; I_POSTING_DATE_LOW="20260101"; I_POSTING_DATE_HIGH="20260316"}
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost:8888/api/ZADVANCE_PAYMENT_RFC" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "RFC TEST: HTTP $($r.StatusCode) - $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))"
+          } catch {
+            Write-Host "RFC test: $_"
+          }
+          
+          Write-Host "=== IIS Site Status ==="
+          Get-Website "RfcApiApp" | Select Name, State
