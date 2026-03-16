@@ -2,10 +2,16 @@ name: Deploy Controllers to IIS (V2DC-ADDVERB)
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
     paths:
       - 'Controllers/**'
       - 'Models/**'
+  workflow_dispatch:
+    inputs:
+      rfc_name:
+        description: 'RFC Name that was pushed'
+        required: false
+        default: 'manual'
 
 jobs:
   deploy-iis:
