@@ -1,7 +1,6 @@
 name: Build RFC app on .46
-# v3-20260316-180742
+# v4-20260316-180941
 on:
-  workflow_dispatch:
   push:
     paths:
       - '.github/workflows/build_rfc_46.yml'
@@ -11,63 +10,75 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install missing VS17 Web Application targets (stub)
+      - name: Stub VS17 targets + build + deploy + test
         shell: powershell
         run: |
-          $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
-          if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force }
-          $f = "$d\Microsoft.WebApplication.targets"
-          if (-not (Test-Path $f)) {
-            # Try copy from older VS first
-            $alts = @(
-              "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v16.0\WebApplications\Microsoft.WebApplication.targets",
-              "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v15.0\WebApplications\Microsoft.WebApplication.targets"
-            )
-            $done = $false
-            foreach ($a in $alts) { if (Test-Path $a) { Copy-Item $a $f; Write-Host "Copied from $a"; $done=$true; break } }
-            if (-not $done) {
-              Set-Content $f @'
+          Set-StrictMode -Off
+          $ErrorActionPreference = "Continue"
+
+          # 1. Stub missing targets
+          $targetsDir = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          if (-not (Test-Path $targetsDir)) { New-Item -ItemType Directory $targetsDir -Force | Out-Null }
+          $targetsFile = "$targetsDir\Microsoft.WebApplication.targets"
+          if (-not (Test-Path $targetsFile)) {
+            Set-Content $targetsFile @'
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup><WebPublishMethod Condition="'$(WebPublishMethod)'==''">FileSystem</WebPublishMethod></PropertyGroup>
   <Target Name="WebPublish" /><Target Name="Package" />
 </Project>
 '@
-              Write-Host "Stub targets written"
-            }
-          } else { Write-Host "Targets already present" }
+            Write-Host "TARGETS: stub written"
+          } else {
+            Write-Host "TARGETS: already present"
+          }
 
-      - name: Build RFC app
-        shell: cmd
-        run: |
-          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
-          echo BUILD_EXIT: %ERRORLEVEL%
-          dir bin\Release /B 2>nul | findstr "Vendor"
+          # 2. Build
+          $msbuild = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+          Write-Host "BUILD: starting"
+          $proc = Start-Process $msbuild -ArgumentList "Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0" -Wait -PassThru -NoNewWindow
+          Write-Host "BUILD EXIT: $($proc.ExitCode)"
 
-      - name: Deploy to C:\RfcApp and smoke test
-        shell: powershell
-        run: |
-          $src = "$env:GITHUB_WORKSPACE\bin\Release"
+          # 3. Show build output
+          $binPath = "$env:GITHUB_WORKSPACE\bin\Release"
+          $dllCount = (Get-ChildItem $binPath -Filter "*.dll" -ErrorAction SilentlyContinue).Count
+          Write-Host "BUILD DLLs: $dllCount"
+          Get-ChildItem $binPath -Filter "Vendor*" -ErrorAction SilentlyContinue | Select Name | Format-Table
+
+          if ($proc.ExitCode -ne 0) {
+            Write-Host "BUILD FAILED — showing MSBuild errors:"
+            & $msbuild Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /nologo /verbosity:detailed /p:VisualStudioVersion=17.0 2>&1 | Select-String -Pattern "error|Error|FAILED" | Select -First 20
+            exit 1
+          }
+
+          # 4. Deploy to C:\RfcApp
           $dst = "C:\RfcApp"
-          if (-not (Test-Path $dst)) { New-Item -ItemType Directory $dst -Force }
-          Copy-Item "$src\*" $dst -Recurse -Force
+          if (-not (Test-Path $dst)) { New-Item -ItemType Directory $dst -Force | Out-Null }
+          Copy-Item "$binPath\*" $dst -Recurse -Force
           Copy-Item "$env:GITHUB_WORKSPACE\Web.config" $dst -Force -ErrorAction SilentlyContinue
-          Write-Host "DLLs deployed: $((Get-ChildItem $dst -Filter '*.dll' -Recurse).Count)"
-          # Wire RFC Collector to localhost:8888
+          Write-Host "DEPLOY DLLs in C:\RfcApp: $((Get-ChildItem $dst -Filter '*.dll' -Recurse).Count)"
+
+          # 5. Wire RFC Collector to localhost:8888
           $cfg = "C:\RfcCollector\appsettings.json"
           $json = Get-Content $cfg | ConvertFrom-Json
           $json.IIS_HOST = "127.0.0.1"; $json.IIS_PORT = "8888"
           $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
-          # Recycle pool and restart service
+          Write-Host "CONFIG: IIS_HOST=127.0.0.1 IIS_PORT=8888"
+
+          # 6. Recycle IIS pool + restart service
           Import-Module WebAdministration
           Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
           Start-Sleep 6
           Restart-Service RfcCollector -Force
           Start-Sleep 12
-          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
-          # Smoke test
+          Write-Host "SERVICE: $((Get-Service RfcCollector).Status)"
+
+          # 7. Smoke test
           $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
-          $resp = $null
-          try { $resp = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 60 } catch { Write-Host "Error: $_" }
-          if ($resp) { Write-Host "=== FETCH HTTP $($resp.StatusCode) ==="; Write-Host ($resp.Content.Substring(0,[Math]::Min(2000,$resp.Content.Length))) }
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "FETCH: HTTP $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(2000,$r.Content.Length)))
+          } catch {
+            Write-Host "FETCH ERROR: $($_.Exception.Message)"
+          }
