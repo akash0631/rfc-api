@@ -1,0 +1,143 @@
+name: Mirror .36 App to .46 (Zero impact on .36)
+on:
+  workflow_dispatch:
+jobs:
+  mirror:
+    runs-on: [self-hosted, test-vm]
+    timeout-minutes: 20
+    steps:
+      - name: Install MSDeploy on .46 if needed
+        shell: powershell
+        run: |
+          $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          if (-not (Test-Path $msdeploy)) {
+            Write-Host "Installing Web Deploy..."
+            $url = "https://download.microsoft.com/download/0/1/D/01DC28EA-638C-4A22-A57B-4CEF97755C6C/WebDeploy_amd64_en-US.msi"
+            Invoke-WebRequest $url -OutFile "C:\WebDeploy.msi" -UseBasicParsing
+            Start-Process msiexec -ArgumentList "/i C:\WebDeploy.msi /quiet /norestart" -Wait
+            Start-Sleep 5
+          }
+          if (Test-Path $msdeploy) { Write-Host "MSDeploy OK: $msdeploy" }
+          else { Write-Host "MSDeploy not found after install"; exit 1 }
+
+      - name: Pull app package FROM .36 (read-only)
+        shell: powershell
+        run: |
+          $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          Write-Host "Pulling Store Tracker package from .36..."
+          New-Item -ItemType Directory -Path "C:\mirror" -Force | Out-Null
+          
+          & $msdeploy `
+            -verb:sync `
+            -source:apphostconfig="Store Tracker",`
+computername="https://V2DC-ADDVERB:8172/msdeploy.axd",`
+username="V2DC-ADDVERB\Administrator",`
+password="vrl@55555",`
+authtype="Basic",`
+includeAcls="False" `
+            -dest:package="C:\mirror\StoreTracker.zip" `
+            -allowUntrusted
+          
+          Write-Host "Pull exit: $LASTEXITCODE"
+          if (Test-Path "C:\mirror\StoreTracker.zip") {
+            $size = (Get-Item "C:\mirror\StoreTracker.zip").Length
+            Write-Host "Package size: $([math]::Round($size/1MB,1)) MB"
+          } else {
+            Write-Host "Package not created - checking if we can reach .36 MSDeploy"
+            # Test connectivity
+            try {
+              $r = Invoke-WebRequest "https://V2DC-ADDVERB:8172/msdeploy.axd" -UseBasicParsing -TimeoutSec 10 -SkipCertificateCheck
+              Write-Host ".36 MSDeploy reachable: HTTP $($r.StatusCode)"
+            } catch {
+              Write-Host ".36 MSDeploy: $_"
+            }
+          }
+
+      - name: Also grab SAP NCo DLLs from .36
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          Write-Host "Fetching NCo DLLs via file share..."
+          net use "\\192.168.151.36\C$" "vrl@55555" /user:"V2DC-ADDVERB\Administrator" 2>&1
+          
+          $ncoDlls = @(
+            "\\192.168.151.36\C$\Windows\System32\sapnco.dll",
+            "\\192.168.151.36\C$\Windows\System32\sapnco_utils.dll",
+            "\\192.168.151.36\C$\Windows\System32\sapnco3.dll",
+            "\\192.168.151.36\C$\Windows\System32\rscp4n.dll",
+            "\\192.168.151.36\C$\Windows\System32\icudt51l.dll",
+            "\\192.168.151.36\C$\Windows\System32\libicudecnumber.dll"
+          )
+          
+          $copied = 0
+          foreach ($src in $ncoDlls) {
+            if (Test-Path $src) {
+              $fname = Split-Path $src -Leaf
+              Copy-Item $src "C:\Windows\System32\$fname" -Force
+              Write-Host "Copied: $fname"
+              $copied++
+            }
+          }
+          
+          # Also check in GAC
+          $gacPath = "\\192.168.151.36\C$\Windows\assembly\GAC_64"
+          Get-ChildItem $gacPath -ErrorAction SilentlyContinue | Where-Object {$_.Name -like "*sapnco*"} | ForEach-Object {
+            Write-Host "GAC entry found: $($_.Name)"
+          }
+          
+          # Check Store Tracker bin for NCo
+          $binPath = "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin"
+          $binNco = Get-ChildItem $binPath -Filter "sapnco*.dll" -ErrorAction SilentlyContinue
+          foreach ($dll in $binNco) {
+            Copy-Item $dll.FullName "C:\Windows\System32\$($dll.Name)" -Force
+            Write-Host "Copied from bin: $($dll.Name)"
+            $copied++
+          }
+          
+          Write-Host "Total NCo DLLs copied: $copied"
+          net use "\\192.168.151.36\C$" /delete /y 2>&1
+          
+          # Verify
+          $found = Get-ChildItem "C:\Windows\System32\sapnco*.dll" -ErrorAction SilentlyContinue
+          if ($found) { $found | Select-Object Name, Length | Format-Table }
+          else { Write-Host "NCo DLLs not found on .36 System32 - may be in GAC or elsewhere" }
+
+      - name: Deploy package to .46 IIS
+        shell: powershell
+        run: |
+          if (-not (Test-Path "C:\mirror\StoreTracker.zip")) {
+            Write-Host "No package found - skipping IIS deploy"
+            exit 0
+          }
+          $msdeploy = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          Write-Host "Deploying to .46 Store Tracker site..."
+          
+          & $msdeploy `
+            -verb:sync `
+            -source:package="C:\mirror\StoreTracker.zip" `
+            -dest:apphostconfig="Store Tracker" `
+            -setParam:name="IIS Web Application Name",value="Store Tracker" `
+            -allowUntrusted `
+            -enableRule:AppOffline
+          
+          Write-Host "Local deploy exit: $LASTEXITCODE"
+
+      - name: Test .46 RFC API
+        shell: powershell
+        run: |
+          Start-Sleep 5
+          $ErrorActionPreference = "Continue"
+          
+          # Test swagger
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost/swagger" -UseBasicParsing -TimeoutSec 8
+            Write-Host "Swagger: HTTP $($r.StatusCode) len=$($r.Content.Length)"
+          } catch { Write-Host "Swagger: $_" }
+          
+          # Test RFC endpoint
+          try {
+            $body = "{`"I_COMPANY_CODE`":`"1000`",`"I_POSTING_DATE_LOW`":`"20260301`",`"I_POSTING_DATE_HIGH`":`"20260315`"}"
+            $r = Invoke-WebRequest -Uri "http://localhost/api/ZADVANCE_PAYMENT_RFC" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
+            Write-Host "RFC API: HTTP $($r.StatusCode)"
+            Write-Host $r.Content.Substring(0, [Math]::Min(300, $r.Content.Length))
+          } catch { Write-Host "RFC API: $_" }
