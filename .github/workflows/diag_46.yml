@@ -1,0 +1,63 @@
+name: Diagnose .46 — find RfcCollector config and .36 IIS path
+on:
+  workflow_dispatch:
+jobs:
+  diag:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Find RfcCollector config and .36 IIS structure
+        shell: powershell
+        run: |
+          # 1. Find appsettings.json anywhere under C:\RfcCollector and nearby dirs
+          Write-Host "=== Searching for appsettings.json ==="
+          Get-ChildItem "C:\RfcCollector" -Recurse -ErrorAction SilentlyContinue | Select FullName, Length
+          Get-ChildItem "C:\" -Filter "appsettings.json" -Recurse -Depth 4 -ErrorAction SilentlyContinue | Select FullName
+
+          # 2. RfcCollector service details
+          Write-Host "`n=== RfcCollector service ==="
+          $svc = Get-WmiObject Win32_Service -Filter "Name='RfcCollector'"
+          Write-Host "PathName: $($svc.PathName)"
+          Write-Host "StartName: $($svc.StartName)"
+
+          # 3. Check if RFC Collector is an ASP.NET app or a console app — look for env vars in service
+          Write-Host "`n=== Environment variables for RfcCollector process ==="
+          $proc = Get-Process -Name "RfcCollector" -ErrorAction SilentlyContinue
+          if ($proc) { Write-Host "PID: $($proc.Id)"; Write-Host "WorkingDir: $($proc.Path)" }
+
+          # 4. Check .36 IIS paths via network mount
+          Write-Host "`n=== Mounting .36 ==="
+          $pass = ConvertTo-SecureString "vrl@55555" -AsPlainText -Force
+          $cred = New-Object System.Management.Automation.PSCredential("Administrator", $pass)
+          try {
+            New-PSDrive -Name Y -PSProvider FileSystem -Root "\\192.168.151.36\C$" -Credential $cred -ErrorAction Stop
+            Write-Host "Mounted .36 as Y:"
+            
+            Write-Host "`n=== .36 inetpub sites ==="
+            Get-ChildItem "Y:\inetpub\wwwroot" -ErrorAction SilentlyContinue | Select Name
+            
+            Write-Host "`n=== .36 Store Tracker bin (if exists) ==="
+            Get-ChildItem "Y:\inetpub\wwwroot\Store Tracker\bin" -Filter "*.dll" -ErrorAction SilentlyContinue | Select Name, Length | Sort Name
+            
+            Write-Host "`n=== .36 RfcApiApp / API bins ==="
+            Get-ChildItem "Y:\inetpub\wwwroot" -Recurse -Filter "ZADVANCE*Controller.cs" -ErrorAction SilentlyContinue | Select FullName
+            Get-ChildItem "Y:\inetpub\wwwroot" -Recurse -Filter "sapnco.dll" -ErrorAction SilentlyContinue | Select FullName, Length
+            
+            Write-Host "`n=== IIS sites on .36 ==="
+            C:\Windows\System32\inetsrv\appcmd.exe list site /computername:192.168.151.36 2>$null
+            # fallback: check via filesystem
+            Get-ChildItem "Y:\inetpub\wwwroot" | Select Name, @{n="DLLCount";e={(Get-ChildItem "$($_.FullName)\bin" -Filter "*.dll" -ErrorAction SilentlyContinue).Count}}
+            
+            Remove-PSDrive Y -ErrorAction SilentlyContinue
+          } catch {
+            Write-Host "Mount failed: $_"
+          }
+
+          # 5. Check current RFC Collector IIS_HOST config
+          Write-Host "`n=== RFC Collector environment / config ==="
+          $dirs = @("C:\RfcCollector", "C:\Program Files\RfcCollector", "C:\inetpub\wwwroot\RfcCollector")
+          foreach ($d in $dirs) {
+            if (Test-Path $d) {
+              Write-Host "Found dir: $d"
+              Get-ChildItem $d -Recurse -ErrorAction SilentlyContinue | Select FullName, Length
+            }
+          }
