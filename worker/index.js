@@ -1883,6 +1883,21 @@ input::placeholder{color:var(--dim)}
             data-params="I_COMPANY_CODE,I_POSTING_DATE_LOW,I_POSTING_DATE_HIGH">
             ZADVANCE_PAYMENT_RFC — Advance Payment Documents
           </option>
+          <option value="ZVND_PUTWAY_BIN_VAL_RFC" data-table="ET_ZVND_PUTWAY_BIN_VAL"
+            data-cols="TYPE,MESSAGE"
+            data-params="IM_USER,IM_PLANT,IM_BIN">
+            ZVND_PUTWAY_BIN_VAL_RFC — BIN Validation (Inbound Putway)
+          </option>
+          <option value="ZVND_PUTWAY_PALETTE_VAL_RFC" data-table="ET_ZVND_PUTWAY_PALETTE_VAL"
+            data-cols="PO_NUMBER,VENDOR_CODE,VENDOR_NAME,INVOICE_NO,BOX_COUNT,PALETTE_NO"
+            data-params="IM_USER,IM_PLANT,IM_BIN,IM_PALL">
+            ZVND_PUTWAY_PALETTE_VAL_RFC — Palette Validation + PO/Vendor Details
+          </option>
+          <option value="ZVND_PUTWAY_SAVE_DATA_RFC" data-table="ET_ZVND_PUTWAY_SAVE"
+            data-cols="TYPE,MESSAGE"
+            data-params="IM_USER">
+            ZVND_PUTWAY_SAVE_DATA_RFC — Save Putway Data [WRITE RFC]
+          </option>
         </select>
       </div>
       <div>
