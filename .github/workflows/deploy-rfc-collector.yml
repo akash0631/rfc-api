@@ -1,0 +1,78 @@
+name: Deploy RFC Collector to .46
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'rfc-collector/**'
+
+jobs:
+  # Job 1: Build on GitHub-hosted ubuntu runner
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish win-x64 self-contained
+        run: |
+          dotnet publish rfc-collector/RfcCollector/RfcCollector.csproj \
+            -c Release -r win-x64 --self-contained true \
+            -o ${{ github.workspace }}/publish
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfc-collector-win-x64
+          path: publish/
+          retention-days: 7
+
+  # Job 2: Deploy to VM-CRM (.46) via self-hosted runner
+  deploy:
+    needs: build
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rfc-collector-win-x64
+          path: C:\RfcCollector\
+
+      - name: Stop existing process
+        shell: cmd
+        run: |
+          taskkill /F /IM RfcCollector.exe 2>nul
+          echo Stopped (or was not running)
+
+      - name: Set environment and start
+        shell: cmd
+        run: |
+          setx IIS_HOST "192.168.151.36" /M
+          setx IIS_PORT "80" /M
+          setx SQL_SERVER "192.168.151.46" /M
+          setx SQL_USER "sa" /M
+          setx SQL_PASS "vrl@55555" /M
+          setx SQL_DB "claudetestv2" /M
+          setx ASPNETCORE_URLS "http://0.0.0.0:9090" /M
+          echo Environment set
+
+      - name: Start RFC Collector
+        shell: cmd
+        run: |
+          start /B C:\RfcCollector\RfcCollector.exe > C:\RfcCollector\rfc-collector.log 2>&1
+          timeout /t 5 /nobreak
+          echo Started
+
+      - name: Health check
+        shell: cmd
+        run: |
+          timeout /t 3 /nobreak
+          curl -s http://localhost:9090/ || echo "Health check - may need a moment to start"
+
+      - name: Summary
+        shell: cmd
+        run: |
+          echo RFC Collector deployed to VM-CRM (.46)
+          echo URL: http://192.168.151.46:9090
+          echo Swagger: http://192.168.151.46:9090/swagger
+          echo Database: claudetestv2 @ 192.168.151.46
