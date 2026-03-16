@@ -5,40 +5,63 @@ jobs:
   verify:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Check Store Tracker DLLs on .46
+      - name: Find app root on .36 and copy to .46
+        shell: cmd
+        run: |
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE: %ERRORLEVEL%
+          echo === wwwroot on .36 ===
+          dir \\192.168.151.36\C$\inetpub\wwwroot /B 2>nul
+          echo === inetpub root ===
+          dir \\192.168.151.36\C$\inetpub /B 2>nul
+          echo === Testing exact path ===
+          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker" /B 2>nul
+          echo EXIT: %ERRORLEVEL%
+          net use \\192.168.151.36\C$ /delete /y 2>nul
+
+      - name: Check IIS site physical paths on .36 via appcmd
         shell: powershell
         run: |
-          $bin = "C:\inetpub\wwwroot\Store Tracker\bin"
-          Write-Host "=== Vendor + SAP DLLs in Store Tracker\bin ==="
-          Get-ChildItem $bin -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "Vendor*" -or $_.Name -like "*sap*" -or $_.Name -like "*SAP*" } | Select Name, Length | Format-Table
-          Write-Host "Total DLL count: $((Get-ChildItem $bin -Filter '*.dll' -ErrorAction SilentlyContinue).Count)"
+          # Use appcmd over PSRemoting to .36
+          $sess = New-PSSession -ComputerName 192.168.151.36 -Credential (New-Object PSCredential("Administrator", (ConvertTo-SecureString "vrl@55555" -AsPlainText -Force))) -ErrorAction SilentlyContinue
+          if ($sess) {
+            Write-Host "PSRemoting connected"
+            Invoke-Command -Session $sess -ScriptBlock {
+              & "C:\Windows\System32\inetsrv\appcmd.exe" list sites
+              & "C:\Windows\System32\inetsrv\appcmd.exe" list vdir
+            }
+            Remove-PSSession $sess
+          } else {
+            Write-Host "PSRemoting not available — trying WMI"
+            # Fall back: list shares available on .36
+            net view \\192.168.151.36 2>$null
+          }
 
-      - name: Recycle all IIS app pools
+      - name: Mount .36 and list all wwwroot subfolders
+        shell: cmd
+        run: |
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo wwwroot contents:
+          dir \\192.168.151.36\C$\inetpub\wwwroot 2>nul
+          echo.
+          echo Checking alternate paths:
+          dir \\192.168.151.36\C$\StoreTracker 2>nul
+          dir "\\192.168.151.36\C$\Store Tracker" 2>nul
+          dir \\192.168.151.36\C$\RfcApp 2>nul
+          dir \\192.168.151.36\C$\iis 2>nul
+          net use \\192.168.151.36\C$ /delete /y 2>nul
+
+      - name: Check .46 local IIS site paths
         shell: powershell
         run: |
           Import-Module WebAdministration
-          Get-ChildItem IIS:\AppPools | ForEach-Object { Restart-WebAppPool $_.Name -ErrorAction SilentlyContinue; Write-Host "Recycled $($_.Name)" }
-          Start-Sleep 6
-          Get-Website | Select Name, State, PhysicalPath | Format-Table
-
-      - name: Restart RFC Collector
-        shell: powershell
-        run: |
-          Restart-Service RfcCollector -Force
-          Start-Sleep 10
-          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
-
-      - name: Test IIS :80 health endpoint
-        shell: powershell
-        run: |
-          $resp = $null
-          try { $resp = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10 } catch { Write-Host "Health: $_" }
-          if ($resp) { Write-Host "IIS Health HTTP $($resp.StatusCode): $($resp.Content)" }
-
-      - name: End-to-end smoke test via RFC Collector
-        shell: powershell
-        run: |
-          $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
-          $resp = $null
-          try { $resp = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 45 } catch { Write-Host "Error: $_" }
-          if ($resp) { Write-Host "FETCH HTTP $($resp.StatusCode):"; Write-Host ($resp.Content.Substring(0,[Math]::Min(1500,$resp.Content.Length))) }
+          Write-Host "=== .46 IIS sites with physical paths ==="
+          Get-Website | Select Name, State, @{n='Path';e={$_.PhysicalPath}} | Format-Table -AutoSize
+          Write-Host "=== .46 Store Tracker bin ==="
+          Get-ChildItem "C:\inetpub\wwwroot\Store Tracker" -ErrorAction SilentlyContinue | Select Name | Format-Table
+          Write-Host "=== .46 RfcApp ==="
+          Get-ChildItem "C:\RfcApp" -ErrorAction SilentlyContinue | Select Name | Format-Table
+          Write-Host "=== Web.config in Store Tracker? ==="
+          Test-Path "C:\inetpub\wwwroot\Store Tracker\Web.config"
+          Write-Host "=== Web.config in RfcApp? ==="
+          Test-Path "C:\RfcApp\Web.config"
