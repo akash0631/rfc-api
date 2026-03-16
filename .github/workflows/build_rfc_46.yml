@@ -1,5 +1,5 @@
 name: Build RFC app on .46
-# v7-181743
+# v8-182253
 on:
   push:
     paths:
@@ -10,26 +10,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build and push output
+      - name: Stub VS17 targets
+        shell: cmd
+        run: |
+          if not exist "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications" mkdir "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          echo ^<?xml version="1.0" encoding="utf-8"?^> > "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+          echo ^<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"^> >> "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+          echo ^<Target Name="WebPublish" /^> >> "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+          echo ^<Target Name="Package" /^> >> "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+          echo ^</Project^> >> "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+          echo Targets written
+
+      - name: Build RFC app
         shell: cmd
         run: |
           set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /nologo /verbosity:normal /p:VisualStudioVersion=17.0 > build_output.txt 2>&1
-          echo BUILD_EXIT=%ERRORLEVEL% >> build_output.txt
-          type build_output.txt
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
+          echo BUILD_EXIT: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 exit /b 1
+          echo === Vendor DLLs ===
+          dir bin\Release\Vendor*.dll /B 2>nul
+          echo === SAP DLLs ===
+          dir bin\Release\*sap*.dll /B 2>nul
+          echo === Total DLL count ===
+          dir bin\Release\*.dll /B 2>nul | find /c ".dll"
 
-      - name: Push build output to GitHub
-        shell: powershell
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy to C:\RfcApp
+        shell: cmd
         run: |
-          $content = Get-Content "build_output.txt" -Raw -ErrorAction SilentlyContinue
-          if (-not $content) { $content = "empty" }
-          $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
-          $h = @{ Authorization = "token $env:GH_TOKEN"; "User-Agent" = "v2"; "Content-Type" = "application/json" }
-          $ex = try { Invoke-WebRequest "https://api.github.com/repos/akash0631/rfc-api/contents/build_output.txt" -Headers $h -UseBasicParsing } catch { $null }
-          $sha = if ($ex) { ($ex.Content | ConvertFrom-Json).sha } else { "" }
-          $body = @{ message = "ci: build output 181743"; content = $b64 }
-          if ($sha) { $body.sha = $sha }
-          Invoke-WebRequest "https://api.github.com/repos/akash0631/rfc-api/contents/build_output.txt" -Method PUT -Headers $h -Body ($body | ConvertTo-Json) -UseBasicParsing | Out-Null
-          Write-Host "Pushed"
+          if not exist C:\RfcApp mkdir C:\RfcApp
+          xcopy /E /Y /I bin\Release C:\RfcApp
+          copy /Y Web.config C:\RfcApp\ 2>nul
+          echo === DLLs in C:\RfcApp ===
+          dir C:\RfcApp\*.dll /B 2>nul | find /c ".dll"
+          dir C:\RfcApp\Vendor*.dll /B 2>nul
+
+      - name: Wire RFC Collector to localhost:8888 and restart
+        shell: cmd
+        run: |
+          powershell -NoProfile -Command "\$j = Get-Content C:\RfcCollector\appsettings.json | ConvertFrom-Json; \$j.IIS_HOST='127.0.0.1'; \$j.IIS_PORT='8888'; \$j | ConvertTo-Json -Depth 10 | Set-Content C:\RfcCollector\appsettings.json; Write-Host (Get-Content C:\RfcCollector\appsettings.json)"
+          powershell -NoProfile -Command "Import-Module WebAdministration; Restart-WebAppPool RfcApiPool -ErrorAction SilentlyContinue; Start-Sleep 6; Write-Host Pool-recycled"
+          net stop RfcCollector
+          timeout /t 4 /nobreak
+          net start RfcCollector
+          timeout /t 12 /nobreak
+          sc query RfcCollector | findstr STATE
+
+      - name: Smoke test
+        shell: cmd
+        run: |
+          powershell -NoProfile -Command "\$b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'; try { \$r = Invoke-WebRequest http://localhost:9090/fetch -Method POST -Body \$b -ContentType application/json -UseBasicParsing -TimeoutSec 60; Write-Host FETCH-HTTP \$r.StatusCode; Write-Host (\$r.Content.Substring(0,[Math]::Min(2000,\$r.Content.Length))) } catch { Write-Host FETCH-ERROR \$_.Exception.Message }"
