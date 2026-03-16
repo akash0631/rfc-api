@@ -1,0 +1,23 @@
+name: Check .46 Environment
+on: [workflow_dispatch]
+jobs:
+  check:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Check .NET versions
+        shell: powershell
+        run: |
+          Write-Host "=== .NET Runtimes ==="
+          dotnet --list-runtimes 2>$null || Write-Host "dotnet not found"
+          Write-Host "=== .NET SDKs ==="
+          dotnet --list-sdks 2>$null || Write-Host "no sdks"
+          Write-Host "=== IIS Check ==="
+          Get-Service W3SVC -ErrorAction SilentlyContinue | Select Name,Status
+          Write-Host "=== SAP NCo DLLs ==="
+          Get-ChildItem "C:\","D:\","C:\Windows\System32" -Recurse -Filter "sapnco*.dll" -ErrorAction SilentlyContinue | Select FullName | head -10
+          Write-Host "=== SAP NCo in GAC ==="
+          gacutil /l sapnco 2>$null || Get-ChildItem "C:\Windows\assembly" -Recurse -Filter "*sapnco*" -ErrorAction SilentlyContinue | Select FullName
+          Write-Host "=== Existing services on common ports ==="
+          netstat -ano | findstr "LISTENING" | findstr ":80 \|:8080\|:9090\|:5000\|:3000"
+          Write-Host "=== C:\inetpub check ==="
+          dir "C:\inetpub\wwwroot" -ErrorAction SilentlyContinue
