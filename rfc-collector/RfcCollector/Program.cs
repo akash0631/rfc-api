@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.Data.SqlClient;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -108,7 +109,14 @@ app.MapPost("/fetch", async (FetchRequest req, IHttpClientFactory httpFactory) =
     HttpResponseMessage? iisResp;
     try {
         var body = JsonSerializer.Serialize(req.Params ?? new());
-        iisResp = await http.PostAsync($"/api/{req.Rfc}", new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+        // Map RFC name → IIS controller route (SAP_RFC_NAME → /api/SapRfcName/Execute)
+    var rfcRoute = req.Rfc;  // default: use RFC name as-is
+    // Convert SNAKE_CASE RFC names to PascalCase controller routes
+    var parts = req.Rfc.Split('_');
+    var pascal = string.Concat(parts.Select(p => p.Length > 0 ? char.ToUpper(p[0]) + p.Substring(1).ToLower() : ""));
+    var controllerRoute = $"/api/{pascal}/Execute";
+    // Try controller route first, fall back to direct RFC name
+    iisResp = await http.PostAsync(controllerRoute, new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
     } catch (HttpRequestException ex) {
         return Results.Problem($"Cannot reach IIS at {iisHost}:{iisPort} — {ex.Message}", statusCode: 503);
     } catch (TaskCanceledException) {
