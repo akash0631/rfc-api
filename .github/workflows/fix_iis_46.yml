@@ -6,29 +6,50 @@ jobs:
   fix:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Discover .36 IIS paths
+      - name: Find Store Tracker physical path on .36 + read RFC Collector config
+        shell: powershell
+        run: |
+          # -- Read RFC Collector config files --
+          Write-Host "=== web.config ==="
+          Get-Content "C:\RfcCollector\web.config" -ErrorAction SilentlyContinue
+          Write-Host "=== start.bat ==="
+          Get-Content "C:\RfcCollector\start.bat" -ErrorAction SilentlyContinue
+          Write-Host "=== svc-wrapper.bat ==="
+          Get-Content "C:\RfcCollector\svc-wrapper.bat" -ErrorAction SilentlyContinue
+          Write-Host "=== rfc.log (last 20 lines) ==="
+          Get-Content "C:\RfcCollector\rfc.log" -Tail 20 -ErrorAction SilentlyContinue
+          Write-Host "=== RfcCollector.runtimeconfig.json ==="
+          Get-Content "C:\RfcCollector\RfcCollector.runtimeconfig.json" -ErrorAction SilentlyContinue
+
+      - name: Find Store Tracker physical path on .36
         shell: cmd
         run: |
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
           echo NET_USE: %ERRORLEVEL%
-          echo === wwwroot on .36 ===
-          dir "\\192.168.151.36\C$\inetpub\wwwroot" /B 2>nul
-          echo === All IIS sites (appcmd) ===
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list site 2>nul || echo APPCMD_FAILED
-          echo === Searching for any .cs or .dll under wwwroot on .36 ===
-          dir "\\192.168.151.36\C$\inetpub\wwwroot\" /S /B 2>nul | findstr "\.dll$" | find "bin\"
+          echo === appcmd on .36 for Store Tracker site ===
+          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list site "Store Tracker" /text:physicalPath
+          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list vdir /site.name:"Store Tracker"
+          echo === Searching C:\ on .36 for Vendor_SRM*.dll or sapnco.dll ===
+          dir "\\192.168.151.36\C$\" /S /B /A:-D 2>nul | findstr /I "Vendor_SRM\|sapnco\|rfcapi\|Store Tracker" 2>nul
           net use \\192.168.151.36\C$ /delete /y 2>nul
 
-      - name: Discover RFC Collector config on .46
+      - name: Set RFC Collector IIS_HOST via environment variable
         shell: powershell
         run: |
-          Write-Host "=== RfcCollector dir ==="
-          Get-ChildItem "C:\RfcCollector" | Select Name, Length
-          Write-Host "=== Environment vars with IIS or RFC ==="
-          [System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::Machine) `
-            | Where-Object { $_.Key -match 'IIS|RFC|HOST|PORT|SAP' } `
-            | Format-Table -AutoSize
-          Write-Host "=== RfcCollector.exe strings (config) ==="
-          try { Select-String -Path "C:\RfcCollector\*.json","C:\RfcCollector\*.config","C:\RfcCollector\*.xml" -Pattern "IIS|HOST|PORT|SAP" -ErrorAction SilentlyContinue } catch {}
-          Write-Host "=== All files in RfcCollector dir ==="
-          Get-ChildItem "C:\RfcCollector" -Recurse | Select FullName, Length
+          # Try setting machine-level env vars so the service picks them up
+          [System.Environment]::SetEnvironmentVariable("IIS_HOST", "127.0.0.1", [System.EnvironmentVariableTarget]::Machine)
+          [System.Environment]::SetEnvironmentVariable("IIS_PORT", "80", [System.EnvironmentVariableTarget]::Machine)
+          Write-Host "Set IIS_HOST=" ([System.Environment]::GetEnvironmentVariable("IIS_HOST","Machine"))
+          Write-Host "Set IIS_PORT=" ([System.Environment]::GetEnvironmentVariable("IIS_PORT","Machine"))
+          Restart-Service RfcCollector -Force
+          Start-Sleep 8
+          Write-Host "RfcCollector state:" (Get-Service RfcCollector).Status
+          # Test immediately
+          $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 25
+            Write-Host "RFC Collector /fetch HTTP $($r.StatusCode):"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(600,$r.Content.Length)))
+          } catch {
+            Write-Host "FETCH via localhost:9090 ERROR: $_"
+          }
