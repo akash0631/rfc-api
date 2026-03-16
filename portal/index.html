@@ -213,6 +213,8 @@ const GITHUB_REPO = "akash0631/rfc-api";
 const SWAGGER_FILE = "v2_sap_api_explorer.html";
 const DAB_CONFIG_FILE = "dab-config.json";
 const DAB_APP_URL = "https://my-dab-app.azurewebsites.net";
+const API_BASE_URL = "http://192.168.151.46:8888"; // TEST-VM-46 IIS port 8888
+const API_BASE_PROD = "http://192.168.151.36";    // V2DC-ADDVERB IIS (production)
 
 const FOLDER_OPTIONS = [
   "Controllers/Finance","Controllers/GateEntry_LOT_Putway",
@@ -657,44 +659,38 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
   };
 
   const triggerDeployment = async (rfcNameToLog) => {
-    log('Triggering GitHub Actions deployment workflow...');
+    log('Triggering deployment workflows...');
+    
+    // Step 1: Trigger deploy-iis.yml on V2DC-ADDVERB (builds .36)
     try {
-      // Trigger deploy-iis.yml via workflow_dispatch
-      const res = await fetch(
+      const res1 = await fetch(
         `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/deploy-iis.yml/dispatches`,
-        {
-          method: 'POST',
-          headers: createGhHeaders(githubToken),
-          body: JSON.stringify({ ref: 'main', inputs: { rfc_name: rfcNameToLog } })
-        }
+        { method:'POST', headers:createGhHeaders(githubToken), body:JSON.stringify({ref:'master',inputs:{rfc_name:rfcNameToLog}}) }
       );
-      if (res.status === 204) {
-        log('✓ Deploy workflow triggered — IIS will rebuild & recycle in ~1-2 min', 'ok');
-        setN("github", "Deploy triggered → IIS rebuilding...");
-      } else if (res.status === 404) {
-        // Try master branch
-        const res2 = await fetch(
-          `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/deploy-iis.yml/dispatches`,
-          {
-            method: 'POST',
-            headers: createGhHeaders(githubToken),
-            body: JSON.stringify({ ref: 'master', inputs: { rfc_name: rfcNameToLog } })
-          }
-        );
-        if (res2.status === 204) {
-          log('✓ Deploy workflow triggered on master branch', 'ok');
-          setN("github", "Deploy triggered → IIS rebuilding...");
-        } else {
-          const d = await res2.json();
-          log(`⚠ Workflow dispatch failed (${res2.status}): ${d.message} — push succeeded, deploy must run manually`, 'err');
-        }
+      if (res1.status === 204) {
+        log('✓ deploy-iis.yml triggered on V2DC-ADDVERB (.36 build)', 'ok');
       } else {
-        const d = await res.json();
-        log(`⚠ Workflow dispatch: ${res.status} ${d.message}`, 'err');
+        const d1 = await res1.json();
+        log(`⚠ deploy-iis.yml: ${res1.status} — ${d1.message} (runner may be offline)`, 'err');
       }
-    } catch(e) {
-      log(`⚠ Deploy trigger error: ${e.message}`, 'err');
-    }
+    } catch(e) { log(`⚠ deploy-iis trigger: ${e.message}`, 'err'); }
+
+    // Step 2: Trigger deploy-rfc-iis-46.yml on TEST-VM-46 (.46 copies from .36)
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const res2 = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/deploy-rfc-iis-46.yml/dispatches`,
+        { method:'POST', headers:createGhHeaders(githubToken), body:JSON.stringify({ref:'master'}) }
+      );
+      if (res2.status === 204) {
+        log('✓ deploy-rfc-iis-46.yml triggered — copies DLLs to 192.168.151.46:8888', 'ok');
+        log(`✓ API will be live at: ${API_BASE_URL}/api/${rfcNameToLog}`, 'ok');
+        setN('github', `Deploy triggered → ${API_BASE_URL}/api/${rfcNameToLog}`);
+      } else {
+        const d2 = await res2.json();
+        log(`⚠ deploy-rfc-iis-46: ${res2.status} — ${d2.message}`, 'err');
+      }
+    } catch(e) { log(`⚠ deploy-rfc-iis-46 trigger: ${e.message}`, 'err'); }
   };
 
   const handlePush = async () => {
@@ -955,8 +951,8 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
         <div className="test-env-banner">
           <div className="icon">⚠️</div>
           <div className="text">
-            <div className="title">Test Environment Mode</div>
-            <div className="sub">Code will be pushed to GitHub repository for testing. Review before production deployment.</div>
+            <div className="title">Test Environment — 192.168.151.46:8888</div>
+            <div className="sub">Push to GitHub → V2DC-ADDVERB builds on .36 → TEST-VM-46 copies to .46:8888. <span style={{fontWeight:700,color:'#b45309'}}>V2DC-ADDVERB runner must be online on .36 for new controllers to compile.</span></div>
           </div>
           <div className={`env-badge ${eo?.label?.toLowerCase()}`}>
             {eo?.label} · {eo?.ip}
@@ -1004,11 +1000,17 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
               <div className="pg-r">
                 <div className="pg-icon"><span style={{fontSize:14}}>🔄</span></div>
                 <div>
-                  <div>IIS Deploy → GitHub Actions <code style={{fontSize:10}}>deploy-iis.yml</code></div>
-                  <div className="pg-sub">Auto-triggered after push · builds & recycles app pool</div>
-                  {details.notes?.github && details.notes.github.includes("triggered") && (
-                    <div className="pg-sub" style={{color:'var(--green)'}}>✓ {details.notes.github}</div>
-                  )}
+                  <div>Deploy Stage 1 → <code style={{fontSize:10}}>deploy-iis.yml</code> on V2DC-ADDVERB (.36 build)</div>
+                  <div className="pg-sub"><span style={{color:'#ef4444',fontWeight:700}}>⚠ Runner OFFLINE</span> — must be brought online on 192.168.151.36 to compile new controllers</div>
+                  <div className="pg-sub">Services.msc on .36 → restart "GitHub Actions Runner" service</div>
+                </div>
+              </div>
+              <div className="pg-r">
+                <div className="pg-icon"><span style={{fontSize:14}}>🚀</span></div>
+                <div>
+                  <div>Deploy Stage 2 → <code style={{fontSize:10}}>deploy-rfc-iis-46.yml</code> on TEST-VM-46</div>
+                  <div className="pg-sub"><span style={{color:'#22c55e',fontWeight:700}}>✓ Runner ONLINE</span> — copies compiled DLLs from .36 → 192.168.151.46:8888</div>
+                  {details.notes?.github&&<div className="pg-sub" style={{color:'var(--green)'}}>✓ {details.notes.github}</div>}
                 </div>
               </div>
             </div>
@@ -1050,11 +1052,12 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
           </div>
         </div>
         <div className="suc" style={{borderTop:'none',paddingTop:20}}>
-          <h2 style={{marginTop:0}}>{rfcName}Controller.cs is live!</h2>
-          <p>Deployed to test environment</p>
+          <h2 style={{marginTop:0}}>{rfcName}Controller.cs pushed to GitHub</h2>
+          <p>Deploy chain triggered — <strong>V2DC-ADDVERB (.36)</strong> compiles → <strong>TEST-VM-46 (.46:8888)</strong> copies DLLs</p>
           {details.commit&&<a className="chip g" href={details.commitUrl} target="_blank" rel="noreferrer">✓ Commit {details.commit}</a>}
           {doDab&&stages.dab==="ok"&&<a className="chip b" href={`${DAB_APP_URL}/api/${sqlTbl||`ET_${rfcName.replace(/_RFC$/,"")}`}`} target="_blank" rel="noreferrer">📡 DAB entity →</a>}
-          <a className="chip b" href={`https://github.com/${GITHUB_REPO}/actions/workflows/deploy-iis.yml`} target="_blank" rel="noreferrer">⚙ Watch IIS Deploy →</a>
+          <a className="chip b" href={`https://github.com/${GITHUB_REPO}/actions/workflows/deploy-iis.yml`} target="_blank" rel="noreferrer">⚙ Stage 1: .36 Build →</a>
+          <a className="chip b" href={`https://github.com/${GITHUB_REPO}/actions/workflows/deploy-rfc-iis-46.yml`} target="_blank" rel="noreferrer">🚀 Stage 2: .46 Deploy →</a>
         </div>
         
         <div className="api-details">
@@ -1062,8 +1065,8 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
             <div className="api-section-title">API Endpoint</div>
             <div className="api-endpoint">
               <span className="api-method">POST</span>
-              <span className="api-url">/api/{rfcName}</span>
-              <button className="api-copy" onClick={()=>{navigator.clipboard.writeText(`/api/${rfcName}`);alert('Endpoint copied!')}}>Copy</button>
+              <span className="api-url">{API_BASE_URL}/api/{rfcName}</span>
+              <button className="api-copy" onClick={()=>{navigator.clipboard.writeText(`${API_BASE_URL}/api/${rfcName}`);alert('Endpoint copied!')}}>Copy</button>
             </div>
           </div>
           
@@ -1137,13 +1140,13 @@ ${params.filter(p=>p.name).length > 0
             <div className="api-section-title">Test with cURL</div>
             <div className="sample-request">
               <button className="sample-copy" onClick={()=>{
-                const curlCmd = `curl -X POST "http://localhost:<port>/api/${rfcName}" \\
+                const curlCmd = `curl -X POST "${API_BASE_URL}/api/${rfcName}" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify(Object.fromEntries(params.filter(p=>p.name).map(p=>[p.name, "value"])))}'`;
                 navigator.clipboard.writeText(curlCmd);
                 alert('cURL command copied!');
               }}>Copy</button>
-{`curl -X POST "http://localhost:<port>/api/${rfcName}" \\
+{`curl -X POST "${API_BASE_URL}/api/${rfcName}" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify(Object.fromEntries(
     params.filter(p=>p.name).length > 0 
