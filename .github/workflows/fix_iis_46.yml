@@ -5,41 +5,50 @@ jobs:
   verify:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Revert IIS_HOST to .36 and restart RFC Collector
+      - name: Mount V2DC-ADDVERB (.24) and copy compiled RFC app
+        shell: cmd
+        run: |
+          net use \\192.168.151.24\C$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE_24: %ERRORLEVEL%
+          echo === .24 IIS sites ===
+          "\\192.168.151.24\C$\Windows\System32\inetsrv\appcmd.exe" list sites 2>nul
+          "\\192.168.151.24\C$\Windows\System32\inetsrv\appcmd.exe" list vdir 2>nul
+          echo === .24 wwwroot ===
+          dir \\192.168.151.24\C$\inetpub\wwwroot /B 2>nul
+          echo === Store Tracker bin on .24 ===
+          dir "\\192.168.151.24\C$\inetpub\wwwroot\Store Tracker\bin" /B 2>nul | findstr /V "Microsoft Azure System"
+          echo.
+          echo === Copying .24 bin to .46 Store Tracker bin ===
+          robocopy "\\192.168.151.24\C$\inetpub\wwwroot\Store Tracker" "C:\inetpub\wwwroot\Store Tracker" /E /IS /IT /NFL /NDL
+          echo ROBOCOPY: %ERRORLEVEL%
+          echo.
+          echo === .46 Store Tracker bin after copy ===
+          dir "C:\inetpub\wwwroot\Store Tracker\bin" /B 2>nul | findstr /V "Microsoft Azure System"
+          net use \\192.168.151.24\C$ /delete /y 2>nul
+
+      - name: Update appsettings to localhost and restart RFC Collector
         shell: powershell
         run: |
           $cfg = "C:\RfcCollector\appsettings.json"
           $json = Get-Content $cfg | ConvertFrom-Json
-          $json.IIS_HOST = "192.168.151.36"
+          $json.IIS_HOST = "127.0.0.1"
           $json.IIS_PORT = "80"
           $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
-          Write-Host "Config now: $(Get-Content $cfg)"
+          Write-Host "Config: $(Get-Content $cfg)"
+          Import-Module WebAdministration
+          Restart-WebAppPool "StoreTracker" -ErrorAction SilentlyContinue
+          Start-Sleep 5
           Restart-Service RfcCollector -Force
           Start-Sleep 10
           Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
 
-      - name: Smoke test RFC Collector -> .36 IIS -> SAP
+      - name: End-to-end smoke test
         shell: powershell
         run: |
           $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
           $resp = $null
-          try { $resp = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 50 } catch { Write-Host "Fetch error: $_" }
+          try { $resp = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 50 } catch { Write-Host "Error: $_" }
           if ($resp) {
             Write-Host "=== FETCH HTTP $($resp.StatusCode) ==="
-            Write-Host ($resp.Content.Substring(0,[Math]::Min(1500,$resp.Content.Length)))
+            Write-Host ($resp.Content.Substring(0,[Math]::Min(2000,$resp.Content.Length)))
           }
-
-      - name: Find compiled RFC app path on .36
-        shell: cmd
-        run: |
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          echo NET_USE: %ERRORLEVEL%
-          echo === Check IIS appcmd on .36 via share ===
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list sites 2>nul
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list vdir 2>nul
-          echo === Other potential app paths ===
-          dir \\192.168.151.36\C$\ /B 2>nul
-          dir \\192.168.151.36\C$\inetpub\wwwroot\testingsite.v2retail.com\bin /B 2>nul
-          dir \\192.168.151.36\C$\RfcApp 2>nul
-          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker" 2>nul
-          net use \\192.168.151.36\C$ /delete /y 2>nul
