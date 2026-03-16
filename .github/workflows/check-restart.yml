@@ -1,0 +1,43 @@
+name: Check and restart RfcCollector
+on:
+  workflow_dispatch:
+
+jobs:
+  check-restart:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Check status and restart if needed
+        shell: powershell
+        run: |
+          # Check if process is running
+          $proc = Get-Process RfcCollector -ErrorAction SilentlyContinue
+          if ($proc) {
+            Write-Host "RfcCollector is RUNNING (PID: $($proc.Id))"
+          } else {
+            Write-Host "RfcCollector NOT running - starting..."
+            if (Test-Path "C:\RfcCollector\start.bat") {
+              Start-Process -FilePath "cmd.exe" -ArgumentList "/c C:\RfcCollector\start.bat" -WindowStyle Hidden
+              Start-Sleep -Seconds 10
+            } else {
+              Write-Host "start.bat not found!"
+            }
+          }
+          
+          # Check what ports are listening
+          Write-Host "--- Listening ports ---"
+          netstat -ano | findstr "LISTENING" | findstr ":9090"
+          
+          # Test health
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost:9090/" -UseBasicParsing -TimeoutSec 5
+            Write-Host "HEALTHY: $($r.Content)"
+          } catch {
+            Write-Host "Not responding: $_"
+            if (Test-Path "C:\RfcCollector\rfc.log") {
+              Write-Host "--- Log ---"
+              Get-Content "C:\RfcCollector\rfc.log" -Tail 20
+            }
+          }
+          
+          Write-Host "--- Firewall rules for 9090 ---"
+          Get-NetFirewallRule | Where-Object {$_.DisplayName -like "*9090*"} | Select DisplayName, Enabled, Direction, Action
