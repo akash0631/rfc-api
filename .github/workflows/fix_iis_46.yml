@@ -5,58 +5,45 @@ jobs:
   verify:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Copy C:\RfcApp from .24 to .46 and wire RFC Collector to port 8888
+      - name: Search .24 for compiled RFC app DLLs
         shell: cmd
         run: |
           net use \\192.168.151.24\C$ vrl@55555 /user:Administrator /persistent:no
           echo NET_USE_24: %ERRORLEVEL%
-          echo === RfcApp on .24 ===
-          dir \\192.168.151.24\C$\RfcApp /B 2>nul
-          echo === RfcApp bin on .24 (Vendor + SAP DLLs) ===
-          dir \\192.168.151.24\C$\RfcApp\bin /B 2>nul | findstr /V "Microsoft Azure System clr host cor"
-          echo === Copying C:\RfcApp from .24 to .46 ===
-          robocopy \\192.168.151.24\C$\RfcApp C:\RfcApp /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
-          echo === .46 RfcApp bin after copy (Vendor + SAP DLLs) ===
-          dir C:\RfcApp\bin /B 2>nul | findstr /V "Microsoft Azure System clr host cor"
-          echo Web.config present:
-          dir C:\RfcApp\Web.config 2>nul
+          echo === Searching .24 for Vendor_SRM DLL ===
+          dir \\192.168.151.24\C$\Vendor_SRM*.dll /S /B 2>nul
+          dir "\\192.168.151.24\C$\actions-runner\_work" /B 2>nul
+          dir "\\192.168.151.24\C$\actions-runner\_work\rfc-api\rfc-api\bin\Release" /B 2>nul
+          echo === Checking D drive on .24 ===
+          dir \\192.168.151.24\D$ /B 2>nul
           net use \\192.168.151.24\C$ /delete /y 2>nul
 
-      - name: Set IIS_HOST=127.0.0.1 IIS_PORT=8888 and restart RFC Collector
-        shell: powershell
+      - name: Search .36 for compiled RFC app
+        shell: cmd
         run: |
-          $cfg = "C:\RfcCollector\appsettings.json"
-          $json = Get-Content $cfg | ConvertFrom-Json
-          $json.IIS_HOST = "127.0.0.1"
-          $json.IIS_PORT = "8888"
-          $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
-          Write-Host "Config: $(Get-Content $cfg)"
-          Import-Module WebAdministration
-          Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
-          Start-Sleep 5
-          Write-Host "RfcApiApp site state: $((Get-Website 'RfcApiApp').State)"
-          Restart-Service RfcCollector -Force
-          Start-Sleep 10
-          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE_36: %ERRORLEVEL%
+          echo === Searching .36 for Vendor_SRM DLL ===
+          dir \\192.168.151.36\C$\Vendor_SRM*.dll /S /B 2>nul
+          echo === actions-runner on .36 ===
+          dir "\\192.168.151.36\C$\actions-runner\_work\rfc-api\rfc-api\bin\Release" /B 2>nul
+          echo === RfcApp on .36 ===
+          dir \\192.168.151.36\C$\RfcApp /B 2>nul
+          echo === inetpub wwwroot sites on .36 ===
+          dir \\192.168.151.36\C$\inetpub\wwwroot /B 2>nul
+          echo === D drive on .36 ===
+          dir \\192.168.151.36\D$ /B 2>nul
+          net use \\192.168.151.36\C$ /delete /y 2>nul
 
-      - name: Test IIS :8888 health endpoint
+      - name: Build RFC app on .46 using MSBuild after fixing targets
         shell: powershell
         run: |
-          $resp = $null
-          try { $resp = Invoke-WebRequest "http://localhost:8888/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 12 } catch { Write-Host "Health :8888 error: $_" }
-          if ($resp) { Write-Host "IIS :8888 Health HTTP $($resp.StatusCode): $($resp.Content)" }
-          $resp2 = $null
-          try { $resp2 = Invoke-WebRequest "http://localhost:8888/swagger" -UseBasicParsing -TimeoutSec 8 } catch { Write-Host "Swagger: $_" }
-          if ($resp2) { Write-Host "Swagger HTTP $($resp2.StatusCode)" }
-
-      - name: Full end-to-end smoke test
-        shell: powershell
-        run: |
-          $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
-          $resp = $null
-          try { $resp = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 60 } catch { Write-Host "Fetch error: $_" }
-          if ($resp) {
-            Write-Host "=== FETCH HTTP $($resp.StatusCode) ==="
-            Write-Host ($resp.Content.Substring(0,[Math]::Min(2000,$resp.Content.Length)))
-          }
+          # Check if VS Web Application targets are installed
+          $targets = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+          Write-Host "VS17 targets exist: $(Test-Path $targets)"
+          # Check VS installs
+          Get-ChildItem "C:\Program Files (x86)\Microsoft Visual Studio" -ErrorAction SilentlyContinue | Select Name | Format-Table
+          Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -ErrorAction SilentlyContinue | Select Name | Format-Table
+          # Find any msbuild
+          Get-ChildItem "C:\Program Files (x86)\MSBuild" -Recurse -Filter "MSBuild.exe" -ErrorAction SilentlyContinue | Select FullName | Format-Table
+          Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "MSBuild.exe" -ErrorAction SilentlyContinue | Select FullName | Format-Table
