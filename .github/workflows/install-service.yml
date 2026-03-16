@@ -1,0 +1,74 @@
+name: Install RfcCollector as Windows Service
+on:
+  workflow_dispatch:
+
+jobs:
+  install-service:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Install as Windows Service using sc.exe
+        shell: powershell
+        run: |
+          $serviceName = "RfcCollector"
+          $exePath = "C:\RfcCollector\RfcCollector.exe"
+          
+          # Stop and remove existing service if exists
+          $existing = Get-Service $serviceName -ErrorAction SilentlyContinue
+          if ($existing) {
+            Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
+            Start-Sleep 2
+            sc.exe delete $serviceName
+            Start-Sleep 2
+            Write-Host "Removed existing service"
+          }
+          
+          # Set env vars in registry so the service picks them up
+          $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName"
+          
+          # Create the service
+          New-Service -Name $serviceName `
+            -BinaryPathName $exePath `
+            -DisplayName "V2 Retail RFC Collector" `
+            -Description "SAP RFC to SQL collector - claudetestv2 @ .46" `
+            -StartupType Automatic
+          
+          # Set environment variables for the service via registry
+          $envVars = @(
+            "IIS_HOST=192.168.151.36",
+            "IIS_PORT=80",
+            "SQL_SERVER=192.168.151.46",
+            "SQL_USER=sa",
+            "SQL_PASS=vrl@55555",
+            "SQL_DB=claudetestv2",
+            "ASPNETCORE_URLS=http://0.0.0.0:9090"
+          )
+          New-ItemProperty -Path "$regPath" -Name "Environment" -Value $envVars -PropertyType MultiString -Force
+          
+          # Start the service
+          Start-Service $serviceName
+          Start-Sleep 10
+          
+          $svc = Get-Service $serviceName
+          Write-Host "Service status: $($svc.Status)"
+          
+          # Health check
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8
+            Write-Host "HEALTHY: $($r.Content)"
+          } catch {
+            Write-Host "Not responding: $_"
+            # Check event log
+            Get-EventLog -LogName Application -Source "*RfcCollector*" -Newest 5 -ErrorAction SilentlyContinue
+          }
+          
+          # Confirm firewall
+          $fw = Get-NetFirewallRule -DisplayName "RfcCollector-9090" -ErrorAction SilentlyContinue
+          if (-not $fw) {
+            New-NetFirewallRule -DisplayName "RfcCollector-9090" -Direction Inbound -Protocol TCP -LocalPort 9090 -Action Allow
+            Write-Host "Firewall rule created"
+          } else {
+            Write-Host "Firewall rule already exists"
+          }
+          
+          Write-Host "Service installed and running on port 9090"
+          Write-Host "Will auto-start on reboot"
