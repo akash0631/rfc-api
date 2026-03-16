@@ -5,94 +5,73 @@ jobs:
   fix:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Find RFC Collector config and .36 IIS path
+      - name: Find RFC Collector config method
         shell: powershell
         run: |
-          Write-Host "=== RFC Collector service path ==="
-          $svc = Get-WmiObject Win32_Service -Filter "Name='RfcCollector'"
-          Write-Host "PathName: $($svc.PathName)"
-          $dir = Split-Path $svc.PathName.Trim('"') -Parent
-          Write-Host "Dir: $dir"
-          Write-Host "=== Files in service dir ==="
-          Get-ChildItem $dir | Select Name, Length
-          Write-Host "=== appsettings search ==="
-          Get-ChildItem $dir -Filter "appsettings*.json" -Recurse -ErrorAction SilentlyContinue | Select FullName
-          Write-Host "=== Environment vars ==="
-          [System.Environment]::GetEnvironmentVariables() | Where-Object { $_.Key -like "*IIS*" -or $_.Key -like "*HOST*" -or $_.Key -like "*RFC*" } | Format-Table
-          Write-Host "=== .36 IIS path test ==="
-          Test-Path "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker"
+          Write-Host "=== Service dir contents ==="
+          Get-ChildItem "C:\RfcCollector" -ErrorAction SilentlyContinue | Select Name, Length
+          Write-Host "=== appsettings anywhere under C:\RfcCollector ==="
+          Get-ChildItem "C:\RfcCollector" -Recurse -ErrorAction SilentlyContinue | Select FullName, Length
+          Write-Host "=== Service registry env vars ==="
+          $reg = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" -ErrorAction SilentlyContinue
+          $reg | Format-List
+          Write-Host "=== Service env block ==="
+          $envReg = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector\Parameters" -ErrorAction SilentlyContinue
+          $envReg | Format-List
+          Write-Host "=== Any json files near RfcCollector.exe ==="
+          Get-ChildItem "C:\RfcCollector" -Filter "*.json" -Recurse -ErrorAction SilentlyContinue | Select FullName
 
-      - name: Mount .36 and copy with PowerShell (handles spaces)
-        shell: powershell
+      - name: Mount .36 and copy Store Tracker using cmd net use then PS copy
+        shell: cmd
         run: |
-          $src = "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker"
-          $dst = "C:\inetpub\wwwroot\Store Tracker"
-          net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no
-          Write-Host "Net use exit: $LASTEXITCODE"
-          Write-Host "Source exists: $(Test-Path $src)"
-          if (Test-Path $src) {
-            Write-Host "=== Source DLLs on .36 ==="
-            Get-ChildItem "$src\bin" -Filter "*.dll" -ErrorAction SilentlyContinue | Select Name, Length | Format-Table
-            Write-Host "=== Copying ==="
-            if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force }
-            Copy-Item -Path "$src\*" -Destination $dst -Recurse -Force
-            Write-Host "Copy exit: $LASTEXITCODE"
-            Write-Host "=== .46 bin after copy ==="
-            Get-ChildItem "$dst\bin" -Filter "*.dll" -ErrorAction SilentlyContinue | Select Name | Format-Table
-          } else {
-            Write-Host "Source not found — trying alternate path"
-            Get-ChildItem "\\192.168.151.36\C$\inetpub\wwwroot" -ErrorAction SilentlyContinue | Select Name
-          }
-          net use "\\192.168.151.36\C$" /delete /y 2>$null
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE: %ERRORLEVEL%
+          dir "\\192.168.151.36\C$\inetpub\wwwroot" 2>nul
+          echo Copying...
+          robocopy "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker" "C:\inetpub\wwwroot\Store Tracker" /E /IS /IT /NFL /NDL
+          echo ROBOCOPY: %ERRORLEVEL%
+          dir "C:\inetpub\wwwroot\Store Tracker\bin" /B 2>nul | findstr ".dll" | findstr /V "Microsoft Azure System"
+          net use \\192.168.151.36\C$ /delete /y 2>nul
 
-      - name: Update RFC Collector appsettings to localhost
+      - name: Set RFC Collector IIS_HOST env via registry and restart
         shell: powershell
         run: |
-          $svc = Get-WmiObject Win32_Service -Filter "Name='RfcCollector'"
-          $dir = Split-Path $svc.PathName.Trim('"') -Parent
-          # Search for appsettings in service dir and subdirs
-          $cfg = Get-ChildItem $dir -Filter "appsettings.json" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $cfg) {
-            # Try environment-based path
-            $cfg = "C:\RfcCollector\appsettings.json"
+          # ASP.NET Core reads env vars from registry under HKLM:\SYSTEM\CCS\Services\<name>\Parameters\AppParameters or Environment
+          # Try setting Environment block
+          $envPath = "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector\Environment"
+          if (-not (Test-Path $envPath)) {
+            New-Item -Path $envPath -Force | Out-Null
           }
-          Write-Host "Config path: $cfg"
-          if (Test-Path $cfg) {
-            $raw = Get-Content $cfg -Raw
-            Write-Host "BEFORE: $raw"
-            $json = $raw | ConvertFrom-Json
-            if ($json.PSObject.Properties['IIS_HOST']) {
-              $json.IIS_HOST = "127.0.0.1"
-            } else {
-              $json | Add-Member -NotePropertyName IIS_HOST -NotePropertyValue "127.0.0.1" -Force
-            }
-            if ($json.PSObject.Properties['IIS_PORT']) {
-              $json.IIS_PORT = "80"
-            } else {
-              $json | Add-Member -NotePropertyName IIS_PORT -NotePropertyValue "80" -Force
-            }
-            $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
-            Write-Host "AFTER: $(Get-Content $cfg -Raw)"
-          } else {
-            Write-Host "appsettings.json not found — listing dir:"
-            Get-ChildItem $dir -Recurse | Select FullName | Format-Table
-          }
-
-      - name: Restart RFC Collector and smoke test
-        shell: powershell
-        run: |
-          Restart-Service RfcCollector -Force -ErrorAction SilentlyContinue
-          Start-Sleep 8
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" -Name "Environment" `
+            -Value @("IIS_HOST=127.0.0.1", "IIS_PORT=80") -Type MultiString
+          Write-Host "Registry env set"
+          # Also write appsettings.json since it's ASP.NET Core
+          $appsettings = @{
+            Logging = @{ LogLevel = @{ Default = "Information" } }
+            AllowedHosts = "*"
+            IIS_HOST = "127.0.0.1"
+            IIS_PORT = "80"
+          } | ConvertTo-Json -Depth 5
+          $appsettings | Set-Content "C:\RfcCollector\appsettings.json"
+          Write-Host "appsettings.json written"
+          # Restart
+          Restart-Service RfcCollector -Force
+          Start-Sleep 10
           Write-Host "Service: $((Get-Service RfcCollector).Status)"
-          # Check IIS sites
-          Import-Module WebAdministration
-          Get-Website | Select Name, State, PhysicalPath | Format-Table
-          # Test RFC Collector
+
+      - name: End-to-end smoke test
+        shell: powershell
+        run: |
+          Start-Sleep 5
           $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
           try {
-            $r = Invoke-WebRequest -Uri "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 40
-            Write-Host "=== FETCH RESULT HTTP $($r.StatusCode) ==="
+            $r = Invoke-WebRequest -Uri "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 45
+            Write-Host "=== FETCH HTTP $($r.StatusCode) ==="
             Write-Host ($r.Content.Substring(0,[Math]::Min(1000,$r.Content.Length)))
           } catch {
             Write-Host "Fetch error: $_"
+            # Test IIS directly too
+            try {
+              Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10 | Select StatusCode,Content | Format-List
+            } catch { Write-Host "IIS health: $_" }
           }
