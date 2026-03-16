@@ -1,0 +1,82 @@
+name: Check IIS sites and copy NCo from .36
+on:
+  workflow_dispatch:
+jobs:
+  setup:
+    runs-on: [self-hosted, test-vm]
+    timeout-minutes: 10
+    steps:
+      - name: Check .46 IIS site contents
+        shell: cmd
+        run: |
+          echo === Store Tracker site path ===
+          C:\Windows\System32\inetsrv\appcmd.exe list site "Store Tracker" /physicalPath
+          echo === RfcApiApp site path ===
+          C:\Windows\System32\inetsrv\appcmd.exe list site "RfcApiApp" /physicalPath
+          echo === Store Tracker bin ===
+          dir "C:\inetpub\wwwroot\Store Tracker\bin" /B 2>nul || echo EMPTY_OR_NOT_FOUND
+          echo === RfcApiApp files ===
+          dir "C:\RfcApiApp" /B 2>nul || echo NOT_FOUND
+
+      - name: Copy SAP NCo DLLs from .36 via file share
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          Write-Host "=== Trying to access .36 file shares ==="
+          
+          # Try connecting to .36 admin share with credentials
+          $pass = ConvertTo-SecureString "vrl@55555" -AsPlainText -Force
+          $cred = New-Object PSCredential("V2DC-ADDVERB\Administrator", $pass)
+          
+          # Map drive to .36
+          try {
+            New-PSDrive -Name "X" -PSProvider FileSystem -Root "\\192.168.151.36\C$" -Credential $cred -ErrorAction Stop
+            Write-Host "Drive mapped OK"
+            
+            # Find SAP NCo DLLs on .36
+            $ncoPaths = @(
+              "X:\Windows\System32",
+              "X:\Windows\assembly\GAC_64",
+              "X:\inetpub\wwwroot\Store Tracker\bin"
+            )
+            
+            $found = @()
+            foreach ($path in $ncoPaths) {
+              $dlls = Get-ChildItem $path -Filter "sapnco*.dll" -ErrorAction SilentlyContinue
+              foreach ($dll in $dlls) {
+                Write-Host "Found: $($dll.FullName) ($($dll.Length) bytes)"
+                $found += $dll.FullName
+              }
+            }
+            
+            if ($found.Count -gt 0) {
+              Write-Host "=== Copying NCo DLLs to .46 ==="
+              # Copy to System32
+              foreach ($src in $found) {
+                $fname = Split-Path $src -Leaf
+                $dest = "C:\Windows\System32\$fname"
+                Copy-Item $src $dest -Force
+                Write-Host "Copied: $fname -> $dest"
+              }
+              
+              # Also list what .36 Store Tracker bin has for reference
+              Write-Host "=== .36 Store Tracker bin ==="
+              Get-ChildItem "X:\inetpub\wwwroot\Store Tracker\bin" -ErrorAction SilentlyContinue | Select-Object Name, Length | Format-Table
+            } else {
+              Write-Host "No SAP NCo DLLs found on .36 - checking GAC"
+              Get-ChildItem "X:\Windows\assembly\GAC_64" -ErrorAction SilentlyContinue | Format-Table Name
+            }
+            
+            Remove-PSDrive -Name "X" -ErrorAction SilentlyContinue
+          } catch {
+            Write-Host "Cannot access .36 admin share: $_"
+            Write-Host "Will need to install SAP NCo installer on .46 manually"
+          }
+
+      - name: Verify NCo on .46 after copy
+        shell: cmd
+        run: |
+          echo === NCo DLLs on .46 System32 ===
+          dir "C:\Windows\System32\sapnco*.dll" 2>nul || echo NOT_FOUND
+          echo === NCo in GAC ===
+          dir "C:\Windows\assembly\GAC_64\sapnco" 2>nul || echo NOT_IN_GAC
