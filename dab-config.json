@@ -1587,6 +1587,25 @@
       "graphql": {
         "enabled": false
       }
+    },
+    "ET_GENERATED": {
+      "source": {
+        "object": "dbo.ET_GENERATED",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
     }
   }
 }
