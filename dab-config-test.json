@@ -2,7 +2,7 @@
   "$schema": "https://github.com/Azure/data-api-builder/releases/download/v0.10.23/dab.draft.schema.json",
   "data-source": {
     "database-type": "mssql",
-    "connection-string": "Server=192.168.151.46,1433;Database=DataV2;User Id=sa;Password=vrl@55555;TrustServerCertificate=true;Encrypt=false;Connection Timeout=30;"
+    "connection-string": "Server=192.168.151.46,1433;Database=claudetestv2;User Id=sa;Password=vrl@55555;TrustServerCertificate=true;Encrypt=false;Connection Timeout=30;"
   },
   "runtime": {
     "rest": {
