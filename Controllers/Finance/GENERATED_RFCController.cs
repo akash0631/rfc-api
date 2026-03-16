@@ -16,197 +16,230 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     public class GENERATED_RFCController : BaseController
     {
         [HttpPost]
-        [Route("api/GENERATED_RFC")]
-        public async Task<IHttpActionResult> ProcessGeneratedRFC([FromBody] GeneratedRFCRequest request)
+        public async Task<IHttpActionResult> GetCreditData([FromBody] GeneratedRfcRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return BadRequest("Request cannot be null");
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "Request cannot be null",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
                 }
 
-                var validationResult = ValidateRequest(request);
-                if (!validationResult.IsValid)
+                // Validate required parameters
+                if (string.IsNullOrEmpty(request.I_COMPANY_CODE))
                 {
-                    return BadRequest(validationResult.ErrorMessage);
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "I_COMPANY_CODE is required",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
                 }
 
-                var rfcParameters = rfcConfigparameters();
-                IRfcFunction rfcFunction = rfcParameters.Repository.CreateFunction("GENERATED_RFC");
+                if (string.IsNullOrEmpty(request.I_POSTING_DATE_LOW))
+                {
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "I_POSTING_DATE_LOW is required",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
+                }
 
-                rfcFunction.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE ?? string.Empty);
-                rfcFunction.SetValue("I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW ?? string.Empty);
-                rfcFunction.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH ?? string.Empty);
+                if (string.IsNullOrEmpty(request.I_POSTING_DATE_HIGH))
+                {
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "I_POSTING_DATE_HIGH is required",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
+                }
 
-                rfcFunction.Invoke(rfcParameters.Destination);
+                // Validate date format
+                if (!IsValidDate(request.I_POSTING_DATE_LOW))
+                {
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "Invalid I_POSTING_DATE_LOW format",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
+                }
 
-                IRfcTable itCreditTable = rfcFunction.GetTable("IT_CREDIT");
-                var creditData = new List<ITCreditItem>();
+                if (!IsValidDate(request.I_POSTING_DATE_HIGH))
+                {
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "Invalid I_POSTING_DATE_HIGH format",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
+                }
+
+                // Validate date range
+                DateTime dateFrom = DateTime.ParseExact(request.I_POSTING_DATE_LOW, "yyyyMMdd", null);
+                DateTime dateTo = DateTime.ParseExact(request.I_POSTING_DATE_HIGH, "yyyyMMdd", null);
+
+                if (dateFrom > dateTo)
+                {
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "I_POSTING_DATE_LOW cannot be greater than I_POSTING_DATE_HIGH",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
+                }
+
+                // Get RFC configuration
+                var rfcConfig = rfcConfigparameters();
+                if (rfcConfig?.RfcDestination == null)
+                {
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "RFC configuration not available",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
+                }
+
+                IRfcFunction function = rfcConfig.RfcDestination.Repository.CreateFunction("GENERATED_RFC");
+                if (function == null)
+                {
+                    return Ok(new
+                    {
+                        Status = "Error",
+                        Message = "RFC function GENERATED_RFC not found",
+                        Data = new { IT_CREDIT = new List<object>() }
+                    });
+                }
+
+                // Set import parameters
+                function.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
+                function.SetValue("I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW);
+                function.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
+
+                // Execute RFC
+                function.Invoke(rfcConfig.RfcDestination);
+
+                // Get table data
+                IRfcTable itCreditTable = function.GetTable("IT_CREDIT");
+                var creditData = new List<object>();
 
                 if (itCreditTable != null)
                 {
-                    for (int i = 0; i < itCreditTable.RowCount; i++)
+                    foreach (IRfcStructure row in itCreditTable)
                     {
-                        itCreditTable.CurrentIndex = i;
-                        var creditItem = new ITCreditItem
+                        var creditItem = new
                         {
-                            DOCUMENT_TYPE = itCreditTable.GetString("DOCUMENT_TYPE"),
-                            COMPANY_CODE = itCreditTable.GetString("COMPANY_CODE"),
-                            DOCUMENT_NUMBER = itCreditTable.GetString("DOCUMENT_NUMBER"),
-                            FISCAL_YEAR = itCreditTable.GetString("FISCAL_YEAR"),
-                            LINE_ITEM = itCreditTable.GetString("LINE_ITEM"),
-                            POSTING_KEY = itCreditTable.GetString("POSTING_KEY"),
-                            ACCOUNT_TYPE = itCreditTable.GetString("ACCOUNT_TYPE"),
-                            SPECIAL_G_L_IND = itCreditTable.GetString("SPECIAL_G_L_IND"),
-                            TRANSACT_TYPE = itCreditTable.GetString("TRANSACT_TYPE"),
-                            DEBIT_CREDIT = itCreditTable.GetString("DEBIT_CREDIT"),
-                            AMOUNT_IN_LC = itCreditTable.GetDecimal("AMOUNT_IN_LC"),
-                            AMOUNT = itCreditTable.GetDecimal("AMOUNT"),
-                            TEXT = itCreditTable.GetString("TEXT"),
-                            VENDOR = itCreditTable.GetString("VENDOR"),
-                            PAYMENT_AMT = itCreditTable.GetDecimal("PAYMENT_AMT"),
-                            POSTING_DATE = itCreditTable.GetString("POSTING_DATE")
+                            DOCUMENT_TYPE = GetSafeString(row, "DOCUMENT_TYPE"),
+                            COMPANY_CODE = GetSafeString(row, "COMPANY_CODE"),
+                            DOCUMENT_NUMBER = GetSafeString(row, "DOCUMENT_NUMBER"),
+                            FISCAL_YEAR = GetSafeString(row, "FISCAL_YEAR"),
+                            LINE_ITEM = GetSafeString(row, "LINE_ITEM"),
+                            POSTING_KEY = GetSafeString(row, "POSTING_KEY"),
+                            ACCOUNT_TYPE = GetSafeString(row, "ACCOUNT_TYPE"),
+                            SPECIAL_G_L_IND = GetSafeString(row, "SPECIAL_G_L_IND"),
+                            TRANSACT_TYPE = GetSafeString(row, "TRANSACT_TYPE"),
+                            DEBIT_CREDIT = GetSafeString(row, "DEBIT_CREDIT"),
+                            AMOUNT_IN_LC = GetSafeDecimal(row, "AMOUNT_IN_LC"),
+                            AMOUNT = GetSafeDecimal(row, "AMOUNT"),
+                            TEXT = GetSafeString(row, "TEXT"),
+                            VENDOR = GetSafeString(row, "VENDOR"),
+                            PAYMENT_AMT = GetSafeDecimal(row, "PAYMENT_AMT"),
+                            POSTING_DATE = GetSafeString(row, "POSTING_DATE")
                         };
                         creditData.Add(creditItem);
                     }
                 }
 
-                var response = new GeneratedRFCResponse
+                return Ok(new
                 {
-                    Status = "SUCCESS",
-                    Message = "RFC executed successfully",
-                    Data = new GeneratedRFCData
-                    {
-                        IT_CREDIT = creditData
-                    }
-                };
-
-                return Ok(response);
+                    Status = "Success",
+                    Message = "Data retrieved successfully",
+                    Data = new { IT_CREDIT = creditData }
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return Content(HttpStatusCode.InternalServerError, new GeneratedRFCResponse
+                return Ok(new
                 {
-                    Status = "ERROR",
-                    Message = $"SAP Communication Error: {ex.Message}",
-                    Data = null
+                    Status = "Error",
+                    Message = $"RFC Communication Error: {ex.Message}",
+                    Data = new { IT_CREDIT = new List<object>() }
                 });
             }
             catch (RfcLogonException ex)
             {
-                return Content(HttpStatusCode.Unauthorized, new GeneratedRFCResponse
+                return Ok(new
                 {
-                    Status = "ERROR",
-                    Message = $"SAP Logon Error: {ex.Message}",
-                    Data = null
+                    Status = "Error",
+                    Message = $"RFC Logon Error: {ex.Message}",
+                    Data = new { IT_CREDIT = new List<object>() }
                 });
             }
             catch (RfcAbapRuntimeException ex)
             {
-                return Content(HttpStatusCode.BadRequest, new GeneratedRFCResponse
+                return Ok(new
                 {
-                    Status = "ERROR",
-                    Message = $"SAP Runtime Error: {ex.Message}",
-                    Data = null
+                    Status = "Error",
+                    Message = $"RFC ABAP Runtime Error: {ex.Message}",
+                    Data = new { IT_CREDIT = new List<object>() }
                 });
             }
             catch (Exception ex)
             {
-                return Content(HttpStatusCode.InternalServerError, new GeneratedRFCResponse
+                return Ok(new
                 {
-                    Status = "ERROR",
+                    Status = "Error",
                     Message = $"Unexpected error: {ex.Message}",
-                    Data = null
+                    Data = new { IT_CREDIT = new List<object>() }
                 });
             }
         }
 
-        private ValidationResult ValidateRequest(GeneratedRFCRequest request)
+        private bool IsValidDate(string dateString)
         {
-            if (string.IsNullOrWhiteSpace(request.I_COMPANY_CODE))
-            {
-                return new ValidationResult { IsValid = false, ErrorMessage = "I_COMPANY_CODE is required" };
-            }
+            if (string.IsNullOrEmpty(dateString) || dateString.Length != 8)
+                return false;
 
-            if (request.I_COMPANY_CODE.Length > 4)
-            {
-                return new ValidationResult { IsValid = false, ErrorMessage = "I_COMPANY_CODE must not exceed 4 characters" };
-            }
-
-            if (!string.IsNullOrEmpty(request.I_POSTING_DATE_LOW) && !IsValidSAPDate(request.I_POSTING_DATE_LOW))
-            {
-                return new ValidationResult { IsValid = false, ErrorMessage = "I_POSTING_DATE_LOW must be in YYYYMMDD format" };
-            }
-
-            if (!string.IsNullOrEmpty(request.I_POSTING_DATE_HIGH) && !IsValidSAPDate(request.I_POSTING_DATE_HIGH))
-            {
-                return new ValidationResult { IsValid = false, ErrorMessage = "I_POSTING_DATE_HIGH must be in YYYYMMDD format" };
-            }
-
-            if (!string.IsNullOrEmpty(request.I_POSTING_DATE_LOW) && !string.IsNullOrEmpty(request.I_POSTING_DATE_HIGH))
-            {
-                if (DateTime.TryParseExact(request.I_POSTING_DATE_LOW, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out DateTime lowDate) &&
-                    DateTime.TryParseExact(request.I_POSTING_DATE_HIGH, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out DateTime highDate))
-                {
-                    if (lowDate > highDate)
-                    {
-                        return new ValidationResult { IsValid = false, ErrorMessage = "I_POSTING_DATE_LOW must be less than or equal to I_POSTING_DATE_HIGH" };
-                    }
-                }
-            }
-
-            return new ValidationResult { IsValid = true };
-        }
-
-        private bool IsValidSAPDate(string dateString)
-        {
             return DateTime.TryParseExact(dateString, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out _);
         }
 
-        private class ValidationResult
+        private string GetSafeString(IRfcStructure structure, string fieldName)
         {
-            public bool IsValid { get; set; }
-            public string ErrorMessage { get; set; }
+            try
+            {
+                return structure.GetString(fieldName)?.Trim() ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private decimal GetSafeDecimal(IRfcStructure structure, string fieldName)
+        {
+            try
+            {
+                return structure.GetDecimal(fieldName);
+            }
+            catch
+            {
+                return 0;
+            }
         }
     }
 
-    public class GeneratedRFCRequest
+    public class GeneratedRfcRequest
     {
         public string I_COMPANY_CODE { get; set; }
         public string I_POSTING_DATE_LOW { get; set; }
         public string I_POSTING_DATE_HIGH { get; set; }
-    }
-
-    public class GeneratedRFCResponse
-    {
-        public string Status { get; set; }
-        public string Message { get; set; }
-        public GeneratedRFCData Data { get; set; }
-    }
-
-    public class GeneratedRFCData
-    {
-        public List<ITCreditItem> IT_CREDIT { get; set; }
-    }
-
-    public class ITCreditItem
-    {
-        public string DOCUMENT_TYPE { get; set; }
-        public string COMPANY_CODE { get; set; }
-        public string DOCUMENT_NUMBER { get; set; }
-        public string FISCAL_YEAR { get; set; }
-        public string LINE_ITEM { get; set; }
-        public string POSTING_KEY { get; set; }
-        public string ACCOUNT_TYPE { get; set; }
-        public string SPECIAL_G_L_IND { get; set; }
-        public string TRANSACT_TYPE { get; set; }
-        public string DEBIT_CREDIT { get; set; }
-        public decimal AMOUNT_IN_LC { get; set; }
-        public decimal AMOUNT { get; set; }
-        public string TEXT { get; set; }
-        public string VENDOR { get; set; }
-        public decimal PAYMENT_AMT { get; set; }
-        public string POSTING_DATE { get; set; }
     }
 }
