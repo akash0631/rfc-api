@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWindowsService();
 
 // ── Config from env vars (set in IIS / Azure App Settings) ──────────────────
 var iisHost    = Environment.GetEnvironmentVariable("IIS_HOST")   ?? "192.168.151.36";
