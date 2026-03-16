@@ -1,0 +1,98 @@
+name: Clone .36 to .46
+on:
+  workflow_dispatch:
+jobs:
+  clone:
+    runs-on: [self-hosted, test-vm]
+    timeout-minutes: 20
+    steps:
+      - name: Install MSDeploy if needed
+        shell: powershell
+        run: |
+          $ms = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          if (-not (Test-Path $ms)) {
+            Write-Host "Downloading Web Deploy..."
+            Invoke-WebRequest "https://download.microsoft.com/download/0/1/D/01DC28EA-638C-4A22-A57B-4CEF97755C6C/WebDeploy_amd64_en-US.msi" -OutFile "C:\wdeploy.msi" -UseBasicParsing
+            Start-Process msiexec -ArgumentList "/i C:\wdeploy.msi /quiet /norestart" -Wait
+            Start-Sleep 5
+          }
+          Test-Path $ms | Write-Host
+
+      - name: Pull Store Tracker from .36 via MSDeploy
+        shell: powershell
+        run: |
+          $ms = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          New-Item "C:\mirror" -ItemType Directory -Force | Out-Null
+          Write-Host "Pulling from .36 (read-only - no changes to .36)..."
+          & $ms -verb:sync `
+            "-source:apphostconfig=Store Tracker,computername=https://V2DC-ADDVERB:8172/msdeploy.axd,username=V2DC-ADDVERB\Administrator,password=vrl@55555,authtype=Basic,includeAcls=False" `
+            "-dest:package=C:\mirror\StoreTracker.zip" `
+            -allowUntrusted
+          Write-Host "Exit: $LASTEXITCODE"
+          if (Test-Path "C:\mirror\StoreTracker.zip") {
+            $mb = [math]::Round((Get-Item "C:\mirror\StoreTracker.zip").Length/1MB,1)
+            Write-Host "Package: $mb MB - SUCCESS"
+          } else {
+            Write-Host "Package not created"
+            # Try connectivity test
+            Write-Host "Testing .36 MSDeploy connectivity..."
+            try { $r = Invoke-WebRequest "https://192.168.151.36:8172/msdeploy.axd" -UseBasicParsing -TimeoutSec 8 -SkipCertificateCheck; Write-Host "HTTP $($r.StatusCode)" } catch { Write-Host $_ }
+          }
+
+      - name: Copy SAP NCo DLLs from .36 file share
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          net use "\\192.168.151.36\C$" "vrl@55555" /user:"V2DC-ADDVERB\Administrator"
+          Write-Host "Share mapped: $LASTEXITCODE"
+
+          # Search all likely locations
+          $searchPaths = @("\\192.168.151.36\C$\Windows\System32", "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin")
+          $copied = 0
+          foreach ($path in $searchPaths) {
+            $dlls = Get-ChildItem $path -Filter "*.dll" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "sapnco|rscp4n|icudt|libicu" }
+            foreach ($dll in $dlls) {
+              Copy-Item $dll.FullName "C:\Windows\System32\$($dll.Name)" -Force
+              Write-Host "Copied: $($dll.Name) from $path"
+              $copied++
+            }
+          }
+          Write-Host "NCo DLLs copied: $copied"
+          net use "\\192.168.151.36\C$" /delete /y
+          
+          # Verify
+          $check = Get-ChildItem "C:\Windows\System32\sapnco*.dll" -EA SilentlyContinue
+          Write-Host "NCo on .46: $(if($check){ ($check | Select-Object -ExpandProperty Name) -join ', ' }else{'NONE'})"
+
+      - name: Deploy package to .46 IIS
+        shell: powershell
+        run: |
+          if (-not (Test-Path "C:\mirror\StoreTracker.zip")) {
+            Write-Host "No package - cannot deploy. Check previous step."
+            exit 0
+          }
+          $ms = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          Write-Host "Deploying to .46 Store Tracker IIS site..."
+          & $ms -verb:sync `
+            "-source:package=C:\mirror\StoreTracker.zip" `
+            "-dest:apphostconfig=Store Tracker" `
+            "-setParam:name=IIS Web Application Name,value=Store Tracker" `
+            -allowUntrusted
+          Write-Host "Deploy exit: $LASTEXITCODE"
+
+      - name: Test .46 RFC endpoint
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          Start-Sleep 5
+          try {
+            $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260315"}'
+            $r = Invoke-WebRequest -Uri "http://localhost/api/ZADVANCE_PAYMENT_RFC" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
+            Write-Host "RFC on .46: HTTP $($r.StatusCode)"
+            Write-Host $r.Content.Substring(0,[Math]::Min(300,$r.Content.Length))
+          } catch { Write-Host "RFC test: $_" }
+          
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost/swagger" -UseBasicParsing -TimeoutSec 8
+            Write-Host "Swagger on .46: HTTP $($r.StatusCode)"
+          } catch { Write-Host "Swagger: $_" }
