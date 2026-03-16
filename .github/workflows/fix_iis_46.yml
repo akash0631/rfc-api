@@ -5,49 +5,57 @@ jobs:
   verify:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Mount V2DC-ADDVERB (.24) and copy compiled RFC app
+      - name: Copy C:\RfcApp from .24 to .46 and wire RFC Collector to port 8888
         shell: cmd
         run: |
           net use \\192.168.151.24\C$ vrl@55555 /user:Administrator /persistent:no
           echo NET_USE_24: %ERRORLEVEL%
-          echo === .24 IIS sites ===
-          "\\192.168.151.24\C$\Windows\System32\inetsrv\appcmd.exe" list sites 2>nul
-          "\\192.168.151.24\C$\Windows\System32\inetsrv\appcmd.exe" list vdir 2>nul
-          echo === .24 wwwroot ===
-          dir \\192.168.151.24\C$\inetpub\wwwroot /B 2>nul
-          echo === Store Tracker bin on .24 ===
-          dir "\\192.168.151.24\C$\inetpub\wwwroot\Store Tracker\bin" /B 2>nul | findstr /V "Microsoft Azure System"
-          echo.
-          echo === Copying .24 bin to .46 Store Tracker bin ===
-          robocopy "\\192.168.151.24\C$\inetpub\wwwroot\Store Tracker" "C:\inetpub\wwwroot\Store Tracker" /E /IS /IT /NFL /NDL
+          echo === RfcApp on .24 ===
+          dir \\192.168.151.24\C$\RfcApp /B 2>nul
+          echo === RfcApp bin on .24 (Vendor + SAP DLLs) ===
+          dir \\192.168.151.24\C$\RfcApp\bin /B 2>nul | findstr /V "Microsoft Azure System clr host cor"
+          echo === Copying C:\RfcApp from .24 to .46 ===
+          robocopy \\192.168.151.24\C$\RfcApp C:\RfcApp /E /IS /IT /NFL /NDL
           echo ROBOCOPY: %ERRORLEVEL%
-          echo.
-          echo === .46 Store Tracker bin after copy ===
-          dir "C:\inetpub\wwwroot\Store Tracker\bin" /B 2>nul | findstr /V "Microsoft Azure System"
+          echo === .46 RfcApp bin after copy (Vendor + SAP DLLs) ===
+          dir C:\RfcApp\bin /B 2>nul | findstr /V "Microsoft Azure System clr host cor"
+          echo Web.config present:
+          dir C:\RfcApp\Web.config 2>nul
           net use \\192.168.151.24\C$ /delete /y 2>nul
 
-      - name: Update appsettings to localhost and restart RFC Collector
+      - name: Set IIS_HOST=127.0.0.1 IIS_PORT=8888 and restart RFC Collector
         shell: powershell
         run: |
           $cfg = "C:\RfcCollector\appsettings.json"
           $json = Get-Content $cfg | ConvertFrom-Json
           $json.IIS_HOST = "127.0.0.1"
-          $json.IIS_PORT = "80"
+          $json.IIS_PORT = "8888"
           $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
           Write-Host "Config: $(Get-Content $cfg)"
           Import-Module WebAdministration
-          Restart-WebAppPool "StoreTracker" -ErrorAction SilentlyContinue
+          Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
           Start-Sleep 5
+          Write-Host "RfcApiApp site state: $((Get-Website 'RfcApiApp').State)"
           Restart-Service RfcCollector -Force
           Start-Sleep 10
           Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
 
-      - name: End-to-end smoke test
+      - name: Test IIS :8888 health endpoint
+        shell: powershell
+        run: |
+          $resp = $null
+          try { $resp = Invoke-WebRequest "http://localhost:8888/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 12 } catch { Write-Host "Health :8888 error: $_" }
+          if ($resp) { Write-Host "IIS :8888 Health HTTP $($resp.StatusCode): $($resp.Content)" }
+          $resp2 = $null
+          try { $resp2 = Invoke-WebRequest "http://localhost:8888/swagger" -UseBasicParsing -TimeoutSec 8 } catch { Write-Host "Swagger: $_" }
+          if ($resp2) { Write-Host "Swagger HTTP $($resp2.StatusCode)" }
+
+      - name: Full end-to-end smoke test
         shell: powershell
         run: |
           $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
           $resp = $null
-          try { $resp = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 50 } catch { Write-Host "Error: $_" }
+          try { $resp = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 60 } catch { Write-Host "Fetch error: $_" }
           if ($resp) {
             Write-Host "=== FETCH HTTP $($resp.StatusCode) ==="
             Write-Host ($resp.Content.Substring(0,[Math]::Min(2000,$resp.Content.Length)))
