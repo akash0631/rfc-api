@@ -7,7 +7,6 @@ on:
       - 'rfc-collector/**'
 
 jobs:
-  # Job 1: Build on GitHub-hosted ubuntu runner
   build:
     runs-on: ubuntu-latest
     steps:
@@ -27,7 +26,6 @@ jobs:
           path: publish/
           retention-days: 7
 
-  # Job 2: Deploy to VM-CRM (.46) via self-hosted runner
   deploy:
     needs: build
     runs-on: [self-hosted, test-vm]
@@ -38,41 +36,53 @@ jobs:
           name: rfc-collector-win-x64
           path: C:\RfcCollector\
 
-      - name: Stop existing process
-        shell: cmd
+      - name: Stop existing and start new
+        shell: powershell
         run: |
-          taskkill /F /IM RfcCollector.exe 2>nul
-          echo Stopped (or was not running)
+          # Stop gracefully
+          Stop-Process -Name RfcCollector -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
 
-      - name: Set environment and start
-        shell: cmd
-        run: |
-          setx IIS_HOST "192.168.151.36" /M
-          setx IIS_PORT "80" /M
-          setx SQL_SERVER "192.168.151.46" /M
-          setx SQL_USER "sa" /M
-          setx SQL_PASS "vrl@55555" /M
-          setx SQL_DB "claudetestv2" /M
-          setx ASPNETCORE_URLS "http://0.0.0.0:9090" /M
-          echo Environment set
+          # Write start script with env vars baked in
+          $script = @"
+@echo off
+set IIS_HOST=192.168.151.36
+set IIS_PORT=80
+set SQL_SERVER=192.168.151.46
+set SQL_USER=sa
+set SQL_PASS=vrl@55555
+set SQL_DB=claudetestv2
+set ASPNETCORE_URLS=http://0.0.0.0:9090
+C:\RfcCollector\RfcCollector.exe >> C:\RfcCollector\rfc-collector.log 2>&1
+"@
+          $script | Out-File -FilePath "C:\RfcCollector\start.bat" -Encoding ASCII
 
-      - name: Start RFC Collector
-        shell: cmd
-        run: |
-          start /B C:\RfcCollector\RfcCollector.exe > C:\RfcCollector\rfc-collector.log 2>&1
-          timeout /t 5 /nobreak
-          echo Started
+          # Start detached
+          Start-Process -FilePath "cmd.exe" -ArgumentList "/c C:\RfcCollector\start.bat" -WindowStyle Hidden
+          Start-Sleep -Seconds 6
 
-      - name: Health check
-        shell: cmd
-        run: |
-          timeout /t 3 /nobreak
-          curl -s http://localhost:9090/ || echo "Health check - may need a moment to start"
+          # Health check
+          try {
+            $r = Invoke-WebRequest -Uri "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8
+            Write-Host "HEALTH OK: $($r.StatusCode)"
+            Write-Host $r.Content
+          } catch {
+            Write-Host "Health check failed: $_"
+            Write-Host "Check logs at C:\RfcCollector\rfc-collector.log"
+            # Show log tail
+            if (Test-Path "C:\RfcCollector\rfc-collector.log") {
+              Get-Content "C:\RfcCollector\rfc-collector.log" | Select-Object -Last 20
+            }
+          }
 
       - name: Summary
-        shell: cmd
+        shell: powershell
         run: |
-          echo RFC Collector deployed to VM-CRM (.46)
-          echo URL: http://192.168.151.46:9090
-          echo Swagger: http://192.168.151.46:9090/swagger
-          echo Database: claudetestv2 @ 192.168.151.46
+          Write-Host "=== RFC Collector Deployed to VM-CRM (.46) ==="
+          Write-Host "Health:  http://192.168.151.46:9090/"
+          Write-Host "Swagger: http://192.168.151.46:9090/swagger"
+          Write-Host "Fetch:   POST http://192.168.151.46:9090/fetch"
+          Write-Host "Tables:  GET  http://192.168.151.46:9090/tables"
+          Write-Host "SQL:     POST http://192.168.151.46:9090/sql"
+          Write-Host "DB:      claudetestv2 @ 192.168.151.46"
+          Write-Host "Via IIS: 192.168.151.36:80"
