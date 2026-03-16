@@ -5,49 +5,22 @@ jobs:
   verify:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Copy RFC app from .36 to .46 Store Tracker
-        shell: cmd
-        run: |
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          echo NET_USE: %ERRORLEVEL%
-          echo === Source DLLs on .36 ===
-          dir \\192.168.151.36\C$\inetpub\wwwroot\testingsite.v2retail.com\bin /B 2>nul | findstr /E ".dll"
-          echo === Copying to .46 Store Tracker ===
-          robocopy \\192.168.151.36\C$\inetpub\wwwroot\testingsite.v2retail.com "C:\inetpub\wwwroot\Store Tracker" /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
-          echo === .46 Store Tracker bin after copy ===
-          dir "C:\inetpub\wwwroot\Store Tracker\bin" /B 2>nul | findstr /E ".dll"
-          net use \\192.168.151.36\C$ /delete /y 2>nul
-
-      - name: Recycle StoreTracker app pool and test
+      - name: Revert IIS_HOST to .36 and restart RFC Collector
         shell: powershell
         run: |
-          Import-Module WebAdministration
-          Restart-WebAppPool "StoreTracker" -ErrorAction SilentlyContinue
-          Restart-WebAppPool "DefaultAppPool" -ErrorAction SilentlyContinue
-          Start-Sleep 8
-          Write-Host "IIS sites:"
-          Get-Website | Select Name, State | Format-Table
-          Write-Host "Vendor DLLs in Store Tracker bin:"
-          Get-ChildItem "C:\inetpub\wwwroot\Store Tracker\bin" -Filter "Vendor*" -ErrorAction SilentlyContinue | Select Name | Format-Table
-          Write-Host "SAP DLLs:"
-          Get-ChildItem "C:\inetpub\wwwroot\Store Tracker\bin" -ErrorAction SilentlyContinue | Where-Object {$_.Name -like "*sap*" -or $_.Name -like "*SAP*"} | Select Name | Format-Table
-          Write-Host "Total DLLs: $((Get-ChildItem 'C:\inetpub\wwwroot\Store Tracker\bin' -Filter '*.dll' -ErrorAction SilentlyContinue).Count)"
-          Write-Host "Web.config: $(Test-Path 'C:\inetpub\wwwroot\Store Tracker\Web.config')"
-
-      - name: Test IIS health on .46
-        shell: powershell
-        run: |
-          $resp = $null
-          try { $resp = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 12 } catch { Write-Host "Health error: $_" }
-          if ($resp) { Write-Host "IIS Health HTTP $($resp.StatusCode): $($resp.Content)" }
-
-      - name: Restart RFC Collector and full smoke test
-        shell: powershell
-        run: |
+          $cfg = "C:\RfcCollector\appsettings.json"
+          $json = Get-Content $cfg | ConvertFrom-Json
+          $json.IIS_HOST = "192.168.151.36"
+          $json.IIS_PORT = "80"
+          $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
+          Write-Host "Config now: $(Get-Content $cfg)"
           Restart-Service RfcCollector -Force
           Start-Sleep 10
           Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
+
+      - name: Smoke test RFC Collector -> .36 IIS -> SAP
+        shell: powershell
+        run: |
           $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260316"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
           $resp = $null
           try { $resp = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 50 } catch { Write-Host "Fetch error: $_" }
@@ -55,3 +28,18 @@ jobs:
             Write-Host "=== FETCH HTTP $($resp.StatusCode) ==="
             Write-Host ($resp.Content.Substring(0,[Math]::Min(1500,$resp.Content.Length)))
           }
+
+      - name: Find compiled RFC app path on .36
+        shell: cmd
+        run: |
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE: %ERRORLEVEL%
+          echo === Check IIS appcmd on .36 via share ===
+          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list sites 2>nul
+          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list vdir 2>nul
+          echo === Other potential app paths ===
+          dir \\192.168.151.36\C$\ /B 2>nul
+          dir \\192.168.151.36\C$\inetpub\wwwroot\testingsite.v2retail.com\bin /B 2>nul
+          dir \\192.168.151.36\C$\RfcApp 2>nul
+          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker" 2>nul
+          net use \\192.168.151.36\C$ /delete /y 2>nul
