@@ -1,7 +1,6 @@
-name: Deploy RFC App to .46 IIS
+name: Copy NCo from .36 and Deploy to .46
 on:
   workflow_dispatch:
-
 jobs:
   deploy:
     runs-on: [self-hosted, test-vm]
@@ -9,158 +8,84 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy SAP NCo from .36 and install to GAC
+      - name: Mount .36 and copy SAP NCo + IIS bin
+        shell: cmd
+        run: |
+          net use \\192.168.151.36\c$ /user:Administrator vrl@55555 /persistent:no
+          if %ERRORLEVEL% NEQ 0 (
+            net use \\192.168.151.36\c$ /user:Administrator Vrl@55555 /persistent:no
+          )
+          echo Mount result: %ERRORLEVEL%
+          
+          if not exist C:\RfcApp\bin mkdir C:\RfcApp\bin
+          
+          rem Copy SAP NCo DLLs from .36 - try multiple locations
+          xcopy "\\192.168.151.36\c$\Windows\Microsoft.NET\assembly\GAC_64\sapnco" "C:\NCo\" /E /I /Y 2>nul
+          xcopy "\\192.168.151.36\c$\Windows\Microsoft.NET\assembly\GAC_MSIL\sapnco" "C:\NCo\" /E /I /Y 2>nul
+          xcopy "\\192.168.151.36\c$\Windows\System32\sapnco.dll" "C:\RfcApp\bin\" /Y 2>nul
+          xcopy "\\192.168.151.36\c$\Windows\System32\sapnco3.dll" "C:\RfcApp\bin\" /Y 2>nul
+          
+          rem Copy entire IIS bin from .36 (compiled DLLs + NCo)
+          xcopy "\\192.168.151.36\c$\inetpub\wwwroot\Store Tracker\bin\*.*" "C:\RfcApp\bin\" /Y /I 2>nul
+          xcopy "\\192.168.151.36\c$\inetpub\wwwroot\Store Tracker\*.*" "C:\RfcApp\" /Y /I 2>nul
+          
+          rem Copy web.config if found
+          xcopy "\\192.168.151.36\c$\inetpub\wwwroot\Store Tracker\Web.config" "C:\RfcApp\" /Y 2>nul
+          
+          dir C:\RfcApp\bin | find "sap"
+          dir C:\RfcApp\bin | find "SAP"
+          dir C:\RfcApp\bin
+          
+          net use \\192.168.151.36\c$ /delete
+
+      - name: Check what we have and list SAP DLLs
         shell: powershell
         run: |
-          $ErrorActionPreference = "Continue"
-          
-          # Try to copy NCo DLLs from .36 via network share or IIS bin folder
-          $srcPaths = @(
-            "\\192.168.151.36\c$\Windows\assembly",
-            "\\192.168.151.36\c$\Windows\System32",
-            "\\192.168.151.36\c$\inetpub\wwwroot\Store Tracker\bin",
-            "\\192.168.151.36\c$\Program Files\SAP"
-          )
-          
-          $destDir = "C:\RfcApp\bin"
-          if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
-          
-          $found = $false
-          foreach ($src in $srcPaths) {
-            try {
-              $files = Get-ChildItem $src -Recurse -Filter "sapnco*.dll" -ErrorAction SilentlyContinue
-              if ($files) {
-                $files | ForEach-Object {
-                  Copy-Item $_.FullName -Destination $destDir -Force
-                  Write-Host "Copied: $($_.Name) from $src"
-                  $found = $true
-                }
-              }
-            } catch { Write-Host "Cannot access $src - $_" }
-          }
-          
-          if (-not $found) {
-            Write-Host "NCo DLLs not found via network - checking local GAC..."
-            Get-ChildItem "C:\Windows\assembly" -Recurse -Filter "*sapnco*" -ErrorAction SilentlyContinue | Select FullName
-          }
+          Write-Host "=== RfcApp bin DLLs ==="
+          Get-ChildItem "C:\RfcApp\bin" -Filter "*.dll" | Select Name, Length | Sort Name
 
-      - name: Setup IIS site for RFC app on port 8888
+          Write-Host "=== SAP DLLs ==="
+          Get-ChildItem "C:\RfcApp\bin" -Filter "*sap*" -ErrorAction SilentlyContinue | Select Name, Length
+          Get-ChildItem "C:\RfcApp\bin" -Filter "*SAP*" -ErrorAction SilentlyContinue | Select Name, Length
+          
+          Write-Host "=== NCo folder ==="
+          Get-ChildItem "C:\NCo" -Recurse -ErrorAction SilentlyContinue | Select FullName, Length
+
+          Write-Host "=== Web.config present? ==="
+          Test-Path "C:\RfcApp\Web.config"
+          if (Test-Path "C:\RfcApp\Web.config") { Get-Content "C:\RfcApp\Web.config" | Select-Object -First 20 }
+
+      - name: Setup IIS site and test RFC
         shell: powershell
         run: |
           Import-Module WebAdministration
           
-          $siteName = "RfcApiApp"
-          $appPoolName = "RfcApiPool"
-          $physPath = "C:\RfcApp"
-          
-          if (-not (Test-Path $physPath)) { New-Item -ItemType Directory -Path $physPath | Out-Null }
-          if (-not (Test-Path "$physPath\bin")) { New-Item -ItemType Directory -Path "$physPath\bin" | Out-Null }
-          
-          # Create app pool if not exists
-          if (-not (Test-Path "IIS:\AppPools\$appPoolName")) {
-            New-WebAppPool -Name $appPoolName
-            Set-ItemProperty "IIS:\AppPools\$appPoolName" -Name managedRuntimeVersion -Value "v4.0"
-            Set-ItemProperty "IIS:\AppPools\$appPoolName" -Name processModel.loadUserProfile -Value $true
-            Write-Host "App pool created: $appPoolName"
-          }
-          
-          # Remove existing site if any
-          if (Get-Website -Name $siteName -ErrorAction SilentlyContinue) {
-            Remove-Website -Name $siteName
-          }
-          
-          # Create site on port 8888
-          New-Website -Name $siteName -Port 8888 -PhysicalPath $physPath -ApplicationPool $appPoolName
-          Start-Website -Name $siteName
-          
-          Write-Host "IIS site '$siteName' created on port 8888 at $physPath"
-          Get-Website -Name $siteName | Select Name, State, PhysicalPath
-
-      - name: Build RFC app with MSBuild
-        shell: powershell
-        run: |
-          $msbuild = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
-          $proj = "Vendor_SRM_Routing_Application.sln"
-          
-          # Restore NuGet packages
-          Write-Host "Restoring NuGet..."
-          $nuget = Get-Command nuget -ErrorAction SilentlyContinue
-          if (-not $nuget) {
-            Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "C:\nuget.exe" -UseBasicParsing
-            $env:PATH += ";C:\"
-          }
-          nuget restore $proj -NonInteractive 2>&1 | Select-Object -Last 10
-          
-          # Build
-          Write-Host "Building with MSBuild..."
-          & $msbuild $proj /p:Configuration=Release /p:Platform="Any CPU" /p:DeployOnBuild=false /t:Build /v:minimal 2>&1 | Select-Object -Last 20
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Build failed - trying Framework build..."
-            & $msbuild "Vendor_SRM_Routing_Application.csproj" /p:Configuration=Release /t:Build /v:minimal 2>&1 | Select-Object -Last 20
-          }
-
-      - name: Deploy built files to IIS
-        shell: powershell
-        run: |
-          $srcBin = ".\bin\Release"
-          $dest = "C:\RfcApp"
-          
-          # Copy all compiled files
-          if (Test-Path $srcBin) {
-            Copy-Item "$srcBin\*" -Destination "$dest\bin" -Recurse -Force
-            Write-Host "Copied bin files"
-          }
-          
-          # Copy web config, views, scripts
-          foreach ($item in @("Web.config", "Web.Release.config", "Global.asax", "Global.asax.cs", "Views", "Scripts", "Content")) {
-            if (Test-Path ".\$item") {
-              Copy-Item ".\$item" -Destination $dest -Recurse -Force
-              Write-Host "Copied: $item"
+          # Ensure site exists
+          if (-not (Get-Website "RfcApiApp" -ErrorAction SilentlyContinue)) {
+            if (-not (Test-Path "IIS:\AppPools\RfcApiPool")) {
+              New-WebAppPool -Name "RfcApiPool"
+              Set-ItemProperty "IIS:\AppPools\RfcApiPool" -Name managedRuntimeVersion -Value "v4.0"
             }
+            New-Website -Name "RfcApiApp" -Port 8888 -PhysicalPath "C:\RfcApp" -ApplicationPool "RfcApiPool"
           }
+          Start-Website "RfcApiApp" -ErrorAction SilentlyContinue
+          Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
+          Start-Sleep 8
           
-          # Copy packages (NuGet dlls)
-          if (Test-Path ".\packages") {
-            Get-ChildItem ".\packages" -Recurse -Filter "*.dll" | ForEach-Object {
-              Copy-Item $_.FullName -Destination "$dest\bin" -Force -ErrorAction SilentlyContinue
-            }
-          }
+          Get-Website "RfcApiApp" | Select Name, State, PhysicalPath
           
-          Write-Host "Deploy complete. Files in C:\RfcApp\bin: $((Get-ChildItem C:\RfcApp\bin -ErrorAction SilentlyContinue).Count)"
-
-      - name: Open firewall and test
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Continue"
-          
-          # Open port 8888
+          # Open firewall
           if (-not (Get-NetFirewallRule -DisplayName "RfcApp-8888" -ErrorAction SilentlyContinue)) {
             New-NetFirewallRule -DisplayName "RfcApp-8888" -Direction Inbound -Protocol TCP -LocalPort 8888 -Action Allow
-            Write-Host "Firewall rule created for 8888"
           }
           
-          # Restart IIS site
-          Import-Module WebAdministration
-          Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
-          Start-Sleep 5
-          
-          # Test swagger
-          try {
-            $r = Invoke-WebRequest -Uri "http://localhost:8888/swagger" -UseBasicParsing -TimeoutSec 10
-            Write-Host "SWAGGER OK: HTTP $($r.StatusCode)"
-          } catch {
-            Write-Host "Swagger test: $_"
-          }
-          
-          # Test ZADVANCE endpoint
+          # Test
           $body = ConvertTo-Json @{I_COMPANY_CODE="1000"; I_POSTING_DATE_LOW="20260101"; I_POSTING_DATE_HIGH="20260316"}
           try {
             $r = Invoke-WebRequest -Uri "http://localhost:8888/api/ZADVANCE_PAYMENT_RFC" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "RFC TEST: HTTP $($r.StatusCode) - $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))"
+            Write-Host "RFC TEST HTTP $($r.StatusCode): $($r.Content.Substring(0, [Math]::Min(300, $r.Content.Length)))"
           } catch {
-            Write-Host "RFC test: $_"
+            Write-Host "RFC test failed: $_"
+            # Show IIS error
+            Get-EventLog -LogName Application -Newest 3 -EntryType Error -ErrorAction SilentlyContinue | Select Message
           }
-          
-          Write-Host "=== IIS Site Status ==="
-          Get-Website "RfcApiApp" | Select Name, State
