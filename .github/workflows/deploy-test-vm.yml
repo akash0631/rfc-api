@@ -115,36 +115,39 @@ jobs:
           
           if (-not (Test-Path "C:\RfcApp\bin")) { New-Item -ItemType Directory "C:\RfcApp\bin" -Force | Out-Null }
           
-          # Fix permissions and clear read-only
+          # Fix permissions on folder and its contents (recursive)
           & icacls "C:\RfcApp\bin" /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
           
-          # Delete destination DLL first to release any file locks on destination
+          # Force-fix permissions and attributes specifically on the destination DLL if it exists
           $destDll = "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
           if (Test-Path $destDll) {
+            Write-Host "Taking ownership and fixing permissions on destination DLL..."
+            & takeown /F $destDll /A 2>&1 | Out-Null
+            & icacls $destDll /grant "Administrators:F" /C /Q 2>&1 | Out-Null
+            & attrib -R -S $destDll 2>&1 | Out-Null
             Write-Host "Removing old destination DLL..."
             $removed = $false
-            for ($i = 0; $i -lt 10; $i++) {
+            for ($i = 0; $i -lt 5; $i++) {
               try {
-                Remove-Item $destDll -Force -ErrorAction Stop
+                [System.IO.File]::Delete($destDll)
                 Write-Host "Old DLL removed on attempt $($i+1)"
                 $removed = $true
                 break
               } catch {
                 Write-Host "Attempt $($i+1) to remove old DLL failed: $_"
-                Start-Sleep -Seconds 3
+                Start-Sleep -Seconds 2
               }
             }
             if (-not $removed) {
-              Write-Host "ERROR: Could not remove old DLL after 10 attempts"
-              exit 1
+              Write-Host "WARNING: Could not delete old DLL - trying overwrite via Copy-Item"
             }
           }
           
-          # Copy the DLL using robocopy /B (backup mode) - output visible in log
-          robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2
+          # Copy the DLL - try robocopy /B first, fall back to Copy-Item
+          robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:1 /W:1
           if ($LASTEXITCODE -gt 7) {
-            Write-Host "ERROR: robocopy /B failed with exit code $LASTEXITCODE"
-            exit 1
+            Write-Host "robocopy /B failed (exit $LASTEXITCODE), trying Copy-Item..."
+            Copy-Item "bin\Release\Vendor_SRM_Routing_Application.dll" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" -Force -ErrorAction Stop
           }
           Write-Host "DLL copied successfully"
           
