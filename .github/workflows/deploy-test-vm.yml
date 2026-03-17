@@ -51,23 +51,30 @@ jobs:
           if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
       - name: Copy to IIS
+        timeout-minutes: 10
         shell: cmd
         run: |
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
-          rem --- Copy ALL build output files + subdirs (e.g. roslyn\), exclude sapnco_utils.dll (native - ASP.NET must never load it as assembly) ---
-          robocopy bin\Release "C:\RfcApp\bin" /E /XO /NJH /NJS /XF sapnco_utils.dll
-          if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
-          rem --- Safety net: delete if it somehow landed in bin from a prior deployment ---
-          if exist "C:\RfcApp\bin\sapnco_utils.dll" del /F /Q "C:\RfcApp\bin\sapnco_utils.dll"
-          rem --- sapnco.dll (managed wrapper) goes in bin so .NET Assembly.Load finds it ---
-          copy /Y packages\sapnco_x64.3.0.18\lib\sapnco.dll "C:\RfcApp\bin\sapnco.dll"
-          rem --- sapnco_utils.dll is NATIVE: NOT in bin. Copy to System32 so IIS w3wp.exe LoadLibrary finds it ---
-          copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\Windows\System32\sapnco_utils.dll"
-          rem --- Copy other native SAP NCo deps (libsapucum.dll, ICU DLLs) to System32 ---
-          for %%f in (packages\sapnco_x64.3.0.18\lib\lib*.dll packages\sapnco_x64.3.0.18\lib\*icu*.dll) do (
-            echo Copying native dep: %%f
-            copy /Y "%%f" "C:\Windows\System32\" 2>nul
+          rem --- ALWAYS copy the freshly-built project DLL (this is the only file that changes per code commit) ---
+          copy /Y "bin\Release\Vendor_SRM_Routing_Application.dll" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
+          copy /Y "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.pdb" 2>nul
+          rem --- FIRST-TIME SETUP: if NuGet deps are not yet deployed, do a full robocopy (slow, but only needed once) ---
+          if not exist "C:\RfcApp\bin\System.Web.Http.dll" (
+            echo First-time deploy detected - copying all dependencies...
+            robocopy bin\Release "C:\RfcApp\bin" /E /NJH /NJS /NFL /NDL /NP /XF sapnco_utils.dll
+            if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
+            rem --- sapnco_utils.dll is NATIVE: NOT in bin. Copy to System32 so IIS w3wp.exe LoadLibrary finds it ---
+            copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\Windows\System32\sapnco_utils.dll" 2>nul
+            rem --- Copy other native SAP NCo deps (libsapucum.dll, ICU DLLs) to System32 ---
+            for %%f in (packages\sapnco_x64.3.0.18\lib\lib*.dll packages\sapnco_x64.3.0.18\lib\*icu*.dll) do (
+              copy /Y "%%f" "C:\Windows\System32\" 2>nul
+            )
+          ) else (
+            echo Incremental deploy - NuGet deps already in place, skipping full robocopy
           )
+          rem --- Safety net: delete sapnco_utils.dll from bin if it somehow got there ---
+          if exist "C:\RfcApp\bin\sapnco_utils.dll" del /F /Q "C:\RfcApp\bin\sapnco_utils.dll"
+          rem --- Always update config and static files ---
           copy /Y Web.config "C:\RfcApp\Web.config"
           if exist Global.asax copy /Y Global.asax "C:\RfcApp\Global.asax"
           xcopy /Y /E /I Views "C:\RfcApp\Views" >nul 2>&1
