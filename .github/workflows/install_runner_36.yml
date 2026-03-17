@@ -5,35 +5,54 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Write event log and test results to file on .36
-        shell: cmd
+      - name: Enable TrustedHosts and PSRemote into .36 for diagnostics
+        shell: powershell
         run: |
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          # Add .36 to TrustedHosts on .46 so PSRemoting works
+          Set-Item WSMan:\localhost\Client\TrustedHosts -Value "192.168.151.36" -Force
+          Write-Host "TrustedHosts set"
 
-          echo === Write diagnostic script to .36 ===
-          echo @echo off > \\192.168.151.36\C$\diag.bat
-          echo cd /d C:\ >> \\192.168.151.36\C$\diag.bat
-          echo echo === SITE AND POOL STATUS === > C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo C:\Windows\System32\inetsrv\appcmd.exe list sites >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo C:\Windows\System32\inetsrv\appcmd.exe list apppools >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo echo === TEST LOCALHOST:9191 === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'OK' $r.StatusCode $r.Content}catch{Write-Host 'ERR' $_.Exception.Message}" >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo echo === TEST LOCALHOST:8888 === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:8888/' -UseBasicParsing -TimeoutSec 8;Write-Host 'OK' $r.StatusCode}catch{Write-Host 'ERR' $_.Exception.Message}" >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo echo === LAST 10 APP ERRORS === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo powershell -NoProfile -Command "Get-EventLog Application -Newest 20 -EntryType Error,Warning -EA SilentlyContinue | Where-Object {$_.Source -like '*IIS*' -or $_.Source -like '*ASP*' -or $_.Source -like '*W3SVC*' -or $_.Source -like '*WAS*'} | Select TimeGenerated,Source,Message | Format-List | Out-String" >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo echo === SAPNCO ON .36 === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo if exist C:\Windows\System32\sapnco.dll echo sapnco.dll PRESENT >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo if not exist C:\Windows\System32\sapnco.dll echo sapnco.dll MISSING >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo if exist C:\Windows\System32\sapnco_utils.dll echo sapnco_utils.dll PRESENT >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo echo === V2RfcApi bin DLL count === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
-          echo dir C:\V2RfcApi\bin\*.dll /B >> C:\diag_out.txt 2^>^&1 >> \\192.168.151.36\C$\diag.bat
-          echo echo DONE >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          $cred = New-Object PSCredential("Administrator", (ConvertTo-SecureString "vrl@55555" -AsPlainText -Force))
+          $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop
+          Write-Host "Connected to .36 ✅"
 
-          schtasks /create /s 192.168.151.36 /u Administrator /p vrl@55555 /tn V2Diag /tr C:\diag.bat /sc once /st 00:00 /ru SYSTEM /f 2>nul
-          schtasks /run /s 192.168.151.36 /u Administrator /p vrl@55555 /tn V2Diag 2>nul
-          echo Task triggered, waiting 20s...
-          timeout /t 20 /nobreak
-          echo === DIAGNOSTIC OUTPUT ===
-          type \\192.168.151.36\C$\diag_out.txt
-          net use \\192.168.151.36\C$ /delete /y 2>nul
+          Invoke-Command -Session $s -ScriptBlock {
+            Write-Host "=== RUNNING ON .36 ==="
+            Write-Host "=== IIS Sites and Pools ==="
+            Import-Module WebAdministration -EA SilentlyContinue
+            Get-Website | Select Name, State, @{n='Port';e={($_.Bindings.Collection[0].bindingInformation -split ':')[1]}} | Format-Table
+            Get-ChildItem IIS:\AppPools | Select Name, State | Format-Table
+
+            Write-Host "=== sapnco on .36 ==="
+            Test-Path "C:\Windows\System32\sapnco.dll"
+            Test-Path "C:\Windows\System32\sapnco_utils.dll"
+
+            Write-Host "=== V2RfcApi bin ==="
+            (Get-ChildItem "C:\V2RfcApiin" -Filter "*.dll" -EA SilentlyContinue).Count
+            Get-ChildItem "C:\V2RfcApiin" -Filter "Vendor*.dll" -EA SilentlyContinue | Select Name
+
+            Write-Host "=== Test localhost:9191 ==="
+            try {
+              $r = Invoke-WebRequest "http://localhost:9191/" -UseBasicParsing -TimeoutSec 8
+              Write-Host "9191 root: HTTP $($r.StatusCode)"
+            } catch { Write-Host "9191 root: $($_.Exception.Message)" }
+            try {
+              $b = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+              $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+              Write-Host "9191 Execute: HTTP $($r2.StatusCode) $($r2.Content.Substring(0,[Math]::Min(300,$r2.Content.Length)))"
+            } catch { Write-Host "9191 Execute: $($_.Exception.Message)" }
+
+            Write-Host "=== Test localhost:8888 (existing RfcApiApp) ==="
+            try {
+              $b = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+              $r3 = Invoke-WebRequest "http://localhost:8888/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+              Write-Host "8888 Execute: HTTP $($r3.StatusCode) $($r3.Content.Substring(0,[Math]::Min(300,$r3.Content.Length)))"
+            } catch { Write-Host "8888 Execute: $($_.Exception.Message)" }
+
+            Write-Host "=== Last 5 IIS errors in Event Log ==="
+            Get-EventLog Application -Newest 50 -EA SilentlyContinue |
+              Where-Object { $_.EntryType -eq 'Error' -and ($_.Source -like '*IIS*' -or $_.Source -like '*ASP*' -or $_.Source -like '*WAS*' -or $_.Source -like '*W3SVC*') } |
+              Select -First 5 | ForEach-Object { Write-Host "$($_.TimeGenerated) $($_.Source): $($_.Message.Substring(0,[Math]::Min(200,$_.Message.Length)))" }
+          }
+
+          Remove-PSSession $s
