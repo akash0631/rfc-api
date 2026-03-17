@@ -129,9 +129,10 @@ body{background:var(--bg);font-family:var(--sans);color:var(--text);min-height:1
     <div class="logo-tag">AUTOMATED</div>
   </div>
   <div class="nav" style="display:flex;align-items:center;gap:4px">
-    <a href="@Url.Action("Index", "RfcDeploy")" class="active">⚡ Deploy</a>
-    <a href="@Url.Action("Explorer", "RfcDeploy")">🔍 API Explorer</a>
-    <a href="@Url.Action("Swagger", "RfcDeploy")">📖 Swagger</a>
+    <a href="@Url.Action("Index",    "RfcDeploy")" class="active">⚡ Deploy</a>
+    <a href="@Url.Action("Explorer", "RfcDeploy")">🔍 Explorer</a>
+    <a href="@Url.Action("SwaggerUI","RfcDeploy")">📖 Swagger UI</a>
+    <a href="@Url.Action("OpenApiJson","RfcDeploy")" target="_blank">📄 OpenAPI</a>
     <a href="https://github.com/akash0631/rfc-api/actions" target="_blank">⚙️ Actions</a>
   </div>
   <div class="live-badge"><div class="live-dot"></div>IIS LIVE</div>
@@ -338,7 +339,8 @@ function showResult(job) {
   c.innerHTML = '';
   if (job.commit) c.innerHTML += `<a class="chip chip-g" href="${job.commit}" target="_blank">✓ GitHub Commit</a>`;
   if (job.dataLake) c.innerHTML += `<a class="chip chip-b" href="${job.dataLake}" target="_blank">📡 Data Lake</a>`;
-  c.innerHTML += `<a class="chip chip-b" href="@Url.Action("Explorer","RfcDeploy")">🔍 API Explorer</a>`;
+  c.innerHTML += `<a class="chip chip-b" href="@Url.Action("Explorer",  "RfcDeploy")">🔍 API Explorer</a>`;
+  c.innerHTML += `<a class="chip chip-b" href="@Url.Action("SwaggerUI","RfcDeploy")">📖 Swagger UI</a>`;
   c.innerHTML += `<a class="chip chip-p" href="https://github.com/akash0631/rfc-api/actions" target="_blank">⚙️ GitHub Actions</a>`;
 }
 function reset() {
