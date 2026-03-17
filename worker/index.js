@@ -1882,26 +1882,80 @@ input::placeholder{color:var(--dim)}
       <div>
         <label>RFC Function</label>
         <select id="rfcSelect" onchange="onRfcChange()">
-          <option value="ZADVANCE_PAYMENT_RFC" data-table="ET_ZADVANCE_PAYMENT"
-            data-cols="DOCUMENT_TYPE,COMPANY_CODE,DOCUMENT_NUMBER,FISCAL_YEAR,LINE_ITEM,POSTING_KEY,ACCOUNT_TYPE,SPECIAL_G_L_IND,TRANSACT_TYPE,DEBIT_CREDIT,AMOUNT_IN_LC,AMOUNT,TEXT,VENDOR,PAYMENT_AMT,POSTING_DATE"
-            data-params="I_COMPANY_CODE,I_POSTING_DATE_LOW,I_POSTING_DATE_HIGH">
-            ZADVANCE_PAYMENT_RFC — Advance Payment Documents
-          </option>
-          <option value="ZVND_PUTWAY_BIN_VAL_RFC" data-table="ET_ZVND_PUTWAY_BIN_VAL"
-            data-cols="TYPE,MESSAGE"
-            data-params="IM_USER,IM_PLANT,IM_BIN">
-            ZVND_PUTWAY_BIN_VAL_RFC — BIN Validation (Inbound Putway)
-          </option>
-          <option value="ZVND_PUTWAY_PALETTE_VAL_RFC" data-table="ET_ZVND_PUTWAY_PALETTE_VAL"
-            data-cols="PO_NUMBER,VENDOR_CODE,VENDOR_NAME,INVOICE_NO,BOX_COUNT,PALETTE_NO"
-            data-params="IM_USER,IM_PLANT,IM_BIN,IM_PALL">
-            ZVND_PUTWAY_PALETTE_VAL_RFC — Palette Validation + PO/Vendor Details
-          </option>
-          <option value="ZVND_PUTWAY_SAVE_DATA_RFC" data-table="ET_ZVND_PUTWAY_SAVE"
-            data-cols="TYPE,MESSAGE"
-            data-params="IM_USER">
-            ZVND_PUTWAY_SAVE_DATA_RFC — Save Putway Data [WRITE RFC]
-          </option>
+          <optgroup label="── Finance ──">
+            <option value="ZADVANCE_PAYMENT_RFC" data-table="ET_ZADVANCE_PAYMENT"
+              data-cols="DOCUMENT_TYPE,COMPANY_CODE,DOCUMENT_NUMBER,FISCAL_YEAR,LINE_ITEM,POSTING_KEY,ACCOUNT_TYPE,SPECIAL_G_L_IND,TRANSACT_TYPE,DEBIT_CREDIT,AMOUNT_IN_LC,AMOUNT,TEXT,VENDOR,PAYMENT_AMT,POSTING_DATE"
+              data-params="I_COMPANY_CODE,I_POSTING_DATE_LOW,I_POSTING_DATE_HIGH">
+              ZADVANCE_PAYMENT_RFC — Advance Payment Documents
+            </option>
+          </optgroup>
+          <optgroup label="── Gate Entry / LOT Putway ──">
+            <option value="ZVND_PUTWAY_BIN_VAL_RFC" data-table="ET_ZVND_PUTWAY_BIN_VAL"
+              data-cols="TYPE,MESSAGE" data-params="IM_USER,IM_PLANT,IM_BIN">
+              ZVND_PUTWAY_BIN_VAL_RFC — BIN Validation
+            </option>
+            <option value="ZVND_PUTWAY_PALETTE_VAL_RFC" data-table="ET_ZVND_PUTWAY_PALETTE_VAL"
+              data-cols="PO_NUMBER,VENDOR_CODE,VENDOR_NAME,INVOICE_NO,BOX_COUNT,PALETTE_NO"
+              data-params="IM_USER,IM_PLANT,IM_BIN,IM_PALL">
+              ZVND_PUTWAY_PALETTE_VAL_RFC — Palette Validation
+            </option>
+            <option value="ZVND_PUTWAY_SAVE_DATA_RFC" data-table="ET_ZVND_PUTWAY_SAVE"
+              data-cols="TYPE,MESSAGE" data-params="IM_USER">
+              ZVND_PUTWAY_SAVE_DATA_RFC — Save Putway Data [WRITE]
+            </option>
+            <option value="ZWM_GET_GATE_ENTRY_DATA_RFC" data-table="ET_ZWM_GET_GATE_ENTRY_DATA_RFC" data-params="">ZWM_GET_GATE_ENTRY_DATA_RFC</option>
+            <option value="ZWM_GET_GATE_ENTRY_DATA4_RFC" data-table="ET_ZWM_GET_GATE_ENTRY_DATA4_RFC" data-params="">ZWM_GET_GATE_ENTRY_DATA4_RFC</option>
+            <option value="ZWM_GET_GATE_ENTRY_LIST_RFC" data-table="ET_ZWM_GET_GATE_ENTRY_LIST_RFC" data-params="">ZWM_GET_GATE_ENTRY_LIST_RFC</option>
+            <option value="ZWM_GET_GATE_ENTRY_LIST4_RFC" data-table="ET_ZWM_GET_GATE_ENTRY_LIST4_RFC" data-params="">ZWM_GET_GATE_ENTRY_LIST4_RFC</option>
+            <option value="ZWM_GET_GATE_ENTRY_PALLATE_RFC" data-table="ET_ZWM_GET_GATE_ENTRY_PALLATE_RFC" data-params="">ZWM_GET_GATE_ENTRY_PALLATE_RFC</option>
+            <option value="ZWM_GATE_BIN_VALIDATION3_N" data-table="ET_ZWM_GATE_BIN_VALIDATION3_N" data-params="">ZWM_GATE_BIN_VALIDATION3_N</option>
+            <option value="ZWM_GATE_BIN_VALIDATION4_N" data-table="ET_ZWM_GATE_BIN_VALIDATION4_N" data-params="">ZWM_GATE_BIN_VALIDATION4_N</option>
+            <option value="ZWM_GATE_BOX3N" data-table="ET_ZWM_GATE_BOX3N" data-params="">ZWM_GATE_BOX3N</option>
+            <option value="ZWM_GATE_PALLATE_VALIDATE3_N" data-table="ET_ZWM_GATE_PALLATE_VALIDATE3_N" data-params="">ZWM_GATE_PALLATE_VALIDATE3_N</option>
+            <option value="ZWM_GATE_PALLATE_VALIDATE4_N" data-table="ET_ZWM_GATE_PALLATE_VALIDATE4_N" data-params="">ZWM_GATE_PALLATE_VALIDATE4_N</option>
+            <option value="ZWM_GATE_SAVE3_N" data-table="ET_ZWM_GATE_SAVE3_N" data-params="">ZWM_GATE_SAVE3_N</option>
+          </optgroup>
+          <optgroup label="── Inbound ──">
+            <option value="ZVND_UNLOAD_HU_VALIDATE_RFC" data-table="ET_ZVND_UNLOAD_HU_VALIDATE_RFC" data-params="">ZVND_UNLOAD_HU_VALIDATE_RFC</option>
+            <option value="ZVND_UNLOAD_PALLATE_VALIDATION" data-table="ET_ZVND_UNLOAD_PALLATE_VALIDATION" data-params="">ZVND_UNLOAD_PALLATE_VALIDATION</option>
+            <option value="ZVND_UNLOAD_SAVE_RFC" data-table="ET_ZVND_UNLOAD_SAVE_RFC" data-params="">ZVND_UNLOAD_SAVE_RFC</option>
+          </optgroup>
+          <optgroup label="── DC Routing ──">
+            <option value="ZDC_ROUTING_SUB_RFC" data-table="ET_ZDC_ROUTING_SUB_RFC" data-params="">ZDC_ROUTING_SUB_RFC</option>
+            <option value="ZWM_GATE_ENTRY_RFC" data-table="ET_ZWM_GATE_ENTRY_RFC" data-params="">ZWM_GATE_ENTRY_RFC</option>
+            <option value="ZWM_HU_STORE_TT_RFC" data-table="ET_ZWM_HU_STORE_TT_RFC" data-params="">ZWM_HU_STORE_TT_RFC</option>
+            <option value="zwm_dc_routing_rfc" data-table="ET_zwm_dc_routing_rfc" data-params="">zwm_dc_routing_rfc</option>
+          </optgroup>
+          <optgroup label="── Vehicle Loading ──">
+            <option value="ZWM_HUBWISE_STORE_LIST_RFC" data-table="ET_ZWM_HUBWISE_STORE_LIST_RFC" data-params="">ZWM_HUBWISE_STORE_LIST_RFC</option>
+            <option value="ZWM_HU_SELECTION_RFC" data-table="ET_ZWM_HU_SELECTION_RFC" data-params="">ZWM_HU_SELECTION_RFC</option>
+            <option value="ZWM_SAVE_SCANNEDHULIST_RFC" data-table="ET_ZWM_SAVE_SCANNEDHULIST_RFC" data-params="">ZWM_SAVE_SCANNEDHULIST_RFC</option>
+            <option value="ZWM_TRANSPORTER_DETAILS_RFC" data-table="ET_ZWM_TRANSPORTER_DETAILS_RFC" data-params="">ZWM_TRANSPORTER_DETAILS_RFC</option>
+          </optgroup>
+          <optgroup label="── HU Scan ──">
+            <option value="ZWM_SAVE_HU" data-table="ET_ZWM_SAVE_HU" data-params="">ZWM_SAVE_HU</option>
+            <option value="ZWM_SCAN_HU" data-table="ET_ZWM_SCAN_HU" data-params="">ZWM_SCAN_HU</option>
+          </optgroup>
+          <optgroup label="── HU Creation ──">
+            <option value="ZVND_HU_PUSH_API_POST" data-table="ET_ZVND_HU_PUSH_API_POST" data-params="">ZVND_HU_PUSH_API_POST</option>
+            <option value="ZVND_HU_VALIDATE_RFC" data-table="ET_ZVND_HU_VALIDATE_RFC" data-params="">ZVND_HU_VALIDATE_RFC</option>
+            <option value="ZWM_VEND_PO_HEADER" data-table="ET_ZWM_VEND_PO_HEADER" data-params="">ZWM_VEND_PO_HEADER</option>
+          </optgroup>
+          <optgroup label="── HRMS ──">
+            <option value="ZESIC_MASTER_POST_RFC" data-table="ET_ZESIC_MASTER_POST_RFC" data-params="">ZESIC_MASTER_POST_RFC</option>
+            <option value="ZHR_LEAVE_POLICY_RFC" data-table="ET_ZHR_LEAVE_POLICY_RFC" data-params="">ZHR_LEAVE_POLICY_RFC</option>
+            <option value="ZLWF_MASTER_POST_RFC" data-table="ET_ZLWF_MASTER_POST_RFC" data-params="">ZLWF_MASTER_POST_RFC</option>
+            <option value="ZPF_MASTER_POST_RFC" data-table="ET_ZPF_MASTER_POST_RFC" data-params="">ZPF_MASTER_POST_RFC</option>
+            <option value="ZPT_MASTER_POST_RFC" data-table="ET_ZPT_MASTER_POST_RFC" data-params="">ZPT_MASTER_POST_RFC</option>
+          </optgroup>
+          <optgroup label="── Vendor SRM Routing ──">
+            <option value="ZMM_ART_CREATION_RFC" data-table="ET_ZMM_ART_CREATION_RFC" data-params="">ZMM_ART_CREATION_RFC</option>
+            <option value="ZPO_MODIFICATION" data-table="ET_ZPO_MODIFICATION" data-params="">ZPO_MODIFICATION</option>
+          </optgroup>
+          <optgroup label="── Finance (Other) ──">
+            <option value="ZFINANCE_DOCUMENT_RFC" data-table="ET_ZFINANCE_DOCUMENT_RFC" data-params="">ZFINANCE_DOCUMENT_RFC</option>
+            <option value="ZSALES_MOP_RFC" data-table="ET_ZSALES_MOP_RFC" data-params="">ZSALES_MOP_RFC</option>
+          </optgroup>
         </select>
       </div>
       <div>
