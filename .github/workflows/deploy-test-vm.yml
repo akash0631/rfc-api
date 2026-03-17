@@ -54,19 +54,24 @@ jobs:
         shell: powershell
         run: |
           try {
+            # Create App_Offline.htm to force ASP.NET to release file handles
+            Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>"
+            Write-Host "App_Offline.htm placed - ASP.NET will release handles"
+            Start-Sleep -Seconds 3
+            
             Import-Module WebAdministration -ErrorAction Stop
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
               $poolName = $site.applicationPool
               Stop-WebAppPool $poolName -ErrorAction SilentlyContinue
-              # Wait up to 15 seconds for w3wp.exe to release file handles
+              # Wait up to 15 seconds for w3wp.exe to fully terminate
               $deadline = [DateTime]::UtcNow.AddSeconds(15)
               while ([DateTime]::UtcNow -lt $deadline) {
-                $w3wp = Get-Process -Name w3wp -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '' }
+                $w3wp = Get-Process -Name w3wp -ErrorAction SilentlyContinue
                 if (-not $w3wp) { break }
                 Start-Sleep -Seconds 1
               }
-              # Force-kill any remaining w3wp for this pool
+              # Force-kill any remaining w3wp
               Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
               Start-Sleep -Seconds 2
               Write-Host "Stopped app pool: $poolName"
@@ -128,14 +133,21 @@ jobs:
         shell: powershell
         run: |
           try {
+            # Remove App_Offline.htm so the site comes back online
+            if (Test-Path "C:\RfcApp\App_Offline.htm") {
+              Remove-Item "C:\RfcApp\App_Offline.htm" -Force
+              Write-Host "Removed App_Offline.htm"
+            }
             Import-Module WebAdministration -ErrorAction Stop
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
+              Start-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
               Restart-WebAppPool $site.applicationPool
               Write-Host "Recycled: $($site.applicationPool) (site: $($site.name))"
             } else {
               Write-Host "Site not found via WebAdmin, using appcmd fallback"
-              & "$env:windir\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:DefaultAppPool
+              & "$env:windir\System32\inetsrv\appcmd.exe" start apppool /apppool.name:RfcApiPool
+              & "$env:windir\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:RfcApiPool
             }
           } catch {
             Write-Host "IIS recycle warning (non-fatal): $_"
