@@ -12,43 +12,107 @@ jobs:
         run: |
           $r = Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners/registration-token" `
             -Method POST -Headers @{Authorization="token $env:GH_TOKEN";"User-Agent"="v2"}
-          Write-Host "TOKEN:$($r.token)"
           $r.token | Set-Content "C:\runner_token.txt"
+          Write-Host "Token ready: $($r.token.Substring(0,8))..."
 
-      - name: Copy runner installer to .36 and run it
+      - name: Create V2RfcApi IIS site on .36 port 9191
+        shell: powershell
+        run: |
+          $cred = New-Object PSCredential("Administrator",(ConvertTo-SecureString "vrl@55555" -AsPlainText -Force))
+          $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop
+          Write-Host "Connected to .36"
+          Invoke-Command -Session $s -ScriptBlock {
+            Import-Module WebAdministration
+            Write-Host "=== Existing IIS sites (DO NOT TOUCH) ==="
+            Get-Website | Select Name, State, @{n='Port';e={($_.Bindings.Collection[0].bindingInformation -split ':')[1]}} | Format-Table
+
+            # Create new app dir for RFC API
+            $appPath = "C:\V2RfcApi"
+            if (-not (Test-Path $appPath)) { New-Item -ItemType Directory $appPath -Force | Out-Null }
+
+            # Create new app pool
+            if (-not (Test-Path "IIS:\AppPools\V2RfcApiPool")) {
+              New-WebAppPool -Name "V2RfcApiPool"
+              Set-ItemProperty "IIS:\AppPools\V2RfcApiPool" -Name managedRuntimeVersion -Value "v4.0"
+              Set-ItemProperty "IIS:\AppPools\V2RfcApiPool" -Name managedPipelineMode -Value "Integrated"
+              Write-Host "App pool V2RfcApiPool created"
+            } else { Write-Host "App pool already exists" }
+
+            # Create new site on port 9191
+            if (-not (Get-Website -Name "V2RfcApi" -EA SilentlyContinue)) {
+              New-Website -Name "V2RfcApi" -Port 9191 -PhysicalPath $appPath -ApplicationPool "V2RfcApiPool"
+              Write-Host "Site V2RfcApi created on :9191"
+            } else { Write-Host "Site already exists" }
+
+            Start-Website "V2RfcApi" -EA SilentlyContinue
+            Write-Host "Site state: $((Get-Website -Name 'V2RfcApi').State)"
+
+            # Open firewall
+            if (-not (Get-NetFirewallRule -DisplayName "V2RfcApi-9191" -EA SilentlyContinue)) {
+              New-NetFirewallRule -DisplayName "V2RfcApi-9191" -Direction Inbound -Protocol TCP -LocalPort 9191 -Action Allow
+              Write-Host "Firewall port 9191 opened"
+            }
+
+            # Now copy the compiled RFC app from Store Tracker bin to V2RfcApi
+            # DO NOT modify Store Tracker — read only
+            $stBin = "C:\inetpub\wwwroot\Store Tracker\bin"
+            $stDlls = (Get-ChildItem $stBin -Filter "*.dll" -EA SilentlyContinue).Count
+            Write-Host "Store Tracker bin DLLs: $stDlls"
+            if ($stDlls -gt 0) {
+              New-Item -ItemType Directory "$appPath\bin" -Force | Out-Null
+              Copy-Item "$stBin\*" "$appPath\bin\" -Recurse -Force
+              Copy-Item "C:\inetpub\wwwroot\Store Tracker\Web.config" $appPath -Force -EA SilentlyContinue
+              Copy-Item "C:\inetpub\wwwroot\Store Tracker\Global.asax" $appPath -Force -EA SilentlyContinue
+              Write-Host "Copied $stDlls DLLs to V2RfcApi"
+            }
+
+            # Recycle new pool
+            Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
+            Start-Sleep 6
+            Write-Host "=== Final site list ==="
+            Get-Website | Select Name, State, @{n='Port';e={($_.Bindings.Collection[0].bindingInformation -split ':')[1]}}, @{n='Path';e={$_.PhysicalPath}} | Format-Table
+          }
+          Remove-PSSession $s
+
+      - name: Test new site on .36:9191
+        shell: powershell
+        run: |
+          $cred = New-Object PSCredential("Administrator",(ConvertTo-SecureString "vrl@55555" -AsPlainText -Force))
+          $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop
+          Invoke-Command -Session $s -ScriptBlock {
+            $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+            try {
+              $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+              Write-Host "HEALTH :9191: HTTP $($r.StatusCode) $($r.Content)"
+            } catch { Write-Host "HEALTH :9191 ERR: $($_.Exception.Message)" }
+            try {
+              $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+              Write-Host "EXECUTE :9191: HTTP $($r2.StatusCode) $($r2.Content.Substring(0,[Math]::Min(300,$r2.Content.Length)))"
+            } catch { Write-Host "EXECUTE :9191 ERR: $($_.Exception.Message)" }
+          }
+          Remove-PSSession $s
+
+      - name: Install GitHub Actions runner on .36
         shell: cmd
         run: |
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          echo NET_USE: %ERRORLEVEL%
-          echo === Creating actions-runner folder on .36 ===
-          mkdir \\192.168.151.36\C$\actions-runner 2>nul
-          echo === Downloading runner directly on .36 via PowerShell ===
           set TOKEN=
           for /f "tokens=*" %%i in (C:\runner_token.txt) do set TOKEN=%%i
-          echo Token starts with: %TOKEN:~0,8%
-          powershell -NoProfile -Command "Invoke-WebRequest 'https://github.com/actions/runner/releases/download/v2.322.0/actions-runner-win-x64-2.322.0.zip' -OutFile '\\192.168.151.36\C$\actions-runner\runner.zip' -UseBasicParsing; Write-Host 'Download done'"
-          dir \\192.168.151.36\C$\actions-runner\runner.zip
-          echo === Extracting ===
-          powershell -NoProfile -Command "Expand-Archive '\\192.168.151.36\C$\actions-runner\runner.zip' -DestinationPath '\\192.168.151.36\C$\actions-runner' -Force; Write-Host 'Extract done'"
-          dir \\192.168.151.36\C$\actions-runner\config.cmd 2>nul
-          net use \\192.168.151.36\C$ /delete /y 2>nul
+          echo Configuring runner with token %TOKEN:~0,8%...
+          powershell -NoProfile -Command "$cred=New-Object PSCredential('Administrator',(ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force)); $s=New-PSSession -ComputerName 192.168.151.36 -Credential $cred; Invoke-Command -Session $s -ArgumentList '%TOKEN%' -ScriptBlock { param($t); if (-not (Test-Path 'C:\actions-runner')) { New-Item -ItemType Directory 'C:\actions-runner' -Force | Out-Null }; Set-Location 'C:\actions-runner'; if (-not (Test-Path '.runner')) { Invoke-WebRequest 'https://github.com/actions/runner/releases/download/v2.322.0/actions-runner-win-x64-2.322.0.zip' -OutFile runner.zip -UseBasicParsing; Expand-Archive runner.zip . -Force; & '.\config.cmd' --url 'https://github.com/akash0631/rfc-api' --token $t --name 'V2DC-ADDVERB' --labels 'self-hosted,Windows,X64,iis' --runasservice --windowslogonaccount 'NT AUTHORITY\SYSTEM' --unattended; Write-Host 'Configured' } else { Write-Host 'Already configured' }; Get-Service -DisplayName '*actions.runner*' -EA SilentlyContinue | ForEach-Object { if ($_.Status -ne 'Running') { Start-Service $_.Name }; Write-Host $_.Name $_.Status } }; Remove-PSSession $s"
+          del C:\runner_token.txt 2>nul
 
-      - name: Configure and install runner service on .36
-        shell: cmd
-        run: |
-          set TOKEN=
-          for /f "tokens=*" %%i in (C:\runner_token.txt) do set TOKEN=%%i
-          echo Configuring runner on .36 with token %TOKEN:~0,8%...
-          powershell -NoProfile -Command "$cred=New-Object PSCredential('Administrator',(ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force)); $s=New-PSSession -ComputerName 192.168.151.36 -Credential $cred; Invoke-Command -Session $s -ArgumentList '%TOKEN%' -ScriptBlock { param($t); Set-Location 'C:\actions-runner'; & '.\config.cmd' --url 'https://github.com/akash0631/rfc-api' --token $t --name 'V2DC-ADDVERB' --labels 'self-hosted,Windows,X64,iis' --runasservice --windowslogonaccount 'NT AUTHORITY\SYSTEM' --unattended; Write-Host 'Config exit:' $LASTEXITCODE }; Remove-PSSession $s"
-          echo Config done
-          powershell -NoProfile -Command "$cred=New-Object PSCredential('Administrator',(ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force)); $s=New-PSSession -ComputerName 192.168.151.36 -Credential $cred; Invoke-Command -Session $s -ScriptBlock { Get-Service -DisplayName '*actions.runner*' -EA SilentlyContinue | ForEach-Object { Start-Service $_.Name -EA SilentlyContinue; Write-Host 'Started:' $_.Name $_.Status } }; Remove-PSSession $s"
-
-      - name: Verify runner online on GitHub
+      - name: Final verification
         shell: powershell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           Start-Sleep 30
+          Write-Host "=== GitHub Runners ==="
           $r = Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners" -Headers @{Authorization="token $env:GH_TOKEN";"User-Agent"="v2"}
           $r.runners | Select name,status,busy | Format-Table
-          del C:\runner_token.txt -EA SilentlyContinue
+          Write-Host "=== Test :9191 from .46 ==="
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          try {
+            $r2 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            Write-Host "EXECUTE from .46: HTTP $($r2.StatusCode) $($r2.Content.Substring(0,[Math]::Min(300,$r2.Content.Length)))"
+          } catch { Write-Host "EXECUTE from .46 ERR: $($_.Exception.Message)" }
