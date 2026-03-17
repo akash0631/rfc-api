@@ -1618,6 +1618,32 @@
           ]
         }
       ]
+    },
+    "ET_ZPO_DD_UPD": {
+      "source": {
+        "object": "dbo.ET_ZPO_DD_UPD",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_ZPO_DD_UPD"
+      },
+      "graphql": {
+        "enabled": false
+      }
     }
   }
 }
