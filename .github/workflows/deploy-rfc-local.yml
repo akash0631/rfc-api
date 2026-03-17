@@ -44,17 +44,7 @@ jobs:
       - name: Start RFC Collector on port 9090
         shell: powershell
         run: |
-          $startScript = @"
-@echo off
-set IIS_HOST=192.168.151.36
-set IIS_PORT=80
-set SQL_SERVER=192.168.151.46
-set SQL_USER=sa
-set SQL_PASS=vrl@55555
-set SQL_DB=claudetestv2
-set ASPNETCORE_URLS=http://0.0.0.0:9090
-C:\RfcCollector\RfcCollector.exe >> C:\RfcCollectorfc.log 2>&1
-"@
+          $startScript = "@echo off`nset IIS_HOST=192.168.151.36`nset IIS_PORT=80`nset SQL_SERVER=192.168.151.46`nset SQL_USER=sa`nset SQL_PASS=vrl@55555`nset SQL_DB=claudetestv2`nset ASPNETCORE_URLS=http://0.0.0.0:9090`nC:\RfcCollector\RfcCollector.exe >> C:\RfcCollector\rfc-collector.log 2>&1"
           $startScript | Out-File "C:\RfcCollector\start.bat" -Encoding ASCII
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c C:\RfcCollector\start.bat" -WindowStyle Hidden
           Write-Host "Process started, waiting 10s for startup..."
