@@ -1,0 +1,362 @@
+@{
+    ViewBag.Title = "V2 Retail · RFC Auto-Deploy";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>@ViewBag.Title</title>
+<style>
+@@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f2f7;--white:#fff;--surface:#f7f8fc;--border:#e0e4ef;
+  --text:#111827;--sub:#374151;--muted:#6b7280;--dim:#9ca3af;
+  --accent:#2563eb;--al:#eff6ff;--ab:#bfdbfe;
+  --green:#15803d;--gl:#f0fdf4;--gb:#86efac;
+  --red:#dc2626;--rl:#fef2f2;--rb:#fca5a5;
+  --amber:#b45309;--amber-l:#fffbeb;
+  --purple:#7c3aed;
+  --sans:'Inter',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+}
+body{background:var(--bg);font-family:var(--sans);color:var(--text);min-height:100vh;}
+/* TOPBAR */
+.topbar{background:var(--white);border-bottom:1.5px solid var(--border);padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-mark{width:30px;height:30px;background:var(--accent);border-radius:7px;display:grid;place-items:center;font-weight:800;color:#fff;font-size:13px;font-family:var(--mono);}
+.logo-name{font-size:14px;font-weight:700;letter-spacing:-.3px;}
+.logo-name span{color:var(--accent);}
+.logo-tag{font-size:10px;font-weight:600;background:var(--al);border:1px solid var(--ab);color:var(--accent);padding:2px 8px;border-radius:20px;font-family:var(--mono);}
+.nav a{font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:6px;transition:.15s;}
+.nav a:hover,.nav a.active{color:var(--accent);background:var(--al);}
+.live-badge{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--green);}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #dcfce7;animation:pulse 2.5s infinite;}
+@@keyframes pulse{0%,100%{box-shadow:0 0 0 3px #dcfce7}50%{box-shadow:0 0 0 6px #bbf7d0}}
+/* HERO */
+.hero{max-width:700px;margin:0 auto;padding:44px 24px 0;text-align:center;}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);background:var(--al);border:1px solid var(--ab);padding:5px 14px;border-radius:20px;margin-bottom:18px;}
+.hero h1{font-size:32px;font-weight:800;letter-spacing:-.7px;line-height:1.15;margin-bottom:10px;}
+.hero h1 em{font-style:normal;color:var(--accent);}
+.hero p{font-size:13.5px;color:var(--muted);line-height:1.8;max-width:500px;margin:0 auto 28px;}
+/* FLOW */
+.flow{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:36px;}
+.fs{padding:9px 14px;background:var(--white);border:1.5px solid var(--border);border-radius:9px;font-size:11px;font-weight:600;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:4px;}
+.fs span{font-size:18px;}
+.fa{color:var(--dim);font-size:16px;margin:0 6px;}
+.fs.hi{border-color:var(--ab);background:var(--al);color:var(--accent);}
+/* MAIN */
+.wrap{max-width:700px;margin:0 auto;padding:0 24px 60px;}
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04);margin-bottom:12px;}
+.card-head{padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.num{width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;flex-shrink:0;}
+.card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);}
+.card-body{padding:18px;}
+/* DROP */
+.drop{border:2px dashed var(--border);border-radius:10px;padding:32px 20px;text-align:center;cursor:pointer;background:var(--surface);transition:.2s;position:relative;}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--al);}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.drop-icon{font-size:38px;margin-bottom:10px;}
+.drop-main{font-size:14px;font-weight:600;color:var(--sub);margin-bottom:3px;}
+.drop-sub{font-size:11.5px;color:var(--dim);font-family:var(--mono);}
+.browse{display:inline-block;margin-top:10px;padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;}
+.browse:hover{background:#1d4ed8;}
+.file-pill{display:flex;align-items:center;gap:8px;background:var(--gl);border:1px solid var(--gb);border-radius:8px;padding:9px 13px;margin-top:10px;display:none;}
+.file-pill .fi{font-size:16px;}
+.file-name{font-size:12.5px;font-weight:600;color:var(--green);font-family:var(--mono);}
+/* ENV */
+.env-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.env-c{border:2px solid var(--border);border-radius:9px;padding:11px 13px;cursor:pointer;background:var(--surface);transition:.15s;user-select:none;}
+.env-c:hover{border-color:#cbd5e1;}
+.env-c.sel{border-color:var(--accent);background:var(--al);}
+.env-c.sel .en{color:var(--accent);}
+.env-c.prd.sel{border-color:var(--red);background:var(--rl);}
+.env-c.prd.sel .en{color:var(--red);}
+.en{font-size:13px;font-weight:700;margin-bottom:2px;}
+.ed{font-size:10px;font-family:var(--mono);color:var(--muted);}
+.eb{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;margin-top:3px;text-transform:uppercase;}
+.eb.d{background:var(--al);color:var(--accent);}
+.eb.p{background:var(--rl);color:var(--red);}
+/* DEPLOY BTN */
+.deploy-btn{width:100%;padding:13px;background:linear-gradient(135deg,var(--accent),#1d4ed8);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.35);transition:.15s;display:flex;align-items:center;justify-content:center;gap:8px;}
+.deploy-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.45);}
+.deploy-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none;}
+/* STEPS */
+.steps{display:flex;flex-direction:column;gap:7px;}
+.step{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;background:var(--surface);transition:.3s;}
+.step.run{border-color:var(--ab);background:var(--al);}
+.step.done{border-color:var(--gb);background:var(--gl);}
+.step.err{border-color:var(--rb);background:var(--rl);}
+.si{width:22px;height:22px;border-radius:6px;background:var(--border);display:grid;place-items:center;font-size:12px;flex-shrink:0;}
+.step.run .si{background:var(--accent);color:#fff;}
+.step.done .si{background:var(--green);color:#fff;}
+.step.err .si{background:var(--red);color:#fff;}
+.sl{font-size:13px;font-weight:600;color:var(--sub);}
+.step.run .sl{color:var(--accent);}
+.step.done .sl{color:var(--green);}
+.step.err .sl{color:var(--red);}
+.sd{font-size:10.5px;font-family:var(--mono);color:var(--muted);margin-top:3px;word-break:break-all;}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:sp .6s linear infinite;}
+@@keyframes sp{to{transform:rotate(360deg)}}
+/* RESULT */
+.res-wrap{text-align:center;padding:28px 20px;}
+.res-icon{font-size:52px;margin-bottom:14px;}
+.res-title{font-size:22px;font-weight:800;color:var(--green);letter-spacing:-.4px;margin-bottom:6px;}
+.res-sub{font-size:13px;color:var(--muted);margin-bottom:20px;}
+.ep-box{background:var(--surface);border:1.5px solid var(--border);border-radius:9px;padding:13px 16px;font-family:var(--mono);font-size:12px;text-align:left;line-height:2;margin-bottom:20px;}
+.ep-lbl{font-size:9.5px;color:var(--dim);font-family:var(--sans);font-weight:700;letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:3px;}
+.chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:20px;}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;}
+.chip-g{background:var(--gl);border:1px solid var(--gb);color:var(--green);}
+.chip-b{background:var(--al);border:1px solid var(--ab);color:var(--accent);}
+.chip-p{background:#f5f3ff;border:1px solid #ddd6fe;color:var(--purple);}
+.reset-btn{background:none;border:1.5px solid var(--border);border-radius:8px;padding:9px 22px;font-size:13px;font-weight:600;color:var(--sub);cursor:pointer;transition:.15s;font-family:var(--sans);}
+.reset-btn:hover{border-color:var(--accent);color:var(--accent);}
+.err-box{background:var(--rl);border:1px solid var(--rb);border-radius:8px;padding:9px 13px;font-size:12px;font-family:var(--mono);color:var(--red);margin-top:10px;display:none;}
+/* DEPLOY NOTE */
+.deploy-note{margin-top:10px;padding:11px 13px;background:var(--amber-l);border:1px solid #fde68a;border-radius:8px;font-size:12px;color:var(--amber);line-height:1.55;}
+.deploy-note code{font-family:var(--mono);font-size:11px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">V2</div>
+    <div class="logo-name">Retail <span>RFC</span> Pipeline</div>
+    <div class="logo-tag">AUTOMATED</div>
+  </div>
+  <div class="nav" style="display:flex;align-items:center;gap:4px">
+    <a href="@Url.Action("Index", "RfcDeploy")" class="active">⚡ Deploy</a>
+    <a href="@Url.Action("Explorer", "RfcDeploy")">🔍 API Explorer</a>
+    <a href="@Url.Action("Swagger", "RfcDeploy")">📖 Swagger</a>
+    <a href="https://github.com/akash0631/rfc-api/actions" target="_blank">⚙️ Actions</a>
+  </div>
+  <div class="live-badge"><div class="live-dot"></div>IIS LIVE</div>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="eyebrow">⚡ Upload → Generate → Deploy</div>
+  <h1>RFC Document to <em>Live API</em><br>Automatically</h1>
+  <p>Upload any SAP RFC spec (.docx) — AI parses it, generates the C# controller, pushes to GitHub, and IIS deploys in under 2 minutes.</p>
+  <div class="flow">
+    <div class="fs"><span>📄</span>Upload .docx</div>
+    <div class="fa">→</div>
+    <div class="fs hi"><span>🤖</span>AI Parses</div>
+    <div class="fa">→</div>
+    <div class="fs"><span>⚙️</span>C# Generated</div>
+    <div class="fa">→</div>
+    <div class="fs"><span>📦</span>GitHub Push</div>
+    <div class="fa">→</div>
+    <div class="fs"><span>🌐</span>IIS Live</div>
+  </div>
+</div>
+
+<!-- FORM -->
+<div class="wrap">
+
+  <div id="uploadSection">
+
+    <!-- Step 1: File -->
+    <div class="card">
+      <div class="card-head"><div class="num">1</div><div class="card-title">RFC Document</div></div>
+      <div class="card-body">
+        <div class="drop" id="drop"
+             ondragover="event.preventDefault();this.classList.add('over')"
+             ondragleave="this.classList.remove('over')"
+             ondrop="handleDrop(event)">
+          <div class="drop-icon">📄</div>
+          <div class="drop-main">Drop your RFC document here</div>
+          <div class="drop-sub">.docx · .txt · .md accepted</div>
+          <button class="browse" onclick="event.stopPropagation();document.getElementById('fi').click()">Browse Files</button>
+          <input type="file" id="fi" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])">
+        </div>
+        <div class="file-pill" id="filePill">
+          <span class="fi">📎</span>
+          <span class="file-name" id="fileName"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Environment -->
+    <div class="card">
+      <div class="card-head"><div class="num">2</div><div class="card-title">SAP Environment</div></div>
+      <div class="card-body">
+        <div class="env-grid">
+          <div class="env-c sel" id="env-dev" onclick="selEnv('dev')">
+            <div class="en">Dev</div>
+            <div class="ed">192.168.144.174 · Client 210</div>
+            <span class="eb d">DEFAULT</span>
+          </div>
+          <div class="env-c" id="env-quality" onclick="selEnv('quality')">
+            <div class="en">Quality</div>
+            <div class="ed">192.168.144.179 · Client 600</div>
+          </div>
+          <div class="env-c prd" id="env-production" onclick="selEnv('production')">
+            <div class="en" style="color:var(--red)">Production</div>
+            <div class="ed">192.168.144.170 · Client 600</div>
+            <span class="eb p">LIVE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="deploy-btn" id="deployBtn" onclick="deploy()" disabled>
+      ⚡ Generate Controller &amp; Deploy to IIS
+    </button>
+    <div class="err-box" id="errBox"></div>
+
+    <div class="deploy-note">
+      <strong>🔄 After GitHub push:</strong> <code>deploy-iis.yml</code> triggers on VM-CRM self-hosted runner →
+      MSBuild → robocopy DLLs → IIS AppPool recycle → live in ~90 seconds
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div id="progressSection" style="display:none">
+    <div class="card">
+      <div class="card-head">
+        <div class="num" style="background:#f59e0b;font-size:14px">→</div>
+        <div class="card-title">Pipeline Running</div>
+      </div>
+      <div class="card-body">
+        <div class="steps" id="steps">
+          <div class="step" id="s-parse"><div class="si">1</div><div><div class="sl">Parse RFC document with Claude AI</div></div></div>
+          <div class="step" id="s-controller"><div class="si">2</div><div><div class="sl">Generate ASP.NET C# controller</div></div></div>
+          <div class="step" id="s-github"><div class="si">3</div><div><div class="sl">Push controller to GitHub repository</div></div></div>
+          <div class="step" id="s-dab"><div class="si">4</div><div><div class="sl">Register entity in Azure DAB config</div></div></div>
+          <div class="step" id="s-swagger"><div class="si">5</div><div><div class="sl">Update API documentation &amp; Swagger</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div id="resultSection" style="display:none">
+    <div class="card">
+      <div class="res-wrap">
+        <div class="res-icon">🚀</div>
+        <div class="res-title" id="resTitle">RFC Deployed!</div>
+        <div class="res-sub" id="resSub">Controller live on IIS after GitHub Actions build (~90s)</div>
+        <div class="ep-box" id="epBox"></div>
+        <div class="chips" id="chips"></div>
+        <button class="reset-btn" onclick="reset()">+ Deploy Another RFC</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const WORKER = 'https://v2-rfc-pipeline.akash-bab.workers.dev';
+let selectedFile = null, selectedEnv = 'dev', pollTimer = null;
+
+function handleFile(f) {
+  if (!f) return;
+  selectedFile = f;
+  document.getElementById('filePill').style.display = 'flex';
+  document.getElementById('fileName').textContent = f.name;
+  document.getElementById('drop').classList.remove('over');
+  document.getElementById('deployBtn').disabled = false;
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop').classList.remove('over');
+  handleFile(e.dataTransfer.files[0]);
+}
+function selEnv(env) {
+  selectedEnv = env;
+  ['dev','quality','production'].forEach(e =>
+    document.getElementById('env-' + e).classList.toggle('sel', e === env));
+}
+async function deploy() {
+  if (!selectedFile) return;
+  document.getElementById('errBox').style.display = 'none';
+  document.getElementById('uploadSection').style.display = 'none';
+  document.getElementById('progressSection').style.display = 'block';
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  fd.append('env', selectedEnv);
+
+  try {
+    // Call MVC proxy which forwards to CF Worker
+    const r = await fetch('@Url.Action("Upload","RfcDeploy")', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || 'Upload failed');
+    pollStatus(d.jobId);
+  } catch (e) {
+    document.getElementById('progressSection').style.display = 'none';
+    document.getElementById('uploadSection').style.display = 'block';
+    const eb = document.getElementById('errBox');
+    eb.textContent = '✗ ' + e.message;
+    eb.style.display = 'block';
+  }
+}
+function pollStatus(jobId) {
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('@Url.Action("Status","RfcDeploy")/' + jobId);
+      const job = await r.json();
+      (job.steps || []).forEach(s => updateStep(s.step, s.status, s.detail));
+      if (job.status === 'complete') { clearInterval(pollTimer); showResult(job); }
+      else if (job.status === 'error') {
+        clearInterval(pollTimer);
+        document.getElementById('progressSection').style.display = 'none';
+        document.getElementById('uploadSection').style.display = 'block';
+        const eb = document.getElementById('errBox');
+        eb.textContent = '✗ ' + (job.error || 'Pipeline error');
+        eb.style.display = 'block';
+      }
+    } catch(e) {}
+  }, 1500);
+}
+const ICONS = { running: '<span class="spin"></span>', done: '✓', error: '✗' };
+function updateStep(id, status, detail) {
+  const el = document.getElementById('s-' + id); if (!el) return;
+  el.className = 'step ' + ({'running':'run','done':'done','error':'err'}[status] || '');
+  const si = el.querySelector('.si');
+  if (ICONS[status]) si.innerHTML = ICONS[status];
+  if (detail) {
+    let d = el.querySelector('.sd');
+    if (!d) { d = document.createElement('div'); d.className = 'sd'; el.querySelector('div:last-child').appendChild(d); }
+    d.textContent = detail;
+  }
+}
+function showResult(job) {
+  document.getElementById('progressSection').style.display = 'none';
+  document.getElementById('resultSection').style.display = 'block';
+  document.getElementById('resTitle').textContent = (job.rfcName || 'RFC') + ' Deployed!';
+  document.getElementById('resSub').textContent = 'Controller live on IIS after GitHub Actions build (~90s)';
+  document.getElementById('epBox').innerHTML =
+    '<span class="ep-lbl">RFC REST API (v2retail.net:9005)</span>POST /api/' + (job.rfcName || '') +
+    (job.dataLake ? '\n<span class="ep-lbl" style="margin-top:10px">Data Lake API (Azure DAB)</span>' + job.dataLake + '?$top=100' : '');
+  const c = document.getElementById('chips');
+  c.innerHTML = '';
+  if (job.commit) c.innerHTML += `<a class="chip chip-g" href="${job.commit}" target="_blank">✓ GitHub Commit</a>`;
+  if (job.dataLake) c.innerHTML += `<a class="chip chip-b" href="${job.dataLake}" target="_blank">📡 Data Lake</a>`;
+  c.innerHTML += `<a class="chip chip-b" href="@Url.Action("Explorer","RfcDeploy")">🔍 API Explorer</a>`;
+  c.innerHTML += `<a class="chip chip-p" href="https://github.com/akash0631/rfc-api/actions" target="_blank">⚙️ GitHub Actions</a>`;
+}
+function reset() {
+  selectedFile = null;
+  if (pollTimer) clearInterval(pollTimer);
+  document.getElementById('resultSection').style.display = 'none';
+  document.getElementById('uploadSection').style.display = 'block';
+  document.getElementById('filePill').style.display = 'none';
+  document.getElementById('errBox').style.display = 'none';
+  document.getElementById('deployBtn').disabled = true;
+  selEnv('dev');
+  ['parse','controller','github','dab','swagger'].forEach((id, i) => {
+    const el = document.getElementById('s-' + id); if (!el) return;
+    el.className = 'step';
+    el.querySelector('.si').innerHTML = String(i + 1);
+    const d = el.querySelector('.sd'); if (d) d.remove();
+  });
+}
+</script>
+</body>
+</html>
