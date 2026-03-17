@@ -5,38 +5,48 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Find compiled RFC app on D drive of .36
+      - name: Deploy Published app to V2RfcApi on .36
         shell: cmd
         run: |
-          net use \\192.168.151.36\D$ vrl@55555 /user:Administrator /persistent:no
-          echo D NET_USE: %ERRORLEVEL%
-
-          echo === V2RETAIL_PUBLISHED ===
-          dir \\192.168.151.36\D$\V2RETAIL_PUBLISHED\ /B 2>nul
-          dir \\192.168.151.36\D$\V2RETAIL_PUBLISHED\Vendor*.dll /B 2>nul
-
-          echo === V2_Published ===
-          dir "\\192.168.151.36\D$\V2 Published\" /B 2>nul
-          dir "\\192.168.151.36\D$\V2 Published\Vendor*.dll" /B 2>nul
-
-          echo === V2_Vendor_PPT_SRM (likely our app) ===
-          dir \\192.168.151.36\D$\V2_Vendor_PPT_SRM\ /B 2>nul
-          dir \\192.168.151.36\D$\V2_Vendor_PPT_SRM\Vendor*.dll /B /S 2>nul
-          dir \\192.168.151.36\D$\V2_Vendor_PPT_SRM\bin\*.dll /B 2>nul | find /c ".dll"
-
-          echo === NewCodeOn(261123) ===
-          dir "\\192.168.151.36\D$\NewCodeOn(261123)\" /B 2>nul
-          dir "\\192.168.151.36\D$\NewCodeOn(261123)\Vendor*.dll" /B /S 2>nul
-
-          echo === V2retail folder ===
-          dir \\192.168.151.36\D$\V2retail\ /B 2>nul
-
-          echo === V2 Projects ===
-          dir "\\192.168.151.36\D$\V2 Projects\" /B 2>nul
-
-          echo === Store Tracker IIS physical path ===
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list vdir
-          net use \\192.168.151.36\C$ /delete /y 2>nul
+          net use \\192.168.151.36\D$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE: %ERRORLEVEL%
 
+          echo === Copy Published_Vendor_Application_MVC to C:\V2RfcApi ===
+          robocopy "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC" "\\192.168.151.36\C$\V2RfcApi" /E /IS /IT /NFL /NDL
+          echo ROBOCOPY: %ERRORLEVEL%
+
+          echo === Verify DLLs deployed ===
+          dir \\192.168.151.36\C$\V2RfcApi\bin\Vendor*.dll /B 2>nul
+          dir \\192.168.151.36\C$\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+          dir \\192.168.151.36\C$\V2RfcApi\Web.config 2>nul
+
+          echo === sapnco check on .36 ===
+          dir \\192.168.151.36\C$\Windows\System32\sapnco.dll 2>nul && echo SAPNCO_PRESENT || echo SAPNCO_MISSING
+          dir \\192.168.151.36\C$\Windows\System32\sapnco_utils.dll 2>nul && echo SAPNCO_UTILS_PRESENT || echo SAPNCO_UTILS_MISSING
+
+          echo === Find sapnco anywhere on D drive of .36 ===
+          dir \\192.168.151.36\D$\sapnco.dll /S /B 2>nul
+          dir "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\sapnco*" /B 2>nul
+          dir "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC\bin\sapnco*" /B 2>nul
+
+          echo === Recycle V2RfcApiPool ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+
+          net use \\192.168.151.36\C$ /delete /y 2>nul
           net use \\192.168.151.36\D$ /delete /y 2>nul
+
+      - name: Test .36:9191 after deploy
+        shell: powershell
+        run: |
+          Start-Sleep 15
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          try {
+            $r = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
+          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+          try {
+            $r2 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 25
+            Write-Host "EXECUTE: HTTP $($r2.StatusCode)"
+            Write-Host $r2.Content
+          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
