@@ -1,4 +1,4 @@
-﻿using SAP.Middleware.Connector;
+using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -32,7 +32,8 @@ namespace Vendor_Application_MVC.Controllers
 
             value = value.Replace(",", ""); // remove commas
 
-            return float.TryParse(value, out float result) ? result : 0;
+            float result;
+            return float.TryParse(value, out result) ? result : 0;
         }
         [EnableCors(origins: "*", headers: "*", methods: "*")]
         [HttpPost]
@@ -84,10 +85,12 @@ namespace Vendor_Application_MVC.Controllers
 
                 foreach (IRfcStructure row in sapTable)
                 {
+                    DateTime parsedDate;
+                    DateTime.TryParse(row.GetString("EINDT"), out parsedDate);
                     dt.Rows.Add(
                         row.GetString("EBELN"), // Purchasing Document
 
-                        DateTime.TryParse(row.GetString("EINDT"), out var d) ? d : (object)DBNull.Value,
+                        parsedDate == default(DateTime) ? (object)DBNull.Value : parsedDate,
 
                         DateTime.Now,
 
