@@ -5,48 +5,106 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Deploy Published app to V2RfcApi on .36
+      - name: Full .36 diagnostic and fix
         shell: cmd
         run: |
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          net use \\192.168.151.36\D$ vrl@55555 /user:Administrator /persistent:no
           echo NET_USE: %ERRORLEVEL%
 
-          echo === Copy Published_Vendor_Application_MVC to C:\V2RfcApi ===
-          robocopy "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC" "\\192.168.151.36\C$\V2RfcApi" /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
+          echo.
+          echo === 1. VERIFY EXISTING SITES STILL WORKING (DO NOT TOUCH) ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list sites
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list apppools
 
-          echo === Verify DLLs deployed ===
-          dir \\192.168.151.36\C$\V2RfcApi\bin\Vendor*.dll /B 2>nul
-          dir \\192.168.151.36\C$\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+          echo.
+          echo === 2. WHAT IS IN C:\V2RfcApi on .36 ===
+          dir \\192.168.151.36\C$\V2RfcApi\*.dll /B 2>nul | find /c ".dll"
+          dir \\192.168.151.36\C$\V2RfcApi\Vendor*.dll /B 2>nul
           dir \\192.168.151.36\C$\V2RfcApi\Web.config 2>nul
+          dir \\192.168.151.36\C$\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+          dir \\192.168.151.36\C$\V2RfcApi\bin\Vendor*.dll /B 2>nul
 
-          echo === sapnco check on .36 ===
-          dir \\192.168.151.36\C$\Windows\System32\sapnco.dll 2>nul && echo SAPNCO_PRESENT || echo SAPNCO_MISSING
-          dir \\192.168.151.36\C$\Windows\System32\sapnco_utils.dll 2>nul && echo SAPNCO_UTILS_PRESENT || echo SAPNCO_UTILS_MISSING
+          echo.
+          echo === 3. CHECK WINDOWS EVENT LOG ON .36 FOR APP POOL ERRORS ===
+          powershell -NoProfile -Command "Get-WinEvent -ComputerName 192.168.151.36 -Credential (New-Object PSCredential('Administrator',(ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force))) -LogName Application -MaxEvents 20 -EA SilentlyContinue | Where-Object {$_.LevelDisplayName -eq 'Error' -or $_.LevelDisplayName -eq 'Warning'} | Select TimeCreated,ProviderName,Message | Format-List" 2>nul
 
-          echo === Find sapnco anywhere on D drive of .36 ===
-          dir \\192.168.151.36\D$\sapnco.dll /S /B 2>nul
-          dir "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\sapnco*" /B 2>nul
-          dir "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC\bin\sapnco*" /B 2>nul
+          echo.
+          echo === 4. CHECK SAPNCO ON .36 ===
+          dir \\192.168.151.36\C$\Windows\System32\sapnco.dll 2>nul && echo sapnco.dll PRESENT || echo sapnco.dll MISSING
+          dir \\192.168.151.36\C$\Windows\System32\sapnco_utils.dll 2>nul && echo sapnco_utils.dll PRESENT || echo sapnco_utils.dll MISSING
 
-          echo === Recycle V2RfcApiPool ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          echo.
+          echo === 5. WHAT APP POOL IS V2RfcApi USING AND ITS STATE ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list site /site.name:V2RfcApi /config 2>nul
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list apppool /apppool.name:V2RfcApiPool /config 2>nul
+
+          echo.
+          echo === 6. TEST EXISTING WORKING ROUTES ON .36 ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://192.168.151.36:8888/' -UseBasicParsing -TimeoutSec 8;Write-Host 'RfcApiApp:8888 root HTTP' $r.StatusCode}catch{Write-Host 'RfcApiApp:8888 root ERR' $_.Exception.Message}"
+          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://192.168.151.36:8888/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 20;Write-Host 'RfcApiApp:8888 Execute HTTP' $r.StatusCode $r.Content.Substring(0,[Math]::Min(300,$r.Content.Length))}catch{Write-Host 'RfcApiApp:8888 Execute ERR' $_.Exception.Message}"
 
           net use \\192.168.151.36\C$ /delete /y 2>nul
-          net use \\192.168.151.36\D$ /delete /y 2>nul
 
-      - name: Test .36:9191 after deploy
+      - name: Fix V2RfcApi based on what we found
+        shell: cmd
+        run: |
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+
+          echo.
+          echo === Fix: ensure V2RfcApi bin has all files from RfcApp ===
+          mkdir \\192.168.151.36\C$\V2RfcApi\bin 2>nul
+
+          rem Copy everything from C:\RfcApp (the working :8888 app) — preserve all DLLs
+          robocopy \\192.168.151.36\C$\RfcApp \\192.168.151.36\C$\V2RfcApi /E /IS /IT
+          echo ROBOCOPY RfcApp root: %ERRORLEVEL%
+
+          echo.
+          echo === V2RfcApi bin DLL count after fix ===
+          dir \\192.168.151.36\C$\V2RfcApi\Vendor*.dll /B 2>nul
+          dir \\192.168.151.36\C$\V2RfcApi\*.dll /B 2>nul | find /c ".dll"
+          dir \\192.168.151.36\C$\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+
+          echo.
+          echo === Recycle V2RfcApiPool ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool 2>nul
+          echo Recycle: %ERRORLEVEL%
+
+          net use \\192.168.151.36\C$ /delete /y 2>nul
+
+      - name: Wait then test all routes on .36
         shell: powershell
         run: |
           Start-Sleep 15
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+
+          Write-Host "=== EXISTING SITES (must still work) ==="
+          foreach ($port in @(80, 8888)) {
+            try {
+              $r = Invoke-WebRequest "http://192.168.151.36:$port/" -UseBasicParsing -TimeoutSec 8
+              Write-Host "PORT $port root: HTTP $($r.StatusCode)"
+            } catch { Write-Host "PORT $port root: $($_.Exception.Message)" }
+            try {
+              $r2 = Invoke-WebRequest "http://192.168.151.36:$port/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+              Write-Host "PORT $port Execute: HTTP $($r2.StatusCode) $($r2.Content.Substring(0,[Math]::Min(200,$r2.Content.Length)))"
+            } catch { Write-Host "PORT $port Execute: $($_.Exception.Message)" }
+          }
+
+          Write-Host ""
+          Write-Host "=== NEW SITE V2RfcApi :9191 ==="
           try {
-            $r = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
-          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+            $r3 = Invoke-WebRequest "http://192.168.151.36:9191/" -UseBasicParsing -TimeoutSec 8
+            Write-Host "PORT 9191 root: HTTP $($r3.StatusCode)"
+          } catch { Write-Host "PORT 9191 root: $($_.Exception.Message)" }
           try {
-            $r2 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 25
-            Write-Host "EXECUTE: HTTP $($r2.StatusCode)"
-            Write-Host $r2.Content
-          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
+            $r4 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            Write-Host "PORT 9191 Execute: HTTP $($r4.StatusCode) $($r4.Content.Substring(0,[Math]::Min(300,$r4.Content.Length)))"
+          } catch { Write-Host "PORT 9191 Execute: $($_.Exception.Message)" }
+
+          Write-Host ""
+          Write-Host "=== Write results to .36 for reading ==="
+          net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no 2>$null
+          @(
+            "8888_root: tested",
+            "9191_execute: tested"
+          ) | Set-Content "\\192.168.151.36\C$\diag_done.txt"
+          net use "\\192.168.151.36\C$" /delete /y 2>$null
