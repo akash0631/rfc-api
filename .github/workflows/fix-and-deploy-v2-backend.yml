@@ -1,6 +1,7 @@
 name: Deploy v2ArticleCreation Backend
 
 on:
+  workflow_call:
   push:
     paths:
       - '.trigger-v2-backend'
@@ -21,8 +22,7 @@ jobs:
             --subscription $SUB --query appServicePlanId -o tsv)
           echo "Current plan: $PLAN"
           if [[ "$PLAN" != *"dab-plan"* ]]; then
-            az webapp update --name v2-article-backend --resource-group dab-rg \
-              --subscription $SUB \
+            az webapp update --name v2-article-backend --resource-group dab-rg --subscription $SUB \
               --set serverFarmId="/subscriptions/$SUB/resourceGroups/dab-rg/providers/Microsoft.Web/serverfarms/dab-plan"
             echo "✅ Moved to dab-plan (P2v3)"
           else
@@ -32,19 +32,16 @@ jobs:
       - name: Set startup command & env vars
         run: |
           SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          az webapp config set \
-            --name v2-article-backend --resource-group dab-rg --subscription $SUB \
+          az webapp config set --name v2-article-backend --resource-group dab-rg --subscription $SUB \
             --startup-file "node --max-old-space-size=512 dist/index.js" \
             --linux-fx-version "NODE|22-lts"
-          az webapp config appsettings set \
-            --name v2-article-backend --resource-group dab-rg --subscription $SUB \
-            --settings \
-              NODE_ENV=production PORT=8080 \
+          az webapp config appsettings set --name v2-article-backend --resource-group dab-rg --subscription $SUB \
+            --settings NODE_ENV=production PORT=8080 \
               FRONTEND_URL="https://articles.v2retail.net" \
               CORS_ORIGINS="https://articles.v2retail.net,https://v2-article-creation.pages.dev" \
-              ENABLE_REDIS=false VLM_FUSION_MODE=default \
-              DEVELOPMENT_MODE=false DEBUG_API_ENDPOINTS=false \
-              DEBUG_VLM_PIPELINE=false SENTRY_ENABLED=false ENABLE_RATE_LIMITING=true \
+              ENABLE_REDIS=false VLM_FUSION_MODE=default DEVELOPMENT_MODE=false \
+              DEBUG_API_ENDPOINTS=false DEBUG_VLM_PIPELINE=false \
+              SENTRY_ENABLED=false ENABLE_RATE_LIMITING=true \
               JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               DIRECT_URL="${{ secrets.DIRECT_URL }}" \
@@ -109,4 +106,4 @@ except: pass
 ")
           echo "=== RUNTIME LOGS ==="
           [ -n "$LOG_URL" ] && curl -s -u "$KU" "$LOG_URL" | tail -100 || echo "No logs"
-          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE" || echo "⚠️ HTTP $HTTP"
+          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE: https://v2-article-backend.azurewebsites.net" || echo "⚠️ HTTP $HTTP"
