@@ -5,34 +5,38 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Find compiled app on .36 in known locations
+      - name: Find compiled RFC app on D drive of .36
         shell: cmd
         run: |
+          net use \\192.168.151.36\D$ vrl@55555 /user:Administrator /persistent:no
+          echo D NET_USE: %ERRORLEVEL%
+
+          echo === V2RETAIL_PUBLISHED ===
+          dir \\192.168.151.36\D$\V2RETAIL_PUBLISHED\ /B 2>nul
+          dir \\192.168.151.36\D$\V2RETAIL_PUBLISHED\Vendor*.dll /B 2>nul
+
+          echo === V2_Published ===
+          dir "\\192.168.151.36\D$\V2 Published\" /B 2>nul
+          dir "\\192.168.151.36\D$\V2 Published\Vendor*.dll" /B 2>nul
+
+          echo === V2_Vendor_PPT_SRM (likely our app) ===
+          dir \\192.168.151.36\D$\V2_Vendor_PPT_SRM\ /B 2>nul
+          dir \\192.168.151.36\D$\V2_Vendor_PPT_SRM\Vendor*.dll /B /S 2>nul
+          dir \\192.168.151.36\D$\V2_Vendor_PPT_SRM\bin\*.dll /B 2>nul | find /c ".dll"
+
+          echo === NewCodeOn(261123) ===
+          dir "\\192.168.151.36\D$\NewCodeOn(261123)\" /B 2>nul
+          dir "\\192.168.151.36\D$\NewCodeOn(261123)\Vendor*.dll" /B /S 2>nul
+
+          echo === V2retail folder ===
+          dir \\192.168.151.36\D$\V2retail\ /B 2>nul
+
+          echo === V2 Projects ===
+          dir "\\192.168.151.36\D$\V2 Projects\" /B 2>nul
+
+          echo === Store Tracker IIS physical path ===
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-
-          echo === C:\ root dirs ===
-          dir \\192.168.151.36\C$\ /B 2>nul
-
-          echo === inetpub wwwroot ===
-          dir \\192.168.151.36\C$\inetpub\wwwroot\ /B 2>nul
-
-          echo === D drive exists? ===
-          dir \\192.168.151.36\D$\ /B 2>nul
-
-          echo === E drive? ===
-          dir \\192.168.151.36\E$\ /B 2>nul
-
-          echo === actions-runner work ===
-          dir \\192.168.151.36\C$\actions-runner\_work\ /B 2>nul
-
-          echo === RfcApp sub-folders ===
-          dir \\192.168.151.36\C$\RfcApp\ /B /S 2>nul | findstr /I ".dll .config .asax"
-
-          echo === inetpub Store Tracker ===
-          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\" /B /S 2>nul | findstr /I ".dll .config" | find /c "."
-
-          echo === Check physical path of Store Tracker site ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"Store Tracker"
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"RfcApiApp"
-
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list vdir
           net use \\192.168.151.36\C$ /delete /y 2>nul
+
+          net use \\192.168.151.36\D$ /delete /y 2>nul
