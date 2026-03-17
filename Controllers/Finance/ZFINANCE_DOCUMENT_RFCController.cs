@@ -80,7 +80,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
                         for (int j = 0; j < row.Metadata.FieldCount; j++)
                         {
-                            RfcFieldMetadata fieldMetadata = row.Metadata[j];
+                            var fieldMetadata = row.Metadata[j];
                             if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
                             {
                                 string fieldName = fieldMetadata.Name;

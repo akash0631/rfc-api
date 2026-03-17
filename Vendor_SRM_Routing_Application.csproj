@@ -222,6 +222,7 @@
     <Compile Include="Controllers\Finance\ZADVANCE_PAYMENT_RFCController.cs" />
     <Compile Include="Controllers\Finance\ZFINANCE_DOCUMENT_RFCController.cs" />
     <Compile Include="Controllers\Finance\ZTEST_RFCController.cs" />
+    <Compile Include="Controllers\Finance\ZPO_DD_UPD_RFCController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\FMSAutoUpdateController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Post_FABPUTWAYGRCController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Validate_GRCController.cs" />
