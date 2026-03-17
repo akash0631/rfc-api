@@ -1808,65 +1808,69 @@ init();
 
 
 
+
+
+
+  if (pathname === '/swagger') {
+    const swaggerHTML = '<!DOCTYPE html>' +
+      '<html><head><meta charset="UTF-8">' +
+      '<title>V2 Retail Data Lake</title>' +
+      '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css">' +
+      '<style>' +
+      'body{margin:0;background:#f4f6fb;}' +
+      '#bar{background:#1a1f36;padding:14px 24px;display:flex;align-items:center;gap:16px;}' +
+      '#bar h1{color:#fff;font-size:18px;font-weight:600;margin:0;}' +
+      '#bar span{color:#8892b0;font-size:13px;}' +
+      '#bar a{color:#64d2ff;font-size:13px;text-decoration:none;margin-left:auto;}' +
+      '.swagger-ui .topbar{display:none;}' +
+      '#swagger-ui{max-width:1200px;margin:0 auto;padding:20px;}' +
+      '</style></head><body>' +
+      '<div id="bar">' +
+      '<h1>&#9889; V2 Retail Data Lake</h1>' +
+      '<span>81 tables &middot; Azure DAB &middot; OData</span>' +
+      '<a href="/explore">RFC Explorer</a>' +
+      '<a href="/sap-fetch" style="margin-left:12px">SAP Fetch</a>' +
+      '</div>' +
+      '<div id="swagger-ui"></div>' +
+      '<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js"></script>' +
+      '<script>' +
+      'SwaggerUIBundle({' +
+      'url:"/swagger/spec",dom_id:"#swagger-ui",' +
+      'presets:[SwaggerUIBundle.presets.apis,SwaggerUIBundle.SwaggerUIStandalonePreset],' +
+      'layout:"BaseLayout",defaultModelsExpandDepth:-1,docExpansion:"none",' +
+      'filter:true,tagsSorter:"alpha",tryItOutEnabled:true' +
+      '});' +
+      '</script></body></html>';
+    return new Response(swaggerHTML, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+  }
+
   if (pathname === '/swagger/spec') {
-    const entities = ["API_Master_AKA", "BIN_MOV_ART_WISE_AKA", "BROADER_MENU", "COMPANY_STOCK_GEN_ART_CLR_MASTER_AKA", "COMPANY_STOCK_MASTER_AKA", "CO_BGT_AK_CO_MJ_ALL_BGT", "CO_BGT_AK_CO_MJ_CLR_ALL_BGT", "CO_BGT_AK_CO_MJ_FAB_ALL_BGT_AKA", "CO_BGT_AK_CO_MJ_M_MVGR_ALL_BGT_AKA", "CO_BGT_AK_CO_MJ_SZ_ALL_BGT", "CO_BGT_AK_CO_MJ_VND_ALL_BGT_AKA", "CO_BGT_AK_ST_MJ_ALL_BGT", "CO_BGT_AK_ST_MJ_CLR_ALL_BGT", "CO_BGT_AK_ST_MJ_SZ_ALL_BGT", "C_ART_DATA", "DAILY_SALE_DATA_GEN_ART_WISE", "DAILY_SALE_DATA_GEN_CLR_WISE", "ET_ARTICLE_GEN_CLR_WISE", "ET_ART_Broader_Menu_DATA", "ET_PUR_DATA_RPT_AKA", "ET_SALES_DATA", "ET_Supplier_Master", "ET_VARIANT_ART_WISE", "ET_VEND_DEDUCTION", "ET_VEND_DEDUCTION_AKA", "ET_VEND_PAY", "ET_ZART_BAR_DETAIL_RFC", "ET_ZFBL1N_PAYMENT_RFC", "ET_ZFI_FB65_DISCOUNT_RFC", "ET_ZMC_SIZE_MASTER_RFC", "ET_ZMM_CITY_TRNS_RFC", "ET_ZPO_MODIFICATION", "ET_ZPO_MODIFICATION_RFC_AKA", "ET_ZPO_MODIFY_REASON", "ET_ZSRM_ROUTING_LOG_RFC", "GET_VV_ART_DATA_AKA", "HHT_VERIENT_ART", "INVT_DC_MJ_AKA", "INVT_DC_MJ_CAT_VND_AKA", "INVT_ST_MJ_CAT_AKA", "INVT_ST_MJ_CAT_CLR_AKA", "INVT_ST_MJ_CAT_FAB_AKA", "INVT_ST_MJ_CAT_MACRO_MVGR_AKA", "INVT_ST_MJ_CAT_MICRO_MVGR_AKA", "INVT_ST_MJ_CAT_MRP_AKA", "INVT_ST_MJ_CAT_RNG_SEG_AKA", "INVT_ST_MJ_CAT_SIZE_AKA", "INVT_ST_MJ_CAT_VND_AKA", "Issue_Tracker", "Karma_Detailed_Report", "Karma_Summary_Report", "L_ARTICLE_Sheet1", "MRDC_VAR_ART_AKA", "MSA_STOCK_DATA_AKA", "PO_DATA_AKA", "Product_Master", "RETAIL_BAR_CODE_AKA", "ROI_TREND_DATA_AKA", "SALE_DATA_CM_AKA", "SALE_DATA_L_2_YEAR_MONTH_AKA", "STORE_MAJ_CAT_BUDGET_FIXTURE_AKA", "STORE_PLANT_MASTER_AKA", "Sale_Data_L_2Years_MAJ_CAT_aka", "Sale_Data_L_2Years_STORE_aka", "TBL_16_RETAIL_GND_BGT_FORMAT_Sheet1", "TNA_REPORT", "Task_Tracker", "VIEW_SALE_GEN_CLR_ART_WISE", "VW_ET_SALES_DATA_AKA", "VW_GRC_REPORT_AKA", "VW_GRC_REPORT_NEW", "VW_LYSP_DAY_MAPPING", "ZSRM_VEND_PAYMENT_INFO", "vw_PO_PENDING_New", "ET_ZGET_STORE_MASTER", "ET_ZTEST", "ET_PROJECT_OVERVIEW", "ET_FINANCE_DOCUMENTS", "ET_ZADVANCE_PAYMENT", "ET_ADVANCE_PAYMENT", "ET_GENERATED"];
-    const params = [
+    const ENTITIES = ["API_Master_AKA", "BIN_MOV_ART_WISE_AKA", "BROADER_MENU", "COMPANY_STOCK_GEN_ART_CLR_MASTER_AKA", "COMPANY_STOCK_MASTER_AKA", "CO_BGT_AK_CO_MJ_ALL_BGT", "CO_BGT_AK_CO_MJ_CLR_ALL_BGT", "CO_BGT_AK_CO_MJ_FAB_ALL_BGT_AKA", "CO_BGT_AK_CO_MJ_M_MVGR_ALL_BGT_AKA", "CO_BGT_AK_CO_MJ_SZ_ALL_BGT", "CO_BGT_AK_CO_MJ_VND_ALL_BGT_AKA", "CO_BGT_AK_ST_MJ_ALL_BGT", "CO_BGT_AK_ST_MJ_CLR_ALL_BGT", "CO_BGT_AK_ST_MJ_SZ_ALL_BGT", "C_ART_DATA", "DAILY_SALE_DATA_GEN_ART_WISE", "DAILY_SALE_DATA_GEN_CLR_WISE", "ET_ARTICLE_GEN_CLR_WISE", "ET_ART_Broader_Menu_DATA", "ET_PUR_DATA_RPT_AKA", "ET_SALES_DATA", "ET_Supplier_Master", "ET_VARIANT_ART_WISE", "ET_VEND_DEDUCTION", "ET_VEND_DEDUCTION_AKA", "ET_VEND_PAY", "ET_ZART_BAR_DETAIL_RFC", "ET_ZFBL1N_PAYMENT_RFC", "ET_ZFI_FB65_DISCOUNT_RFC", "ET_ZMC_SIZE_MASTER_RFC", "ET_ZMM_CITY_TRNS_RFC", "ET_ZPO_MODIFICATION", "ET_ZPO_MODIFICATION_RFC_AKA", "ET_ZPO_MODIFY_REASON", "ET_ZSRM_ROUTING_LOG_RFC", "GET_VV_ART_DATA_AKA", "HHT_VERIENT_ART", "INVT_DC_MJ_AKA", "INVT_DC_MJ_CAT_VND_AKA", "INVT_ST_MJ_CAT_AKA", "INVT_ST_MJ_CAT_CLR_AKA", "INVT_ST_MJ_CAT_FAB_AKA", "INVT_ST_MJ_CAT_MACRO_MVGR_AKA", "INVT_ST_MJ_CAT_MICRO_MVGR_AKA", "INVT_ST_MJ_CAT_MRP_AKA", "INVT_ST_MJ_CAT_RNG_SEG_AKA", "INVT_ST_MJ_CAT_SIZE_AKA", "INVT_ST_MJ_CAT_VND_AKA", "Issue_Tracker", "Karma_Detailed_Report", "Karma_Summary_Report", "L_ARTICLE_Sheet1", "MRDC_VAR_ART_AKA", "MSA_STOCK_DATA_AKA", "PO_DATA_AKA", "Product_Master", "RETAIL_BAR_CODE_AKA", "ROI_TREND_DATA_AKA", "SALE_DATA_CM_AKA", "SALE_DATA_L_2_YEAR_MONTH_AKA", "STORE_MAJ_CAT_BUDGET_FIXTURE_AKA", "STORE_PLANT_MASTER_AKA", "Sale_Data_L_2Years_MAJ_CAT_aka", "Sale_Data_L_2Years_STORE_aka", "TBL_16_RETAIL_GND_BGT_FORMAT_Sheet1", "TNA_REPORT", "Task_Tracker", "VIEW_SALE_GEN_CLR_ART_WISE", "VW_ET_SALES_DATA_AKA", "VW_GRC_REPORT_AKA", "VW_GRC_REPORT_NEW", "VW_LYSP_DAY_MAPPING", "ZSRM_VEND_PAYMENT_INFO", "vw_PO_PENDING_New", "ET_ZGET_STORE_MASTER", "ET_ZTEST", "ET_PROJECT_OVERVIEW", "ET_FINANCE_DOCUMENTS", "ET_ZADVANCE_PAYMENT", "ET_ADVANCE_PAYMENT", "ET_GENERATED"];
+    const PARAMS = [
       {name:'$filter',in:'query',schema:{type:'string'},description:'OData filter e.g. PLANT eq \'DC01\''},
       {name:'$orderby',in:'query',schema:{type:'string'},description:'Order by e.g. POSTING_DATE desc'},
-      {name:'$top',in:'query',schema:{type:'integer',default:100},description:'Max rows (default 100)'},
-      {name:'$skip',in:'query',schema:{type:'integer'},description:'Skip rows for pagination'},
+      {name:'$top',in:'query',schema:{type:'integer',default:100},description:'Max rows'},
+      {name:'$skip',in:'query',schema:{type:'integer'},description:'Skip for pagination'},
       {name:'$select',in:'query',schema:{type:'string'},description:'Columns e.g. VENDOR,AMOUNT'}
     ];
     const paths = {};
-    for (const e of entities) {
-      paths[`/api/${e}`] = { get: {
-        tags:[e], summary:`Query ${e}`, operationId:`get_${e}`,
-        parameters: params,
-        responses:{'200':{description:'Success — returns value array'},'400':{description:'Bad filter'}}
+    for (const e of ENTITIES) {
+      paths['/api/' + e] = { get: {
+        tags:[e], summary:'Query ' + e, operationId:'get_' + e,
+        parameters:PARAMS,
+        responses:{'200':{description:'Success'},'400':{description:'Bad filter'}}
       }};
     }
     const spec = {
       openapi:'3.0.0',
       info:{title:'V2 Retail Data Lake API',version:'1.0.0',
-        description:'81 Data Lake tables via Azure DAB. Base: https://my-dab-app.azurewebsites.net'},
-      servers:[{url:'https://my-dab-app.azurewebsites.net',description:'Azure DAB — Data Lake'}],
+        description:'81 Data Lake tables via Azure DAB. Direct URL: https://my-dab-app.azurewebsites.net'},
+      servers:[{url:'https://my-dab-app.azurewebsites.net',description:'Azure DAB'}],
       paths
     };
     return new Response(JSON.stringify(spec), {
-      headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}
+      headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Cache-Control':'public,max-age=3600'}
     });
-  }
-
-  if (pathname === '/swagger') {
-    const html = `<!DOCTYPE html><html><head>
-<meta charset="UTF-8"><title>V2 Retail Data Lake — API Docs</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css">
-<style>
-body{margin:0;background:#f4f6fb;}
-#bar{background:#1a1f36;padding:14px 24px;display:flex;align-items:center;gap:16px;}
-#bar h1{color:#fff;font-size:18px;font-weight:600;margin:0;}
-#bar span{color:#8892b0;font-size:13px;}
-#bar a{color:#64d2ff;font-size:13px;text-decoration:none;margin-left:auto;}
-.swagger-ui .topbar{display:none;}
-#swagger-ui{max-width:1200px;margin:0 auto;padding:20px;}
-</style></head><body>
-<div id="bar">
-  <h1>⚡ V2 Retail Data Lake</h1>
-  <span>81 tables · Azure DAB · OData</span>
-  <a href="/explore">RFC Explorer</a>
-  <a href="/sap-fetch" style="margin-left:12px">SAP Fetch</a>
-</div>
-<div id="swagger-ui"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js"></script>
-<script>
-SwaggerUIBundle({
-  url:'/swagger/spec',dom_id:'#swagger-ui',
-  presets:[SwaggerUIBundle.presets.apis,SwaggerUIBundle.SwaggerUIStandalonePreset],
-  layout:'BaseLayout',defaultModelsExpandDepth:-1,docExpansion:'none',
-  filter:true,tagsSorter:'alpha',tryItOutEnabled:true
-});
-</script></body></html>`;
-    return new Response(html, {headers:{'Content-Type':'text/html;charset=UTF-8'}});
   }
 
 
