@@ -29,12 +29,7 @@ jobs:
           
           & $msdeploy `
             -verb:sync `
-            -source:apphostconfig="Store Tracker",`
-computername="https://V2DC-ADDVERB:8172/msdeploy.axd",`
-username="V2DC-ADDVERB\Administrator",`
-password="vrl@55555",`
-authtype="Basic",`
-includeAcls="False" `
+            -source:apphostconfig="Store Tracker",computername="https://V2DC-ADDVERB:8172/msdeploy.axd",username="V2DC-ADDVERB\Administrator",password="vrl@55555",authtype="Basic",includeAcls="False" `
             -dest:package="C:\mirror\StoreTracker.zip" `
             -allowUntrusted
           
