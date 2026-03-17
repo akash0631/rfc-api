@@ -5,57 +5,43 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Copy C:\RfcApp to C:\V2RfcApi on .36 (internal copy, no build)
-        shell: cmd
-        run: |
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          echo NET_USE: %ERRORLEVEL%
-
-          echo === DLLs already in C:\RfcApp on .36 ===
-          dir \\192.168.151.36\C$\RfcApp\*.dll /B 2>nul | find /c ".dll"
-          dir \\192.168.151.36\C$\RfcApp\Vendor*.dll /B 2>nul
-
-          echo === Copy C:\RfcApp to C:\V2RfcApi on .36 ===
-          mkdir \\192.168.151.36\C$\V2RfcApi 2>nul
-          robocopy \\192.168.151.36\C$\RfcApp \\192.168.151.36\C$\V2RfcApi /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
-
-          echo === Verify DLLs in V2RfcApi ===
-          dir \\192.168.151.36\C$\V2RfcApi\Vendor*.dll /B 2>nul
-          dir \\192.168.151.36\C$\V2RfcApi\*.dll /B 2>nul | find /c ".dll"
-          dir \\192.168.151.36\C$\V2RfcApi\Web.config 2>nul
-
-          echo === Delete old V2RfcApi site if exists, create fresh on :9191 ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe delete site /site.name:V2RfcApi 2>nul
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe delete apppool /apppool.name:V2RfcApiPool 2>nul
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe add apppool /name:V2RfcApiPool /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe add site /name:V2RfcApi /bindings:http/*:9191: /physicalPath:C:\V2RfcApi
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe set site /site.name:V2RfcApi "/[path='/'].applicationPool:V2RfcApiPool"
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe start site /site.name:V2RfcApi
-          echo Site start: %ERRORLEVEL%
-
-          echo === All sites on .36 ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list sites
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list apppools
-
-          net use \\192.168.151.36\C$ /delete /y 2>nul
-
-      - name: Test .36:9191 from .46
+      - name: Wire RFC Collector on .46 to .36:9191 and test full pipeline
         shell: powershell
         run: |
-          Start-Sleep 15
+          # Update collector config
+          $cfg = Get-Content "C:\RfcCollector\appsettings.json" | ConvertFrom-Json
+          $cfg.IIS_HOST = "192.168.151.36"
+          $cfg.IIS_PORT = "9191"
+          $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
+          Restart-Service RfcCollector -Force
+          Start-Sleep 12
+          $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8
+          Write-Host "Collector: $($h.Content)"
+
+          # Test .36:9191 directly
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          Write-Host "=== Testing .36:9191 directly ==="
           try {
             $r = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
             Write-Host "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
           } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+
           try {
             $r2 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
             Write-Host "EXECUTE: HTTP $($r2.StatusCode)"
             Write-Host $r2.Content
           } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
 
-      - name: Install GitHub Actions runner on .36 (last time using .46)
+          # Full pipeline test via collector
+          Write-Host "=== Full pipeline via RFC Collector ==="
+          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
+          try {
+            $r3 = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "PIPELINE: HTTP $($r3.StatusCode)"
+            Write-Host $r3.Content
+          } catch { Write-Host "PIPELINE ERR: $($_.Exception.Message)" }
+
+      - name: Install runner on .36 via schtasks
         shell: powershell
         env:
           V2_PAT: ${{ secrets.V2_GH_PAT }}
@@ -66,47 +52,37 @@ jobs:
 
           net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no 2>$null
 
-          # Download runner directly to .36
-          if (-not (Test-Path "\\192.168.151.36\C$\actions-runner\config.cmd")) {
-            Write-Host "Downloading runner to .36..."
-            Invoke-WebRequest "https://github.com/actions/runner/releases/download/v2.322.0/actions-runner-win-x64-2.322.0.zip" `
-              -OutFile "\\192.168.151.36\C$\actions-runner\runner.zip" -UseBasicParsing
-            Invoke-Expression "cmd /c robocopy . . /NFL" | Out-Null  # dummy
-            Write-Host "Extracting..."
-            # Extract using shell on .46 writing to .36 share
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            [System.IO.Compression.ZipFile]::ExtractToDirectory(
-              "\\192.168.151.36\C$\actions-runner\runner.zip",
-              "\\192.168.151.36\C$\actions-runner"
-            )
-            Write-Host "Extracted"
+          # Check if runner already configured
+          if (Test-Path "\\192.168.151.36\C$\actions-runner\.runner") {
+            Write-Host "Runner already configured on .36 — starting service..."
+            schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerStart" /tr "sc start actions.runner.akash0631-rfc-api.V2DC-ADDVERB" /sc once /st 00:00 /ru SYSTEM /f 2>$null
+            schtasks /run /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerStart" 2>$null
           } else {
-            Write-Host "Runner already downloaded"
+            # Download if not present
+            if (-not (Test-Path "\\192.168.151.36\C$\actions-runner\config.cmd")) {
+              Write-Host "Downloading runner..."
+              Invoke-WebRequest "https://github.com/actions/runner/releases/download/v2.322.0/actions-runner-win-x64-2.322.0.zip" `
+                -OutFile "\\192.168.151.36\C$\actions-runner\runner.zip" -UseBasicParsing
+              Add-Type -AssemblyName System.IO.Compression.FileSystem
+              [System.IO.Compression.ZipFile]::ExtractToDirectory(
+                "\\192.168.151.36\C$\actions-runner\runner.zip",
+                "\\192.168.151.36\C$\actions-runner")
+              Write-Host "Extracted"
+            }
+            # Write and run config bat
+            $bat = "@echo off`r`ncd /d C:\actions-runner`r`ncall config.cmd --url https://github.com/akash0631/rfc-api --token $tok --name V2DC-ADDVERB --labels self-hosted,Windows,X64,iis --runasservice --windowslogonaccount `"NT AUTHORITY\SYSTEM`" --unattended`r`necho done > C:\runner_done.txt"
+            [System.IO.File]::WriteAllText("\\192.168.151.36\C$\actions-runner\do_config.bat", $bat, [System.Text.Encoding]::ASCII)
+            schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerSetup" /tr "C:\actions-runner\do_config.bat" /sc once /st 00:00 /ru SYSTEM /f 2>$null
+            schtasks /run /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerSetup" 2>$null
+            Write-Host "Waiting 90s for config..."
+            Start-Sleep 90
+            Write-Host "Done file: $(Test-Path '\\192.168.151.36\C$\runner_done.txt')"
           }
-
-          # Write config bat to .36
-          $bat = "@echo off`r`ncd /d C:\actions-runner`r`ncall config.cmd --url https://github.com/akash0631/rfc-api --token $tok --name V2DC-ADDVERB --labels self-hosted,Windows,X64,iis --runasservice --windowslogonaccount `"NT AUTHORITY\SYSTEM`" --unattended`r`necho done > C:\runner_done.txt"
-          [System.IO.File]::WriteAllText("\\192.168.151.36\C$\actions-runner\do_config.bat", $bat, [System.Text.Encoding]::ASCII)
-          Write-Host "Config bat written to .36"
-
-          # Run via schtasks remotely
-          schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerSetup" /tr "C:\actions-runner\do_config.bat" /sc once /st 00:00 /ru SYSTEM /f 2>$null
-          schtasks /run /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerSetup" 2>$null
-          Write-Host "Config task started on .36, waiting 90s..."
-          Start-Sleep 90
-
-          $done = Test-Path "\\192.168.151.36\C$\runner_done.txt"
-          Write-Host "Config done: $done"
-
           net use "\\192.168.151.36\C$" /delete /y 2>$null
 
-      - name: Verify runner online
-        shell: powershell
-        env:
-          V2_PAT: ${{ secrets.V2_GH_PAT }}
-        run: |
+          # Check GitHub
           Start-Sleep 20
           $r = Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners" `
             -Headers @{Authorization="token $env:V2_PAT"; "User-Agent"="v2"}
-          Write-Host "=== Registered Runners ==="
-          $r.runners | Select name, status, busy | Format-Table
+          Write-Host "=== Runners ==="
+          $r.runners | Select name, status | Format-Table
