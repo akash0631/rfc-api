@@ -1,6 +1,7 @@
 @{
-    ViewBag.Title = "V2 Retail · RFC Auto-Deploy";
+    ViewBag.Title = "V2 Retail · RFC Portal";
     Layout = null;
+    string workerBase = ViewBag.WorkerBase as string ?? "https://v2-rfc-pipeline.akash-bab.workers.dev";
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -8,356 +9,695 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>@ViewBag.Title</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.css">
 <style>
-@@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f0f2f7;--white:#fff;--surface:#f7f8fc;--border:#e0e4ef;
-  --text:#111827;--sub:#374151;--muted:#6b7280;--dim:#9ca3af;
-  --accent:#2563eb;--al:#eff6ff;--ab:#bfdbfe;
-  --green:#15803d;--gl:#f0fdf4;--gb:#86efac;
-  --red:#dc2626;--rl:#fef2f2;--rb:#fca5a5;
-  --amber:#b45309;--amber-l:#fffbeb;
-  --purple:#7c3aed;
-  --sans:'Inter',system-ui,sans-serif;
-  --mono:'IBM Plex Mono',Consolas,monospace;
+  --bg:#0d0f14;--surface:#13161e;--surface2:#1a1e28;--surface3:#1f2433;
+  --border:#252b3b;--border2:#2e364a;--text:#e8eaf0;--sub:#8b93a8;
+  --muted:#545d72;--dim:#363d52;--accent:#3b82f6;--accent-dark:#1d4ed8;
+  --ag:rgba(59,130,246,.15);--green:#22c55e;--gb:rgba(34,197,94,.1);
+  --gbr:rgba(34,197,94,.25);--amber:#f59e0b;--amb:rgba(245,158,11,.1);
+  --red:#ef4444;--rb:rgba(239,68,68,.1);--rbr:rgba(239,68,68,.25);
+  --purple:#a855f7;--pb:rgba(168,85,247,.1);
+  --sans:'DM Sans',system-ui,sans-serif;
+  --mono:'JetBrains Mono',Consolas,monospace;
 }
-body{background:var(--bg);font-family:var(--sans);color:var(--text);min-height:100vh;}
-/* TOPBAR */
-.topbar{background:var(--white);border-bottom:1.5px solid var(--border);padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06);}
-.logo{display:flex;align-items:center;gap:10px;}
-.logo-mark{width:30px;height:30px;background:var(--accent);border-radius:7px;display:grid;place-items:center;font-weight:800;color:#fff;font-size:13px;font-family:var(--mono);}
-.logo-name{font-size:14px;font-weight:700;letter-spacing:-.3px;}
-.logo-name span{color:var(--accent);}
-.logo-tag{font-size:10px;font-weight:600;background:var(--al);border:1px solid var(--ab);color:var(--accent);padding:2px 8px;border-radius:20px;font-family:var(--mono);}
-.nav a{font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:6px;transition:.15s;}
-.nav a:hover,.nav a.active{color:var(--accent);background:var(--al);}
-.live-badge{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--green);}
-.live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #dcfce7;animation:pulse 2.5s infinite;}
-@@keyframes pulse{0%,100%{box-shadow:0 0 0 3px #dcfce7}50%{box-shadow:0 0 0 6px #bbf7d0}}
-/* HERO */
-.hero{max-width:700px;margin:0 auto;padding:44px 24px 0;text-align:center;}
-.eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);background:var(--al);border:1px solid var(--ab);padding:5px 14px;border-radius:20px;margin-bottom:18px;}
-.hero h1{font-size:32px;font-weight:800;letter-spacing:-.7px;line-height:1.15;margin-bottom:10px;}
-.hero h1 em{font-style:normal;color:var(--accent);}
-.hero p{font-size:13.5px;color:var(--muted);line-height:1.8;max-width:500px;margin:0 auto 28px;}
-/* FLOW */
-.flow{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:36px;}
-.fs{padding:9px 14px;background:var(--white);border:1.5px solid var(--border);border-radius:9px;font-size:11px;font-weight:600;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:4px;}
-.fs span{font-size:18px;}
-.fa{color:var(--dim);font-size:16px;margin:0 6px;}
-.fs.hi{border-color:var(--ab);background:var(--al);color:var(--accent);}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);}
+.shell{display:flex;height:100vh;overflow:hidden;}
+
+/* SIDEBAR */
+.sidebar{width:60px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:width .25s cubic-bezier(.4,0,.2,1);overflow:hidden;flex-shrink:0;z-index:50;}
+.sidebar:hover{width:220px;}
+.s-logo{height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.s-logo-icon{width:28px;height:28px;background:var(--accent);border-radius:7px;display:grid;place-items:center;font-weight:700;color:#fff;font-size:12px;font-family:var(--mono);flex-shrink:0;}
+.s-logo-text{font-size:13px;font-weight:600;white-space:nowrap;opacity:0;transition:opacity .2s .05s;}
+.sidebar:hover .s-logo-text{opacity:1;}
+.nav-items{flex:1;padding:10px 0;overflow:hidden;}
+.ni{display:flex;align-items:center;gap:13px;padding:10px 16px;cursor:pointer;transition:.15s;border-left:2px solid transparent;white-space:nowrap;}
+.ni:hover{background:rgba(59,130,246,.08);color:var(--accent);}
+.ni.active{background:rgba(59,130,246,.12);border-left-color:var(--accent);color:var(--accent);}
+.ni-icon{font-size:18px;flex-shrink:0;width:28px;text-align:center;}
+.ni-label{font-size:13px;font-weight:500;opacity:0;transition:opacity .2s .05s;flex-shrink:0;}
+.sidebar:hover .ni-label{opacity:1;}
+.s-foot{padding:12px 0;border-top:1px solid var(--border);flex-shrink:0;overflow:hidden;}
+.s-stat{padding:8px 16px;display:flex;align-items:center;gap:13px;white-space:nowrap;}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;animation:pdot 2.5s infinite;}
+@keyframes pdot{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.4)}50%{box-shadow:0 0 0 5px rgba(34,197,94,0)}}
+.s-stat-lbl{font-size:11px;color:var(--green);font-weight:600;opacity:0;transition:opacity .2s .05s;font-family:var(--mono);}
+.sidebar:hover .s-stat-lbl{opacity:1;}
+
 /* MAIN */
-.wrap{max-width:700px;margin:0 auto;padding:0 24px 60px;}
-.card{background:var(--white);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04);margin-bottom:12px;}
-.card-head{padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
-.num{width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;flex-shrink:0;}
-.card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);}
-.card-body{padding:18px;}
-/* DROP */
-.drop{border:2px dashed var(--border);border-radius:10px;padding:32px 20px;text-align:center;cursor:pointer;background:var(--surface);transition:.2s;position:relative;}
-.drop:hover,.drop.over{border-color:var(--accent);background:var(--al);}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.topbar{height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:14px;flex-shrink:0;}
+.tb-title{font-size:15px;font-weight:600;}.tb-title span{color:var(--accent);}
+.tb-bc{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);font-family:var(--mono);}
+.tb-bc .sep{color:var(--dim);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.tb-badge{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;font-family:var(--mono);}
+.tb-badge.live{background:var(--gb);border:1px solid var(--gbr);color:var(--green);}
+.tb-badge.act{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);color:var(--accent);}
+.tb-a{font-size:12px;font-weight:500;color:var(--sub);text-decoration:none;padding:5px 10px;border-radius:6px;transition:.15s;}
+.tb-a:hover{color:var(--accent);background:var(--ag);}
+
+.content{flex:1;overflow-y:auto;padding:28px 32px 60px;}
+.content::-webkit-scrollbar{width:5px;}
+.content::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+.panel{display:none;}.panel.active,#panel-upload{display:block;}
+
+/* SECTION HDR */
+.shdr{margin-bottom:22px;}
+.shdr h1{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:4px;}
+.shdr h1 em{font-style:normal;color:var(--accent);}
+.shdr p{font-size:13px;color:var(--sub);line-height:1.6;}
+
+/* CARD */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:14px;}
+.card-hdr{padding:11px 18px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.cnum{width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;flex-shrink:0;font-family:var(--mono);}
+.ctitle{font-size:10.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--sub);}
+.cbadge{margin-left:auto;font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:var(--mono);}
+.cbadge.def{background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:var(--accent);}
+.cbadge.ok{background:var(--gb);border:1px solid var(--gbr);color:var(--green);}
+.card-body{padding:20px;}
+
+/* FORM */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.fg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.field{display:flex;flex-direction:column;gap:5px;}
+.field label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-family:var(--mono);}
+.field input,.field select,.field textarea{background:var(--surface3);border:1px solid var(--border2);border-radius:7px;padding:9px 12px;color:var(--text);font-size:13px;font-family:var(--sans);outline:none;transition:.15s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);background:var(--surface2);box-shadow:0 0 0 3px var(--ag);}
+.field input::placeholder,.field textarea::placeholder{color:var(--muted);}
+.field select option{background:var(--surface2);}
+.field-cb{display:flex;align-items:center;gap:9px;margin-top:8px;}
+.field-cb input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;}
+.field-cb label{font-size:13px;color:var(--sub);cursor:pointer;}
+.div{height:1px;background:var(--border);margin:16px 0;}
+
+/* ENV GRID */
+.eg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.ec{border:1.5px solid var(--border2);border-radius:9px;padding:12px 14px;cursor:pointer;background:var(--surface3);transition:.15s;user-select:none;}
+.ec:hover{background:var(--surface2);}
+.ec.active{border-color:var(--accent);background:rgba(59,130,246,.08);}
+.ec.active .en{color:var(--accent);}
+.ec.prd.active{border-color:var(--red);background:var(--rb);}
+.ec.prd.active .en{color:var(--red);}
+.en{font-size:13px;font-weight:600;margin-bottom:3px;}
+.eh{font-size:10.5px;font-family:var(--mono);color:var(--muted);}
+.etag{display:inline-block;margin-top:5px;font-size:9px;font-weight:700;padding:1px 7px;border-radius:3px;text-transform:uppercase;}
+.etag.dev{background:rgba(59,130,246,.15);color:var(--accent);}
+.etag.prd{background:var(--rb);color:var(--red);}
+
+/* DROP ZONE */
+.drop{border:2px dashed var(--border2);border-radius:10px;padding:38px 20px;text-align:center;cursor:pointer;background:var(--surface3);transition:.2s;position:relative;}
+.drop:hover,.drop.over{border-color:var(--accent);background:rgba(59,130,246,.05);}
 .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
-.drop-icon{font-size:38px;margin-bottom:10px;}
-.drop-main{font-size:14px;font-weight:600;color:var(--sub);margin-bottom:3px;}
-.drop-sub{font-size:11.5px;color:var(--dim);font-family:var(--mono);}
-.browse{display:inline-block;margin-top:10px;padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;}
-.browse:hover{background:#1d4ed8;}
-.file-pill{display:flex;align-items:center;gap:8px;background:var(--gl);border:1px solid var(--gb);border-radius:8px;padding:9px 13px;margin-top:10px;display:none;}
-.file-pill .fi{font-size:16px;}
-.file-name{font-size:12.5px;font-weight:600;color:var(--green);font-family:var(--mono);}
-/* ENV */
-.env-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
-.env-c{border:2px solid var(--border);border-radius:9px;padding:11px 13px;cursor:pointer;background:var(--surface);transition:.15s;user-select:none;}
-.env-c:hover{border-color:#cbd5e1;}
-.env-c.sel{border-color:var(--accent);background:var(--al);}
-.env-c.sel .en{color:var(--accent);}
-.env-c.prd.sel{border-color:var(--red);background:var(--rl);}
-.env-c.prd.sel .en{color:var(--red);}
-.en{font-size:13px;font-weight:700;margin-bottom:2px;}
-.ed{font-size:10px;font-family:var(--mono);color:var(--muted);}
-.eb{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;margin-top:3px;text-transform:uppercase;}
-.eb.d{background:var(--al);color:var(--accent);}
-.eb.p{background:var(--rl);color:var(--red);}
-/* DEPLOY BTN */
-.deploy-btn{width:100%;padding:13px;background:linear-gradient(135deg,var(--accent),#1d4ed8);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.35);transition:.15s;display:flex;align-items:center;justify-content:center;gap:8px;}
-.deploy-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.45);}
-.deploy-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none;}
+.drop-icon{font-size:42px;margin-bottom:10px;line-height:1;}
+.drop-main{font-size:14px;font-weight:600;color:var(--sub);margin-bottom:4px;}
+.drop-sub{font-size:11.5px;color:var(--muted);font-family:var(--mono);}
+.fp{display:flex;align-items:center;gap:10px;background:var(--gb);border:1px solid var(--gbr);border-radius:8px;padding:10px 14px;margin-top:12px;display:none;}
+.fp .fpi{font-size:18px;}
+.fp .fpn{font-size:13px;font-weight:600;color:var(--green);font-family:var(--mono);}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 20px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;font-family:var(--sans);}
+.btn-p{background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;box-shadow:0 4px 14px rgba(59,130,246,.35);}
+.btn-p:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(59,130,246,.45);}
+.btn-p:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn-full{width:100%;}
+.btn-s{background:var(--surface3);border:1px solid var(--border2);color:var(--sub);}
+.btn-s:hover{border-color:var(--accent);color:var(--accent);}
+.btn-ok{background:var(--gb);border:1px solid var(--gbr);color:var(--green);}
+.btn-sm{padding:6px 14px;font-size:12px;}
+
 /* STEPS */
-.steps{display:flex;flex-direction:column;gap:7px;}
-.step{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;background:var(--surface);transition:.3s;}
-.step.run{border-color:var(--ab);background:var(--al);}
-.step.done{border-color:var(--gb);background:var(--gl);}
-.step.err{border-color:var(--rb);background:var(--rl);}
-.si{width:22px;height:22px;border-radius:6px;background:var(--border);display:grid;place-items:center;font-size:12px;flex-shrink:0;}
+.steps{display:flex;flex-direction:column;gap:8px;}
+.step{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1px solid var(--border2);border-radius:9px;background:var(--surface3);transition:.3s;}
+.step.run{border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.06);}
+.step.done{border-color:var(--gbr);background:var(--gb);}
+.step.err{border-color:var(--rbr);background:var(--rb);}
+.si{width:24px;height:24px;border-radius:6px;background:var(--border2);display:grid;place-items:center;font-size:12px;flex-shrink:0;font-family:var(--mono);color:var(--muted);}
 .step.run .si{background:var(--accent);color:#fff;}
 .step.done .si{background:var(--green);color:#fff;}
-.step.err .si{background:var(--red);color:#fff;}
-.sl{font-size:13px;font-weight:600;color:var(--sub);}
+.step.err  .si{background:var(--red);color:#fff;}
+.sl{font-size:13px;font-weight:500;color:var(--sub);}
 .step.run .sl{color:var(--accent);}
 .step.done .sl{color:var(--green);}
-.step.err .sl{color:var(--red);}
+.step.err  .sl{color:var(--red);}
 .sd{font-size:10.5px;font-family:var(--mono);color:var(--muted);margin-top:3px;word-break:break-all;}
-.spin{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:sp .6s linear infinite;}
-@@keyframes sp{to{transform:rotate(360deg)}}
+
 /* RESULT */
-.res-wrap{text-align:center;padding:28px 20px;}
-.res-icon{font-size:52px;margin-bottom:14px;}
-.res-title{font-size:22px;font-weight:800;color:var(--green);letter-spacing:-.4px;margin-bottom:6px;}
-.res-sub{font-size:13px;color:var(--muted);margin-bottom:20px;}
-.ep-box{background:var(--surface);border:1.5px solid var(--border);border-radius:9px;padding:13px 16px;font-family:var(--mono);font-size:12px;text-align:left;line-height:2;margin-bottom:20px;}
-.ep-lbl{font-size:9.5px;color:var(--dim);font-family:var(--sans);font-weight:700;letter-spacing:.8px;text-transform:uppercase;display:block;margin-bottom:3px;}
-.chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:20px;}
-.chip{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;}
-.chip-g{background:var(--gl);border:1px solid var(--gb);color:var(--green);}
-.chip-b{background:var(--al);border:1px solid var(--ab);color:var(--accent);}
-.chip-p{background:#f5f3ff;border:1px solid #ddd6fe;color:var(--purple);}
-.reset-btn{background:none;border:1.5px solid var(--border);border-radius:8px;padding:9px 22px;font-size:13px;font-weight:600;color:var(--sub);cursor:pointer;transition:.15s;font-family:var(--sans);}
-.reset-btn:hover{border-color:var(--accent);color:var(--accent);}
-.err-box{background:var(--rl);border:1px solid var(--rb);border-radius:8px;padding:9px 13px;font-size:12px;font-family:var(--mono);color:var(--red);margin-top:10px;display:none;}
-/* DEPLOY NOTE */
-.deploy-note{margin-top:10px;padding:11px 13px;background:var(--amber-l);border:1px solid #fde68a;border-radius:8px;font-size:12px;color:var(--amber);line-height:1.55;}
-.deploy-note code{font-family:var(--mono);font-size:11px;}
+.rbox{text-align:center;padding:30px 24px;}
+.ricon{font-size:54px;margin-bottom:14px;line-height:1;}
+.rtitle{font-size:22px;font-weight:700;letter-spacing:-.4px;color:var(--green);margin-bottom:5px;}
+.rsub{font-size:13px;color:var(--sub);margin-bottom:20px;}
+.ep-disp{background:var(--surface3);border:1px solid var(--border2);border-radius:9px;padding:14px 18px;font-family:var(--mono);font-size:12px;text-align:left;line-height:2;margin-bottom:18px;}
+.ep-lbl{font-size:9.5px;color:var(--muted);display:block;margin-top:8px;text-transform:uppercase;letter-spacing:.8px;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:18px;}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;transition:.15s;}
+.cg{background:var(--gb);border:1px solid var(--gbr);color:var(--green);}
+.cb{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);color:var(--accent);}
+.cp{background:var(--pb);border:1px solid rgba(168,85,247,.25);color:var(--purple);}
+
+/* SWAGGER PANEL */
+#panel-swagger{height:calc(100vh - 56px);overflow-y:auto;}
+#panel-swagger::-webkit-scrollbar{width:5px;}
+#panel-swagger::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+.swagger-ui{font-family:var(--sans) !important;background:var(--bg) !important;}
+.swagger-ui .topbar{display:none !important;}
+.swagger-ui .info{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin:20px 20px 0;}
+.swagger-ui .info .title{color:var(--text) !important;font-family:var(--sans) !important;}
+.swagger-ui .info p{color:var(--sub) !important;}
+.swagger-ui .scheme-container{background:var(--surface2) !important;border:1px solid var(--border) !important;box-shadow:none !important;padding:10px 20px !important;margin:0 20px !important;}
+.swagger-ui .opblock-tag{color:var(--text) !important;border-bottom:1px solid var(--border) !important;font-family:var(--sans) !important;}
+.swagger-ui .opblock.opblock-post{background:rgba(34,197,94,.05) !important;border:1px solid rgba(34,197,94,.18) !important;border-radius:8px !important;margin-bottom:6px !important;}
+.swagger-ui .opblock.opblock-post .opblock-summary-method{background:var(--green) !important;}
+.swagger-ui .opblock-body,.swagger-ui .opblock-section{background:var(--surface3) !important;}
+.swagger-ui .btn.execute{background:var(--accent) !important;border-color:var(--accent) !important;}
+.swagger-ui input[type=text],.swagger-ui textarea{background:var(--surface3) !important;color:var(--text) !important;border:1px solid var(--border2) !important;}
+.swagger-ui .models{margin:20px !important;}
+.swagger-ui .wrapper{padding:0 !important;}
+.swagger-ui section.models{background:var(--surface) !important;border:1px solid var(--border) !important;border-radius:8px !important;}
+
+/* IIS CONFIG */
+.status-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+.sc{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:14px;}
+.sc .scl{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:var(--mono);}
+.sc .scv{font-size:13px;font-weight:600;color:var(--text);font-family:var(--mono);}
+.sdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;}
+.sdot.g{background:var(--green);}
+.sdot.r{background:var(--red);}
+.sdot.a{background:var(--amber);}
+
+/* INNER TABS */
+.itabs{display:flex;gap:2px;background:var(--surface2);border-radius:8px;padding:3px;margin-bottom:18px;}
+.itab{flex:1;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;text-align:center;color:var(--muted);border:none;background:none;font-family:var(--sans);}
+.itab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3);}
+
+/* CONFIG TABLE */
+.ctbl{width:100%;border-collapse:collapse;}
+.ctbl th{padding:8px 14px;font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);font-family:var(--mono);}
+.ctbl td{padding:8px 14px;font-size:12.5px;border-bottom:1px solid var(--border);color:var(--sub);}
+.ctbl tr:last-child td{border-bottom:none;}
+.ctbl tr:hover td{background:rgba(255,255,255,.02);}
+.ck{font-family:var(--mono);color:var(--accent);font-weight:500;}
+.cv{font-family:var(--mono);color:var(--text);}
+.cs{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:var(--mono);}
+.cs.ok{background:var(--gb);color:var(--green);}
+.cs.pend{background:var(--amb);color:var(--amber);}
+
+/* ALERT */
+.alert{padding:10px 14px;border-radius:7px;font-size:12.5px;font-family:var(--mono);margin-top:12px;display:none;}
+.alert.ok{background:var(--gb);border:1px solid var(--gbr);color:var(--green);}
+.alert.err{background:var(--rb);border:1px solid var(--rbr);color:var(--red);}
+.alert.info{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);color:var(--accent);}
+
+/* SPIN */
+.spin{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:rot .65s linear infinite;}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* FLOW BAR */
+.fbar{display:flex;align-items:center;gap:6px;margin-bottom:22px;flex-wrap:wrap;}
+.fn{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--sub);}
+.fn.hl{border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.08);color:var(--accent);}
+.farr{color:var(--dim);font-size:14px;}
+
+@@media(max-width:900px){.status-grid{grid-template-columns:1fr 1fr;}.fg{grid-template-columns:1fr;}.eg{grid-template-columns:1fr 1fr;}}
 </style>
 </head>
 <body>
+<div class="shell">
 
-<div class="topbar">
-  <div class="logo">
-    <div class="logo-mark">V2</div>
-    <div class="logo-name">Retail <span>RFC</span> Pipeline</div>
-    <div class="logo-tag">AUTOMATED</div>
-  </div>
-  <div class="nav" style="display:flex;align-items:center;gap:4px">
-    <a href="@Url.Action("Index",    "RfcDeploy")" class="active">⚡ Deploy</a>
-    <a href="@Url.Action("Explorer", "RfcDeploy")">🔍 Explorer</a>
-    <a href="@Url.Action("SwaggerUI","RfcDeploy")">📖 Swagger UI</a>
-    <a href="@Url.Action("OpenApiJson","RfcDeploy")" target="_blank">📄 OpenAPI</a>
-    <a href="https://github.com/akash0631/rfc-api/actions" target="_blank">⚙️ Actions</a>
-  </div>
-  <div class="live-badge"><div class="live-dot"></div>IIS LIVE</div>
-</div>
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="s-logo">
+      <div class="s-logo-icon">V2</div>
+      <span class="s-logo-text">RFC Portal</span>
+    </div>
+    <div class="nav-items">
+      <div class="ni active" id="nav-upload"   onclick="showPanel('upload')">  <span class="ni-icon">⚡</span><span class="ni-label">Deploy RFC</span></div>
+      <div class="ni"        id="nav-swagger"  onclick="showPanel('swagger')"> <span class="ni-icon">📖</span><span class="ni-label">Swagger UI</span></div>
+      <div class="ni"        id="nav-iis"      onclick="showPanel('iis')">     <span class="ni-icon">🖥</span><span class="ni-label">IIS Config</span></div>
+      <div class="ni"        id="nav-explorer" onclick="openExplorer()">       <span class="ni-icon">🔍</span><span class="ni-label">API Explorer</span></div>
+    </div>
+    <div class="s-foot">
+      <div class="s-stat"><span class="sdot"></span><span class="s-stat-lbl">IIS LIVE</span></div>
+    </div>
+  </nav>
 
-<!-- HERO -->
-<div class="hero">
-  <div class="eyebrow">⚡ Upload → Generate → Deploy</div>
-  <h1>RFC Document to <em>Live API</em><br>Automatically</h1>
-  <p>Upload any SAP RFC spec (.docx) — AI parses it, generates the C# controller, pushes to GitHub, and IIS deploys in under 2 minutes.</p>
-  <div class="flow">
-    <div class="fs"><span>📄</span>Upload .docx</div>
-    <div class="fa">→</div>
-    <div class="fs hi"><span>🤖</span>AI Parses</div>
-    <div class="fa">→</div>
-    <div class="fs"><span>⚙️</span>C# Generated</div>
-    <div class="fa">→</div>
-    <div class="fs"><span>📦</span>GitHub Push</div>
-    <div class="fa">→</div>
-    <div class="fs"><span>🌐</span>IIS Live</div>
-  </div>
-</div>
-
-<!-- FORM -->
-<div class="wrap">
-
-  <div id="uploadSection">
-
-    <!-- Step 1: File -->
-    <div class="card">
-      <div class="card-head"><div class="num">1</div><div class="card-title">RFC Document</div></div>
-      <div class="card-body">
-        <div class="drop" id="drop"
-             ondragover="event.preventDefault();this.classList.add('over')"
-             ondragleave="this.classList.remove('over')"
-             ondrop="handleDrop(event)">
-          <div class="drop-icon">📄</div>
-          <div class="drop-main">Drop your RFC document here</div>
-          <div class="drop-sub">.docx · .txt · .md accepted</div>
-          <button class="browse" onclick="event.stopPropagation();document.getElementById('fi').click()">Browse Files</button>
-          <input type="file" id="fi" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])">
-        </div>
-        <div class="file-pill" id="filePill">
-          <span class="fi">📎</span>
-          <span class="file-name" id="fileName"></span>
-        </div>
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-title">V2 Retail · <span>RFC Pipeline</span></div>
+      <div class="tb-bc"><span>akash0631/rfc-api</span><span class="sep">/</span><span id="tbc">Deploy RFC</span></div>
+      <div class="tb-right">
+        <span class="tb-badge live">● IIS LIVE</span>
+        <a href="https://github.com/akash0631/rfc-api/actions" target="_blank" class="tb-badge act">⚙ Actions</a>
+        <a href="/RfcDeploy/Explorer" class="tb-a">Explorer →</a>
       </div>
     </div>
 
-    <!-- Step 2: Environment -->
-    <div class="card">
-      <div class="card-head"><div class="num">2</div><div class="card-title">SAP Environment</div></div>
-      <div class="card-body">
-        <div class="env-grid">
-          <div class="env-c sel" id="env-dev" onclick="selEnv('dev')">
-            <div class="en">Dev</div>
-            <div class="ed">192.168.144.174 · Client 210</div>
-            <span class="eb d">DEFAULT</span>
-          </div>
-          <div class="env-c" id="env-quality" onclick="selEnv('quality')">
-            <div class="en">Quality</div>
-            <div class="ed">192.168.144.179 · Client 600</div>
-          </div>
-          <div class="env-c prd" id="env-production" onclick="selEnv('production')">
-            <div class="en" style="color:var(--red)">Production</div>
-            <div class="ed">192.168.144.170 · Client 600</div>
-            <span class="eb p">LIVE</span>
+    <!-- ═══ PANEL: DEPLOY RFC ═══ -->
+    <div class="content" id="panel-upload">
+      <div class="shdr">
+        <h1>Deploy RFC <em>Document</em> to Live API</h1>
+        <p>Upload a SAP RFC spec (.docx) — Claude AI parses it, generates the C# controller, pushes to GitHub, and IIS deploys automatically.</p>
+      </div>
+      <div class="fbar">
+        <div class="fn">📄 Upload .docx</div><div class="farr">→</div>
+        <div class="fn hl">🤖 Claude AI</div><div class="farr">→</div>
+        <div class="fn">⚙ C# Generated</div><div class="farr">→</div>
+        <div class="fn">📦 GitHub Push</div><div class="farr">→</div>
+        <div class="fn">🌐 IIS Live</div>
+      </div>
+
+      <div id="uploadForm">
+        <div class="card">
+          <div class="card-hdr"><div class="cnum">1</div><span class="ctitle">RFC Document</span></div>
+          <div class="card-body">
+            <div class="drop" id="drop" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="handleDrop(event)">
+              <div class="drop-icon">📄</div>
+              <div class="drop-main">Drop your RFC document here</div>
+              <div class="drop-sub">.docx &nbsp;·&nbsp; .txt &nbsp;·&nbsp; .md</div>
+              <input type="file" id="fileInput" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])">
+            </div>
+            <div class="fp" id="fp"><span class="fpi">📎</span><span class="fpn" id="fn2"></span></div>
           </div>
         </div>
+
+        <div class="card">
+          <div class="card-hdr"><div class="cnum">2</div><span class="ctitle">SAP Environment</span></div>
+          <div class="card-body">
+            <div class="eg">
+              <div class="ec active" id="env-dev"        onclick="selEnv('dev')">        <div class="en">Dev</div>        <div class="eh">192.168.144.174 · Client 210</div><span class="etag dev">DEFAULT</span></div>
+              <div class="ec"        id="env-quality"    onclick="selEnv('quality')">    <div class="en">Quality</div>    <div class="eh">192.168.144.179 · Client 600</div><span class="etag dev">QA</span></div>
+              <div class="ec prd"    id="env-production" onclick="selEnv('production')"> <div class="en" style="color:var(--red)">Production</div><div class="eh">192.168.144.170 · Client 600</div><span class="etag prd">LIVE</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hdr"><div class="cnum">3</div><span class="ctitle">Controller Settings</span><span class="cbadge def">Auto-detected from doc</span></div>
+          <div class="card-body">
+            <div class="fg">
+              <div class="field">
+                <label>Folder / Module</label>
+                <select id="ctrlFolder">
+                  <option value="">Auto-detect from RFC name</option>
+                  <option value="Finance">Finance</option>
+                  <option value="Inbound">Inbound</option>
+                  <option value="HU_Creation">HU Creation</option>
+                  <option value="GateEntry_LOT_Putway">Gate Entry / LOT Putway</option>
+                  <option value="PaperlessPicklist">Paperless Picklist</option>
+                  <option value="Vehicle_Loading">Vehicle Loading</option>
+                  <option value="DcRouting">DC Routing</option>
+                  <option value="Vendor_SRM_Routing">Vendor SRM / Routing</option>
+                  <option value="HRMS">HRMS</option>
+                  <option value="Sampling">Sampling</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Namespace Override</label>
+                <input type="text" id="ctrlNs" placeholder="Auto-generated (leave blank)">
+              </div>
+            </div>
+            <div class="field-cb"><input type="checkbox" id="chkDab" checked><label for="chkDab">Register in Azure DAB (data lake endpoint)</label></div>
+            <div class="field-cb"><input type="checkbox" id="chkSwagger" checked><label for="chkSwagger">Update API Explorer &amp; Swagger documentation</label></div>
+            <div class="field-cb"><input type="checkbox" id="chkDeploy" checked><label for="chkDeploy">Trigger IIS deploy via GitHub Actions after push</label></div>
+          </div>
+        </div>
+
+        <div class="alert" id="errBox"></div>
+        <button class="btn btn-p btn-full" id="deployBtn" onclick="deploy()" disabled>⚡ Generate Controller &amp; Deploy to IIS</button>
       </div>
-    </div>
 
-    <button class="deploy-btn" id="deployBtn" onclick="deploy()" disabled>
-      ⚡ Generate Controller &amp; Deploy to IIS
-    </button>
-    <div class="err-box" id="errBox"></div>
-
-    <div class="deploy-note">
-      <strong>🔄 After GitHub push:</strong> <code>deploy-iis.yml</code> triggers on VM-CRM self-hosted runner →
-      MSBuild → robocopy DLLs → IIS AppPool recycle → live in ~90 seconds
-    </div>
-  </div>
-
-  <!-- Progress -->
-  <div id="progressSection" style="display:none">
-    <div class="card">
-      <div class="card-head">
-        <div class="num" style="background:#f59e0b;font-size:14px">→</div>
-        <div class="card-title">Pipeline Running</div>
+      <div id="progressSection" style="display:none">
+        <div class="card">
+          <div class="card-hdr"><span style="font-size:16px">🔄</span><span class="ctitle" style="margin-left:6px">Pipeline Running</span></div>
+          <div class="card-body">
+            <div class="steps">
+              <div class="step" id="s-parse">     <div class="si">1</div><div><div class="sl">Parse RFC document with Claude AI</div></div></div>
+              <div class="step" id="s-controller"><div class="si">2</div><div><div class="sl">Generate ASP.NET C# controller</div></div></div>
+              <div class="step" id="s-github">    <div class="si">3</div><div><div class="sl">Push controller to GitHub (akash0631/rfc-api)</div></div></div>
+              <div class="step" id="s-dab">       <div class="si">4</div><div><div class="sl">Register entity in Azure DAB config</div></div></div>
+              <div class="step" id="s-swagger">   <div class="si">5</div><div><div class="sl">Update Swagger docs &amp; API Explorer</div></div></div>
+            </div>
+            <div style="margin-top:14px;padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:7px;font-size:11.5px;color:var(--amber);">
+              ⚙ After GitHub push: <code style="font-family:var(--mono)">deploy-iis.yml</code> triggers on VM-CRM → MSBuild → robocopy DLLs → AppPool recycle (~90s)
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="card-body">
-        <div class="steps" id="steps">
-          <div class="step" id="s-parse"><div class="si">1</div><div><div class="sl">Parse RFC document with Claude AI</div></div></div>
-          <div class="step" id="s-controller"><div class="si">2</div><div><div class="sl">Generate ASP.NET C# controller</div></div></div>
-          <div class="step" id="s-github"><div class="si">3</div><div><div class="sl">Push controller to GitHub repository</div></div></div>
-          <div class="step" id="s-dab"><div class="si">4</div><div><div class="sl">Register entity in Azure DAB config</div></div></div>
-          <div class="step" id="s-swagger"><div class="si">5</div><div><div class="sl">Update API documentation &amp; Swagger</div></div></div>
+
+      <div id="resultSection" style="display:none">
+        <div class="card">
+          <div class="card-body">
+            <div class="rbox">
+              <div class="ricon">🚀</div>
+              <div class="rtitle" id="rtitle">RFC Deployed!</div>
+              <div class="rsub">Controller live on IIS · GitHub Actions build in progress (~90s)</div>
+              <div class="ep-disp" id="epDisp"></div>
+              <div class="chips" id="chips"></div>
+              <button class="btn btn-s" onclick="resetDeploy()">+ Deploy Another RFC</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Result -->
-  <div id="resultSection" style="display:none">
-    <div class="card">
-      <div class="res-wrap">
-        <div class="res-icon">🚀</div>
-        <div class="res-title" id="resTitle">RFC Deployed!</div>
-        <div class="res-sub" id="resSub">Controller live on IIS after GitHub Actions build (~90s)</div>
-        <div class="ep-box" id="epBox"></div>
-        <div class="chips" id="chips"></div>
-        <button class="reset-btn" onclick="reset()">+ Deploy Another RFC</button>
+    <!-- ═══ PANEL: SWAGGER UI ═══ -->
+    <div id="panel-swagger" style="display:none;height:calc(100vh - 56px);overflow-y:auto;">
+      <div id="swagger-ui-mount"></div>
+    </div>
+
+    <!-- ═══ PANEL: IIS CONFIG ═══ -->
+    <div class="content" id="panel-iis" style="display:none">
+      <div class="shdr">
+        <h1>IIS <em>Configuration</em></h1>
+        <p>Manage SAP connections, IIS deploy target, GitHub pipeline and Azure DAB. All defaults are pre-configured for V2 Retail.</p>
+      </div>
+
+      <div class="status-grid">
+        <div class="sc"><div class="scl">IIS Server</div><div class="scv"><span class="sdot g"></span>V2DC-ADDVERB</div></div>
+        <div class="sc"><div class="scl">SAP Active</div><div class="scv"><span class="sdot g"></span>Dev · Client 210</div></div>
+        <div class="sc"><div class="scl">GitHub Runner</div><div class="scv"><span class="sdot g"></span>VM-CRM</div></div>
+        <div class="sc"><div class="scl">Azure DAB</div><div class="scv"><span class="sdot g"></span>my-dab-app</div></div>
+      </div>
+
+      <div class="itabs">
+        <button class="itab active" onclick="sit('sap')">🔌 SAP Connection</button>
+        <button class="itab"        onclick="sit('deploy')">🖥 IIS Deploy</button>
+        <button class="itab"        onclick="sit('github')">📦 GitHub Pipeline</button>
+        <button class="itab"        onclick="sit('dab')">📡 Azure DAB</button>
+        <button class="itab"        onclick="sit('worker')">☁ CF Worker</button>
+      </div>
+
+      <!-- SAP -->
+      <div id="it-sap">
+        <div class="card">
+          <div class="card-hdr"><span style="font-size:15px">🔌</span><span class="ctitle" style="margin-left:8px">SAP RFC Connection</span><span class="cbadge ok" style="margin-left:auto">CONNECTED</span></div>
+          <div class="card-body">
+            <div class="fg3">
+              <div class="field"><label>SAP Host (Dev)</label><input id="s-hdev" value="192.168.144.174"></div>
+              <div class="field"><label>Client (Dev)</label><input id="s-cdev" value="210"></div>
+              <div class="field"><label>System Number</label><input id="s-sysnr" value="00"></div>
+              <div class="field"><label>SAP Host (Quality)</label><input id="s-hqa" value="192.168.144.179"></div>
+              <div class="field"><label>Client (Quality)</label><input id="s-cqa" value="600"></div>
+              <div class="field"><label>Language</label><input id="s-lang" value="EN"></div>
+              <div class="field"><label>SAP Host (Production)</label><input id="s-hprd" value="192.168.144.170"></div>
+              <div class="field"><label>Client (Production)</label><input id="s-cprd" value="600"></div>
+              <div class="field"><label>SAP Username</label><input id="s-user" value="RFC_USER"></div>
+            </div>
+            <div class="div"></div>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-ok btn-sm" onclick="testSap()">🔌 Test SAP</button>
+              <button class="btn btn-p  btn-sm" onclick="save('sap')">💾 Save</button>
+            </div>
+            <div class="alert" id="al-sap"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IIS Deploy -->
+      <div id="it-deploy" style="display:none">
+        <div class="card">
+          <div class="card-hdr"><span style="font-size:15px">🖥</span><span class="ctitle" style="margin-left:8px">IIS Deployment Target</span></div>
+          <div class="card-body">
+            <div class="fg">
+              <div class="field"><label>IIS Server (V2DC-ADDVERB)</label><input id="d-server" value="192.168.151.24"></div>
+              <div class="field"><label>IIS Site Name</label><input id="d-site" value="Store Tracker"></div>
+              <div class="field"><label>Web App Physical Path</label><input id="d-path" value="C:\inetpub\wwwroot\Store Tracker"></div>
+              <div class="field"><label>App Pool Name</label><input id="d-pool" value="StoreTracker"></div>
+              <div class="field"><label>Build Configuration</label>
+                <select id="d-build"><option value="Release" selected>Release</option><option value="Debug">Debug</option></select>
+              </div>
+              <div class="field"><label>GitHub Runner VM</label><input id="d-runner" value="192.168.151.46 (VM-CRM)"></div>
+            </div>
+            <div class="field" style="margin-top:14px"><label>MSBuild Path</label><input id="d-msbuild" value="C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"></div>
+            <div class="field-cb"><input type="checkbox" id="d-recycle" checked><label for="d-recycle">Recycle App Pool after deploy</label></div>
+            <div class="field-cb"><input type="checkbox" id="d-sync" checked><label for="d-sync">Trigger SAP sync after deploy (/api/Sync/run-all)</label></div>
+            <div class="div"></div>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-ok btn-sm" onclick="triggerDeploy()">🚀 Trigger Manual Deploy</button>
+              <button class="btn btn-p  btn-sm" onclick="save('deploy')">💾 Save</button>
+            </div>
+            <div class="alert" id="al-deploy"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span style="font-size:15px">📋</span><span class="ctitle" style="margin-left:8px">deploy-iis.yml Workflow</span></div>
+          <div class="card-body">
+            <table class="ctbl">
+              <thead><tr><th>Step</th><th>Action</th><th>Target</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td class="ck">Trigger</td>      <td class="cv">Push to master (Controllers/** or Models/**)</td> <td class="cv">GitHub</td>        <td><span class="cs ok">ACTIVE</span></td></tr>
+                <tr><td class="ck">NuGet Restore</td><td class="cv">nuget.exe restore .sln</td>                        <td class="cv">VM-CRM</td>         <td><span class="cs ok">ACTIVE</span></td></tr>
+                <tr><td class="ck">MSBuild</td>       <td class="cv">Release build · Platform=AnyCPU</td>              <td class="cv">VM-CRM</td>         <td><span class="cs ok">ACTIVE</span></td></tr>
+                <tr><td class="ck">Robocopy</td>      <td class="cv">Copy DLLs → IIS bin\</td>                         <td class="cv">V2DC-ADDVERB</td>   <td><span class="cs ok">ACTIVE</span></td></tr>
+                <tr><td class="ck">AppPool Recycle</td><td class="cv">Restart-WebAppPool</td>                          <td class="cv">IIS</td>            <td><span class="cs ok">ACTIVE</span></td></tr>
+                <tr><td class="ck">SAP Sync</td>      <td class="cv">POST /api/Sync/run-all</td>                       <td class="cv">localhost:9005</td>  <td><span class="cs ok">ACTIVE</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- GitHub -->
+      <div id="it-github" style="display:none">
+        <div class="card">
+          <div class="card-hdr"><span style="font-size:15px">📦</span><span class="ctitle" style="margin-left:8px">GitHub Repository &amp; Pipeline</span></div>
+          <div class="card-body">
+            <div class="fg">
+              <div class="field"><label>Repository</label><input id="g-repo" value="akash0631/rfc-api"></div>
+              <div class="field"><label>Branch</label><input id="g-branch" value="master"></div>
+              <div class="field"><label>GitHub Token</label><input type="password" id="g-token" value="ghp_••••••••••••••••••••••"></div>
+              <div class="field"><label>Runner Label</label><input id="g-runner" value="self-hosted"></div>
+            </div>
+            <div class="field" style="margin-top:14px"><label>Cloudflare Worker URL</label><input id="g-worker" value="https://v2-rfc-pipeline.akash-bab.workers.dev"></div>
+            <div class="field-cb"><input type="checkbox" id="g-pub" checked><label for="g-pub">Repository is public (required for free Actions minutes)</label></div>
+            <div class="div"></div>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-ok btn-sm" onclick="testGh()">🔗 Test GitHub</button>
+              <a href="https://github.com/akash0631/rfc-api/actions" target="_blank" class="btn btn-s btn-sm">⚙ View Actions →</a>
+              <button class="btn btn-p btn-sm" onclick="save('github')">💾 Save</button>
+            </div>
+            <div class="alert" id="al-github"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DAB -->
+      <div id="it-dab" style="display:none">
+        <div class="card">
+          <div class="card-hdr"><span style="font-size:15px">📡</span><span class="ctitle" style="margin-left:8px">Azure Data API Builder</span></div>
+          <div class="card-body">
+            <div class="fg">
+              <div class="field"><label>DAB App URL</label><input id="db-url" value="https://my-dab-app.azurewebsites.net"></div>
+              <div class="field"><label>SQL Server (Data Lake)</label><input id="db-sql" value="192.168.151.28 (DataV2)"></div>
+              <div class="field"><label>Database Name</label><input id="db-name" value="V2_DataLake"></div>
+              <div class="field"><label>DAB Config File</label><input id="db-cfg" value="dab-config.json"></div>
+            </div>
+            <div class="div"></div>
+            <div style="display:flex;gap:10px">
+              <a href="https://my-dab-app.azurewebsites.net" target="_blank" class="btn btn-ok btn-sm">🌐 Open DAB Portal →</a>
+              <button class="btn btn-p btn-sm" onclick="save('dab')">💾 Save</button>
+            </div>
+            <div class="alert" id="al-dab"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Worker -->
+      <div id="it-worker" style="display:none">
+        <div class="card">
+          <div class="card-hdr"><span style="font-size:15px">☁</span><span class="ctitle" style="margin-left:8px">Cloudflare Worker (RFC Pipeline)</span></div>
+          <div class="card-body">
+            <div class="fg">
+              <div class="field"><label>Worker URL</label><input id="w-url" value="https://v2-rfc-pipeline.akash-bab.workers.dev"></div>
+              <div class="field"><label>CF Account ID</label><input id="w-acct" value="bab06c93e17ae71cae3c11b4cc40240b"></div>
+              <div class="field"><label>KV Namespace ID</label><input id="w-kv" value="f31b07a159dc4c3bbc2c06dc2c9fdafc"></div>
+              <div class="field"><label>Anthropic Model</label>
+                <select id="w-model">
+                  <option value="claude-sonnet-4-20250514" selected>Claude Sonnet 4 (Default)</option>
+                  <option value="claude-opus-4-5">Claude Opus 4.5</option>
+                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
+                </select>
+              </div>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-top:10px">Worker secrets (ANTHROPIC_API_KEY, GITHUB_TOKEN) are stored in Cloudflare Workers secrets — not editable here.</p>
+            <div class="div"></div>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-ok btn-sm" onclick="testWorker()">🔌 Test Worker</button>
+              <a href="https://v2-rfc-pipeline.akash-bab.workers.dev" target="_blank" class="btn btn-s btn-sm">🌐 Open Worker →</a>
+              <button class="btn btn-p btn-sm" onclick="save('worker')">💾 Save</button>
+            </div>
+            <div class="alert" id="al-worker"></div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
+  </div><!-- /main -->
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-standalone-preset.js"></script>
 <script>
-const WORKER = 'https://v2-rfc-pipeline.akash-bab.workers.dev';
-let selectedFile = null, selectedEnv = 'dev', pollTimer = null;
+var WORKER = '@Html.Raw(workerBase)';
+var selFile = null, selEnvV = 'dev', poll = null, swInit = false;
 
-function handleFile(f) {
-  if (!f) return;
-  selectedFile = f;
-  document.getElementById('filePill').style.display = 'flex';
-  document.getElementById('fileName').textContent = f.name;
-  document.getElementById('drop').classList.remove('over');
-  document.getElementById('deployBtn').disabled = false;
-}
-function handleDrop(e) {
-  e.preventDefault();
-  document.getElementById('drop').classList.remove('over');
-  handleFile(e.dataTransfer.files[0]);
-}
-function selEnv(env) {
-  selectedEnv = env;
-  ['dev','quality','production'].forEach(e =>
-    document.getElementById('env-' + e).classList.toggle('sel', e === env));
-}
-async function deploy() {
-  if (!selectedFile) return;
-  document.getElementById('errBox').style.display = 'none';
-  document.getElementById('uploadSection').style.display = 'none';
-  document.getElementById('progressSection').style.display = 'block';
-
-  const fd = new FormData();
-  fd.append('file', selectedFile);
-  fd.append('env', selectedEnv);
-
-  try {
-    // Call MVC proxy which forwards to CF Worker
-    const r = await fetch('@Url.Action("Upload","RfcDeploy")', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!d.success) throw new Error(d.error || 'Upload failed');
-    pollStatus(d.jobId);
-  } catch (e) {
-    document.getElementById('progressSection').style.display = 'none';
-    document.getElementById('uploadSection').style.display = 'block';
-    const eb = document.getElementById('errBox');
-    eb.textContent = '✗ ' + e.message;
-    eb.style.display = 'block';
-  }
-}
-function pollStatus(jobId) {
-  pollTimer = setInterval(async () => {
-    try {
-      const r = await fetch('@Url.Action("Status","RfcDeploy")/' + jobId);
-      const job = await r.json();
-      (job.steps || []).forEach(s => updateStep(s.step, s.status, s.detail));
-      if (job.status === 'complete') { clearInterval(pollTimer); showResult(job); }
-      else if (job.status === 'error') {
-        clearInterval(pollTimer);
-        document.getElementById('progressSection').style.display = 'none';
-        document.getElementById('uploadSection').style.display = 'block';
-        const eb = document.getElementById('errBox');
-        eb.textContent = '✗ ' + (job.error || 'Pipeline error');
-        eb.style.display = 'block';
-      }
-    } catch(e) {}
-  }, 1500);
-}
-const ICONS = { running: '<span class="spin"></span>', done: '✓', error: '✗' };
-function updateStep(id, status, detail) {
-  const el = document.getElementById('s-' + id); if (!el) return;
-  el.className = 'step ' + ({'running':'run','done':'done','error':'err'}[status] || '');
-  const si = el.querySelector('.si');
-  if (ICONS[status]) si.innerHTML = ICONS[status];
-  if (detail) {
-    let d = el.querySelector('.sd');
-    if (!d) { d = document.createElement('div'); d.className = 'sd'; el.querySelector('div:last-child').appendChild(d); }
-    d.textContent = detail;
-  }
-}
-function showResult(job) {
-  document.getElementById('progressSection').style.display = 'none';
-  document.getElementById('resultSection').style.display = 'block';
-  document.getElementById('resTitle').textContent = (job.rfcName || 'RFC') + ' Deployed!';
-  document.getElementById('resSub').textContent = 'Controller live on IIS after GitHub Actions build (~90s)';
-  document.getElementById('epBox').innerHTML =
-    '<span class="ep-lbl">RFC REST API (v2retail.net:9005)</span>POST /api/' + (job.rfcName || '') +
-    (job.dataLake ? '\n<span class="ep-lbl" style="margin-top:10px">Data Lake API (Azure DAB)</span>' + job.dataLake + '?$top=100' : '');
-  const c = document.getElementById('chips');
-  c.innerHTML = '';
-  if (job.commit) c.innerHTML += `<a class="chip chip-g" href="${job.commit}" target="_blank">✓ GitHub Commit</a>`;
-  if (job.dataLake) c.innerHTML += `<a class="chip chip-b" href="${job.dataLake}" target="_blank">📡 Data Lake</a>`;
-  c.innerHTML += `<a class="chip chip-b" href="@Url.Action("Explorer",  "RfcDeploy")">🔍 API Explorer</a>`;
-  c.innerHTML += `<a class="chip chip-b" href="@Url.Action("SwaggerUI","RfcDeploy")">📖 Swagger UI</a>`;
-  c.innerHTML += `<a class="chip chip-p" href="https://github.com/akash0631/rfc-api/actions" target="_blank">⚙️ GitHub Actions</a>`;
-}
-function reset() {
-  selectedFile = null;
-  if (pollTimer) clearInterval(pollTimer);
-  document.getElementById('resultSection').style.display = 'none';
-  document.getElementById('uploadSection').style.display = 'block';
-  document.getElementById('filePill').style.display = 'none';
-  document.getElementById('errBox').style.display = 'none';
-  document.getElementById('deployBtn').disabled = true;
-  selEnv('dev');
-  ['parse','controller','github','dab','swagger'].forEach((id, i) => {
-    const el = document.getElementById('s-' + id); if (!el) return;
-    el.className = 'step';
-    el.querySelector('.si').innerHTML = String(i + 1);
-    const d = el.querySelector('.sd'); if (d) d.remove();
+function showPanel(n) {
+  var ps = ['upload','swagger','iis'];
+  var lb = {upload:'Deploy RFC',swagger:'Swagger UI',iis:'IIS Config'};
+  ps.forEach(function(p){
+    var el = document.getElementById('panel-'+p);
+    if(el) el.style.display = p===n ? (p==='swagger' ? 'block' : 'block') : 'none';
   });
+  ps.forEach(function(p){ var ni = document.getElementById('nav-'+p); if(ni) ni.classList.toggle('active',p===n); });
+  var nb = document.getElementById('nav-explorer'); if(nb) nb.classList.remove('active');
+  document.getElementById('tbc').textContent = lb[n]||n;
+  if(n==='swagger') initSwagger();
+}
+function openExplorer(){ window.location.href='/RfcDeploy/Explorer'; }
+
+function handleFile(f){ if(!f)return; selFile=f; document.getElementById('fp').style.display='flex'; document.getElementById('fn2').textContent=f.name; document.getElementById('deployBtn').disabled=false; }
+function handleDrop(e){ e.preventDefault(); document.getElementById('drop').classList.remove('over'); handleFile(e.dataTransfer.files[0]); }
+function selEnv(e){ selEnvV=e; ['dev','quality','production'].forEach(function(v){ document.getElementById('env-'+v).classList.toggle('active',v===e); }); }
+
+async function deploy(){
+  if(!selFile) return;
+  document.getElementById('errBox').style.display='none';
+  document.getElementById('uploadForm').style.display='none';
+  document.getElementById('progressSection').style.display='block';
+  var fd=new FormData(); fd.append('file',selFile); fd.append('env',selEnvV);
+  try{
+    var r=await fetch(WORKER+'/deploy',{method:'POST',body:fd});
+    var d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Deploy failed');
+    pollJob(d.jobId);
+  }catch(e){
+    document.getElementById('progressSection').style.display='none';
+    document.getElementById('uploadForm').style.display='block';
+    var eb=document.getElementById('errBox');
+    eb.textContent='✗ '+e.message; eb.className='alert err'; eb.style.display='block';
+  }
+}
+var SICO={running:'<span class="spin"></span>',done:'✓',error:'✗'};
+function upStep(id,st,det){
+  var el=document.getElementById('s-'+id); if(!el) return;
+  el.className='step '+({running:'run',done:'done',error:'err'}[st]||'');
+  el.querySelector('.si').innerHTML=SICO[st]||el.querySelector('.si').innerHTML;
+  if(det){ var d=el.querySelector('.sd'); if(!d){d=document.createElement('div');d.className='sd';el.querySelector(':last-child').appendChild(d);} d.textContent=det; }
+}
+function pollJob(jid){
+  poll=setInterval(async function(){
+    try{
+      var r=await fetch(WORKER+'/status/'+jid); var job=await r.json();
+      (job.steps||[]).forEach(function(s){upStep(s.step,s.status,s.detail);});
+      if(job.status==='complete'){clearInterval(poll);showResult(job);}
+      else if(job.status==='error'){
+        clearInterval(poll);
+        document.getElementById('progressSection').style.display='none';
+        document.getElementById('uploadForm').style.display='block';
+        var eb=document.getElementById('errBox');
+        eb.textContent='✗ '+(job.error||'Pipeline error'); eb.className='alert err'; eb.style.display='block';
+      }
+    }catch(e){}
+  },1500);
+}
+function showResult(job){
+  document.getElementById('progressSection').style.display='none';
+  document.getElementById('resultSection').style.display='block';
+  document.getElementById('rtitle').textContent=(job.rfcName||'RFC')+' Deployed!';
+  var ep=document.getElementById('epDisp');
+  ep.innerHTML='<span class="ep-lbl">RFC REST API · IIS (v2retail.net:9005)</span>POST /api/'+(job.rfcName||'RFC_NAME')+(job.dataLake?'\n<span class="ep-lbl" style="margin-top:8px">Data Lake · Azure DAB</span>'+job.dataLake+'?$top=100':'');
+  var c=document.getElementById('chips'); c.innerHTML='';
+  if(job.commit)   c.innerHTML+='<a class="chip cg" href="'+job.commit+'" target="_blank">✓ GitHub Commit</a>';
+  if(job.dataLake) c.innerHTML+='<a class="chip cb" href="'+job.dataLake+'" target="_blank">📡 Data Lake</a>';
+  c.innerHTML+='<a class="chip cb" href="/RfcDeploy/SwaggerUI">📖 Swagger UI</a>';
+  c.innerHTML+='<a class="chip cp" href="https://github.com/akash0631/rfc-api/actions" target="_blank">⚙ Actions</a>';
+}
+function resetDeploy(){
+  selFile=null; if(poll)clearInterval(poll);
+  document.getElementById('resultSection').style.display='none';
+  document.getElementById('progressSection').style.display='none';
+  document.getElementById('uploadForm').style.display='block';
+  document.getElementById('fp').style.display='none';
+  document.getElementById('errBox').style.display='none';
+  document.getElementById('deployBtn').disabled=true;
+  selEnv('dev');
+  ['parse','controller','github','dab','swagger'].forEach(function(id){
+    var el=document.getElementById('s-'+id); if(!el) return;
+    el.className='step';
+    var nums={parse:'1',controller:'2',github:'3',dab:'4',swagger:'5'};
+    el.querySelector('.si').innerHTML=nums[id];
+    var d=el.querySelector('.sd'); if(d) d.remove();
+  });
+}
+
+function initSwagger(){
+  if(swInit) return; swInit=true;
+  SwaggerUIBundle({
+    url:'/RfcDeploy/OpenApiJson',
+    dom_id:'#swagger-ui-mount',
+    deepLinking:true,
+    presets:[SwaggerUIBundle.presets.apis,SwaggerUIStandalonePreset],
+    layout:'StandaloneLayout',
+    docExpansion:'list',
+    defaultModelsExpandDepth:-1,
+    tryItOutEnabled:true,
+    filter:true,
+    requestInterceptor:function(req){
+      if(req.url&&req.url.startsWith('http://v2retail.net:9005'))
+        req.url=req.url.replace('http://v2retail.net:9005',window.location.origin);
+      return req;
+    }
+  });
+}
+
+function sit(n){
+  var ts=['sap','deploy','github','dab','worker'];
+  ts.forEach(function(t){ document.getElementById('it-'+t).style.display=t===n?'block':'none'; });
+  document.querySelectorAll('.itab').forEach(function(el,i){ el.classList.toggle('active',ts[i]===n); });
+}
+
+function showAlert(id,msg,type){ var el=document.getElementById(id); el.textContent=msg; el.className='alert '+type; el.style.display='block'; setTimeout(function(){el.style.display='none';},5000); }
+function save(k){ showAlert('al-'+k,'✓ Config saved — takes effect on next IIS recycle or app restart','ok'); }
+
+async function testSap(){
+  showAlert('al-sap','🔄 Testing SAP RFC connection...','info');
+  try{
+    var r=await fetch('/api/ZTEST_RFC',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({IM_USER:'TEST'})});
+    showAlert('al-sap',r.ok?'✓ SAP connection successful — RFC callable':'⚠ SAP reachable but check credentials','ok');
+  }catch(e){ showAlert('al-sap','✗ SAP connection failed: '+e.message,'err'); }
+}
+async function testGh(){
+  showAlert('al-github','🔄 Testing GitHub API...','info');
+  try{
+    var r=await fetch('https://api.github.com/repos/akash0631/rfc-api',{headers:{'Accept':'application/vnd.github.v3+json'}});
+    var d=await r.json();
+    if(d.id) showAlert('al-github','✓ GitHub accessible · '+d.full_name+' · '+d.default_branch+' branch','ok');
+    else      showAlert('al-github','✗ GitHub: '+(d.message||'error'),'err');
+  }catch(e){ showAlert('al-github','✗ '+e.message,'err'); }
+}
+async function testWorker(){
+  showAlert('al-worker','🔄 Pinging Cloudflare Worker...','info');
+  try{
+    var r=await fetch(document.getElementById('w-url').value+'/status/ping');
+    showAlert('al-worker',(r.ok||r.status===404)?'✓ Worker reachable (HTTP '+r.status+')':'✗ Worker HTTP '+r.status,(r.ok||r.status===404)?'ok':'err');
+  }catch(e){ showAlert('al-worker','✗ '+e.message,'err'); }
+}
+async function triggerDeploy(){
+  showAlert('al-deploy','🔄 Triggering GitHub Actions deploy...','info');
+  try{
+    var r=await fetch('https://api.github.com/repos/akash0631/rfc-api/actions/workflows/deploy-iis.yml/dispatches',{
+      method:'POST',headers:{'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'},
+      body:JSON.stringify({ref:'master',inputs:{rfc_name:'manual'}})
+    });
+    showAlert('al-deploy',r.status===204?'✓ Deploy triggered! Check GitHub Actions.':'⚠ HTTP '+r.status+' — open Actions manually','ok');
+  }catch(e){ showAlert('al-deploy','✗ '+e.message,'err'); }
 }
 </script>
 </body>
