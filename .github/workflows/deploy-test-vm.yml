@@ -93,6 +93,8 @@ jobs:
         timeout-minutes: 10
         shell: cmd
         run: |
+          rem --- Wait a moment for MSBuild/Roslyn to release file handles on bin\Release ---
+          ping -n 6 127.0.0.1 >nul
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
           rem --- Diagnostic: show who owns the DLL and its attributes ---
           if exist "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" (
