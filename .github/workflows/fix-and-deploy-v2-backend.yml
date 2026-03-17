@@ -3,7 +3,7 @@ name: Deploy v2ArticleCreation Backend
 on:
   push:
     paths:
-      - '.github/workflows/fix-and-deploy-v2-backend.yml'
+      - '.trigger-v2-backend'
 
 jobs:
   deploy:
@@ -89,13 +89,9 @@ jobs:
           az webapp restart --name v2-article-backend --resource-group dab-rg --subscription $SUB
           echo "Waiting 60s..."
           sleep 60
-
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://v2-article-backend.azurewebsites.net/api/health)
           BODY=$(curl -s https://v2-article-backend.azurewebsites.net/api/health)
-          echo "=== HEALTH: HTTP $HTTP ==="
-          echo "$BODY"
-
-          # Get runtime logs via Kudu
+          echo "=== HEALTH: HTTP $HTTP === $BODY"
           CREDS=$(az webapp deployment list-publishing-credentials \
             --name v2-article-backend --resource-group dab-rg --subscription $SUB \
             --query "{user:publishingUserName, pass:publishingPassword}" -o json)
@@ -112,6 +108,5 @@ try:
 except: pass
 ")
           echo "=== RUNTIME LOGS ==="
-          [ -n "$LOG_URL" ] && curl -s -u "$KU" "$LOG_URL" | tail -100 || echo "No log URL found"
-
-          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE: https://v2-article-backend.azurewebsites.net" || echo "⚠️ HTTP $HTTP — see logs above"
+          [ -n "$LOG_URL" ] && curl -s -u "$KU" "$LOG_URL" | tail -100 || echo "No logs"
+          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE" || echo "⚠️ HTTP $HTTP"
