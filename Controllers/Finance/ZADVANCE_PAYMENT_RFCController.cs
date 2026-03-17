@@ -163,7 +163,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                         // Dynamic metadata loop - extract all available fields
                         for (int i = 0; i < row.Metadata.FieldCount; i++)
                         {
-                            RfcFieldMetadata fieldMeta = row.Metadata[i];
+                            var fieldMeta = row.Metadata[i];
                             string fieldName = fieldMeta.Name;
                             
                             // Skip STRUCTURE/TABLE types as specified
