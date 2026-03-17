@@ -62,7 +62,7 @@
 <body>
 
 <div class="topbar">
-  <div class="topbar-logo">V2 <span>Retail</span> · RFC API Explorer</div>
+  <div class="topbar-logo">V2 <span>Retail</span> Â· RFC API Explorer</div>
   <div class="topbar-badge">103 Controllers</div>
   <div class="topbar-env">
     <span class="env-dot"></span> DEV 192.168.144.174
@@ -95,10 +95,10 @@
 
   <div class="main">
 
-    <!-- ─── UNLOADING ───────────────────────────────────────────── -->
+    <!-- âââ UNLOADING âââââââââââââââââââââââââââââââââââââââââââââ -->
     <a class="section-anchor" id="unloading"></a>
     <div class="group-header">
-      <h2>📦 Unloading — HU Scanning &amp; Putway to Palette</h2>
+      <h2>ð¦ Unloading â HU Scanning &amp; Putway to Palette</h2>
       <span class="count">3 RFCs</span>
     </div>
 
@@ -107,7 +107,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZVND_UNLOAD_HU_VALIDATE_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
         <span class="badge-tag">Inbound</span>
       </div>
       <p class="card-desc">Validate a scanned Handling Unit (HU) during vehicle unloading. Returns PO number, invoice, and vendor name linked to the HU.</p>
@@ -121,7 +121,7 @@
 }</pre>
         </div>
         <div class="block">
-          <div class="block-label">Export — ET_DATA (ZTT_VEN_BOX)</div>
+          <div class="block-label">Export â ET_DATA (ZTT_VEN_BOX)</div>
           <div class="table-fields">
             <div class="tf-row"><span class="tf-name">HU_NO</span><span class="tf-type">ZEXT_HU</span><span class="tf-desc">HU number</span></div>
             <div class="tf-row"><span class="tf-name">PO_NO</span><span class="tf-type">EBELN</span><span class="tf-desc">Purchase order</span></div>
@@ -146,7 +146,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZVND_UNLOAD_PALLATE_VALIDATION</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
         <span class="badge-tag">Inbound</span>
       </div>
       <p class="card-desc">Validate a scanned Palette after HU validation. Confirms palette is valid and ready for putway. Returns BAPIRET2 status only.</p>
@@ -179,7 +179,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZVND_UNLOAD_SAVE_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
         <span class="badge-tag">Inbound</span>
       </div>
       <p class="card-desc">Save unloading data to SAP after both HU and Palette are validated. Accepts a table of unload records (ZTT_UNLOAD_SAVE).</p>
@@ -208,10 +208,10 @@
       </div>
     </div>
 
-    <!-- ─── PUTWAY TO BIN ─────────────────────────────────────────── -->
+    <!-- âââ PUTWAY TO BIN âââââââââââââââââââââââââââââââââââââââââââ -->
     <a class="section-anchor" id="putway"></a>
     <div class="group-header">
-      <h2>🗂 Inbound Putway to Bin</h2>
+      <h2>ð Inbound Putway to Bin</h2>
       <span class="count">3 RFCs</span>
     </div>
 
@@ -220,7 +220,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZVND_PUTWAY_BIN_VAL_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
         <span class="badge-tag">Putway</span>
       </div>
       <p class="card-desc">Validate a scanned BIN location (LGPLA) for inbound putway. BIN is shown greyed-out on screen after successful validation.</p>
@@ -252,7 +252,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZVND_PUTWAY_PALETTE_VAL_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
         <span class="badge-tag">Putway</span>
       </div>
       <p class="card-desc">Validate a Palette for inbound putway. Returns vendor details, PO, invoice info and the total box count on that palette (ZTT_VEN_BOX).</p>
@@ -267,7 +267,7 @@
 }</pre>
         </div>
         <div class="block">
-          <div class="block-label">Export — ET_DATA (ZTT_VEN_BOX)</div>
+          <div class="block-label">Export â ET_DATA (ZTT_VEN_BOX)</div>
           <div class="table-fields">
             <div class="tf-row"><span class="tf-name">HU_NO</span><span class="tf-type">ZEXT_HU</span><span class="tf-desc">HU number</span></div>
             <div class="tf-row"><span class="tf-name">PO_NO</span><span class="tf-type">EBELN</span><span class="tf-desc">Purchase order</span></div>
@@ -289,7 +289,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZVND_PUTWAY_SAVE_DATA_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
         <span class="badge-tag">Putway</span>
       </div>
       <p class="card-desc">Save putway data to SAP after BIN and Palette are validated. Sends IT_DATA table rows (ZTT_PUTWAY_SAVE). After save, palette and bin clear from screen; PO/Vendor info persists.</p>
@@ -318,10 +318,10 @@
       </div>
     </div>
 
-    <!-- ─── FINANCE ───────────────────────────────────────────────── -->
+    <!-- âââ FINANCE âââââââââââââââââââââââââââââââââââââââââââââââââ -->
     <a class="section-anchor" id="finance"></a>
     <div class="group-header">
-      <h2>💰 Finance RFCs</h2>
+      <h2>ð° Finance RFCs</h2>
       <span class="count">2 RFCs</span>
     </div>
 
@@ -330,7 +330,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZFINANCE_DOCUMENT_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
       </div>
       <p class="card-desc">Finance document retrieval with posting date range filtering.</p>
       <pre>{
@@ -339,7 +339,7 @@
   "I_POSTING_DATE_HIGH": "[DATS]"
 }</pre>
       <div class="card-footer">
-        <span>↓ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_FINANCE_DOCUMENTS">ET_FINANCE_DOCUMENTS</a></span>
+        <span>â Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_FINANCE_DOCUMENTS">ET_FINANCE_DOCUMENTS</a></span>
       </div>
     </div>
 
@@ -348,7 +348,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZADVANCE_PAYMENT_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
       </div>
       <p class="card-desc">Fetches advance payment documents for a company code within a posting date range.</p>
       <pre>{
@@ -357,14 +357,14 @@
   "I_POSTING_DATE_HIGH": "[BUDAT]"
 }</pre>
       <div class="card-footer">
-        <span>↓ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ADVANCE_PAYMENT">ET_ADVANCE_PAYMENT</a></span>
+        <span>â Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ADVANCE_PAYMENT">ET_ADVANCE_PAYMENT</a></span>
       </div>
     </div>
 
-    <!-- ─── STORE MASTER ──────────────────────────────────────────── -->
+    <!-- âââ STORE MASTER ââââââââââââââââââââââââââââââââââââââââââââ -->
     <a class="section-anchor" id="store"></a>
     <div class="group-header">
-      <h2>🏪 Store Master</h2>
+      <h2>ðª Store Master</h2>
       <span class="count">1 RFC</span>
     </div>
 
@@ -373,21 +373,21 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZGET_STORE_MASTER_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
       </div>
       <p class="card-desc">Fetch store master data from SAP by store code.</p>
       <pre>{
   "IV_STORE_CODE": "[CHAR10]"
 }</pre>
       <div class="card-footer">
-        <span>↓ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZGET_STORE_MASTER">ET_ZGET_STORE_MASTER</a></span>
+        <span>â Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZGET_STORE_MASTER">ET_ZGET_STORE_MASTER</a></span>
       </div>
     </div>
 
-    <!-- ─── TEST / UTILITY ────────────────────────────────────────── -->
+    <!-- âââ TEST / UTILITY ââââââââââââââââââââââââââââââââââââââââââ -->
     <a class="section-anchor" id="test"></a>
     <div class="group-header">
-      <h2>🔧 Test / Utility</h2>
+      <h2>ð§ Test / Utility</h2>
       <span class="count">1 RFC</span>
     </div>
 
@@ -396,7 +396,7 @@
       <div class="card-head">
         <span class="badge-method">POST</span>
         <code class="endpoint-path">/api/ZTEST_RFC</code>
-        <span class="badge-env dev">DEV · 192.168.144.174</span>
+        <span class="badge-env dev">DEV Â· 192.168.144.174</span>
       </div>
       <p class="card-desc">Test RFC for pipeline validation.</p>
       <pre>{
@@ -404,7 +404,7 @@
   "IM_WERKS": "[CHAR]"
 }</pre>
       <div class="card-footer">
-        <span>↓ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZTEST">ET_ZTEST</a></span>
+        <span>â Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZTEST">ET_ZTEST</a></span>
       </div>
     </div>
 
@@ -473,5 +473,19 @@ window.addEventListener('scroll', () => {
   "I_POSTING_DATE_HIGH": "[DOCUMENT_TYPE]"
 }</pre>
     </div>
+
+  <!-- AUTO:ZPO_DD_UPD_RFC:2026-03-17 -->
+  <div style="border:1px solid #e4e8f0;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+      <span style="background:#4361ee;color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;font-family:monospace;">POST</span>
+      <code style="font-size:13px;font-weight:600;">/api/ZPO_DD_UPD_RFC</code>
+      <span style="background:#f0fdf4;border:1px solid #16a34a;color:#16a34a;padding:2px 9px;border-radius:5px;font-size:11px;font-family:monospace;">DEV · 192.168.144.174</span>
+    </div>
+    <p style="font-size:12px;color:#475569;margin-bottom:10px;">PO delivery date update RFC</p>
+    <pre style="background:#13141f;color:#9aa5d4;padding:12px;border-radius:7px;font-size:11px;overflow-x:auto;">{}</pre>
+    <div style="margin-top:8px;font-size:11px;color:#64748b;font-family:monospace;">
+      ↓ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZPO_DD_UPD" style="color:#4361ee;">https://my-dab-app.azurewebsites.net/api/ET_ZPO_DD_UPD</a>
+    </div>
+  </div>
 </body>
 </html>
