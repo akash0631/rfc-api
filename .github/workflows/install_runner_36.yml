@@ -5,40 +5,10 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Test .36:9191 and write results to file
-        shell: powershell
-        run: |
-          $out = @()
-          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-
-          try {
-            $r = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            $out += "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
-          } catch { $out += "HEALTH ERR: $($_.Exception.Message)" }
-
-          try {
-            $r2 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            $out += "EXECUTE: HTTP $($r2.StatusCode)"
-            $out += $r2.Content
-          } catch { $out += "EXECUTE ERR: $($_.Exception.Message)" }
-
-          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
-          try {
-            $r3 = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
-            $out += "PIPELINE: HTTP $($r3.StatusCode)"
-            $out += $r3.Content
-          } catch { $out += "PIPELINE ERR: $($_.Exception.Message)" }
-
-          $out | ForEach-Object { Write-Host $_ }
-
-          # Also write to .36 share for persistence
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no 2>$null
-          $out | Set-Content "\\192.168.151.36\C$\pipeline_test_result.txt"
-          net use \\192.168.151.36\C$ /delete /y 2>$null
-
-      - name: Read results from .36
+      - name: Read pipeline test results from .36
         shell: cmd
         run: |
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo === PIPELINE TEST RESULTS ===
           type \\192.168.151.36\C$\pipeline_test_result.txt
           net use \\192.168.151.36\C$ /delete /y 2>nul
