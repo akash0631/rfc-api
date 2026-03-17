@@ -1,0 +1,136 @@
+@{
+    ViewBag.Title = "V2 Retail - Swagger UI";
+    Layout = null;
+    string openApiUrl = ViewBag.OpenApiUrl as string ?? "/RfcDeploy/OpenApiJson";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>@ViewBag.Title</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.css">
+<style>
+@* Override Swagger UI topbar with V2 branding *@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; }
+
+/* Custom V2 topbar sits above Swagger UI */
+.v2-topbar {
+  background: #ffffff;
+  border-bottom: 1.5px solid #e0e4ef;
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.v2-logo { display: flex; align-items: center; gap: 10px; }
+.v2-logo-mark {
+  width: 30px; height: 30px; background: #2563eb; border-radius: 7px;
+  display: grid; place-items: center; font-weight: 800; color: #fff;
+  font-size: 13px; font-family: 'IBM Plex Mono', Consolas, monospace;
+}
+.v2-logo-name { font-size: 14px; font-weight: 700; letter-spacing: -.3px; }
+.v2-logo-name span { color: #2563eb; }
+.v2-logo-tag {
+  font-size: 10px; font-weight: 600; background: #eff6ff;
+  border: 1px solid #bfdbfe; color: #2563eb; padding: 2px 8px;
+  border-radius: 20px; font-family: monospace;
+}
+.v2-nav { display: flex; align-items: center; gap: 4px; }
+.v2-nav a {
+  font-size: 12px; font-weight: 500; color: #6b7280; text-decoration: none;
+  padding: 5px 10px; border-radius: 6px; transition: .15s;
+}
+.v2-nav a:hover { color: #2563eb; background: #eff6ff; }
+.v2-nav a.active { color: #2563eb; background: #eff6ff; font-weight: 600; }
+.v2-right { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #6b7280; }
+.v2-live { display: flex; align-items: center; gap: 5px; color: #15803d; font-weight: 600; }
+.v2-live-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: #22c55e;
+  animation: pulse 2.5s infinite;
+}
+@@keyframes pulse {
+  0%,100% { box-shadow: 0 0 0 3px #dcfce7; }
+  50%      { box-shadow: 0 0 0 6px #bbf7d0; }
+}
+
+/* Hide native Swagger topbar */
+.swagger-ui .topbar { display: none !important; }
+
+/* Override Swagger UI fonts and colors */
+.swagger-ui { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.swagger-ui .info { margin: 24px 0 16px; }
+.swagger-ui .info .title { font-size: 24px; font-weight: 800; color: #111827; }
+.swagger-ui .info .description p { color: #374151; line-height: 1.7; }
+.swagger-ui .opblock-tag { font-size: 14px; font-weight: 700; color: #374151; border-bottom: 1.5px solid #e0e4ef; }
+.swagger-ui .opblock.opblock-post .opblock-summary { border-color: #86efac; }
+.swagger-ui .opblock.opblock-post { background: #f0fdf4; border-color: #86efac; }
+.swagger-ui .opblock.opblock-post .opblock-summary-method { background: #15803d; }
+.swagger-ui .btn.execute { background: #2563eb; border-color: #2563eb; }
+.swagger-ui .btn.execute:hover { background: #1d4ed8; }
+
+/* Wrapper to add padding around Swagger UI */
+#swagger-wrapper { max-width: 1200px; margin: 0 auto; padding: 0 24px 60px; }
+</style>
+</head>
+<body>
+
+<!-- V2 Custom Topbar -->
+<div class="v2-topbar">
+  <div class="v2-logo">
+    <div class="v2-logo-mark">V2</div>
+    <div class="v2-logo-name">Retail <span>RFC</span> Swagger UI</div>
+    <div class="v2-logo-tag">OpenAPI 3.0</div>
+  </div>
+  <div class="v2-nav">
+    <a href="/RfcDeploy">&#9889; Deploy RFC</a>
+    <a href="/RfcDeploy/Explorer">&#128269; Explorer</a>
+    <a href="/RfcDeploy/SwaggerUI" class="active">&#128218; Swagger UI</a>
+    <a href="/RfcDeploy/OpenApiJson" target="_blank">&#128196; OpenAPI JSON</a>
+    <a href="/swagger/ui/index">&#128295; Swashbuckle</a>
+  </div>
+  <div class="v2-right">
+    <span>IIS · V2DC-ADDVERB · 192.168.151.24</span>
+    <div class="v2-live"><div class="v2-live-dot"></div>LIVE</div>
+  </div>
+</div>
+
+<!-- Swagger UI renders here -->
+<div id="swagger-wrapper">
+  <div id="swagger-ui"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-standalone-preset.js"></script>
+<script>
+window.onload = function() {
+  SwaggerUIBundle({
+    url:            '@Html.Raw(openApiUrl)',
+    dom_id:         '#swagger-ui',
+    deepLinking:    true,
+    presets:        [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+    plugins:        [SwaggerUIBundle.plugins.DownloadUrl],
+    layout:         'StandaloneLayout',
+    docExpansion:   'list',
+    defaultModelsExpandDepth: -1,
+    tryItOutEnabled: true,
+    persistAuthorization: true,
+    filter:          true,
+    requestInterceptor: function(request) {
+      // Override server URL to use relative path (for same-domain IIS requests)
+      if (request.url && request.url.startsWith('http://v2retail.net:9005')) {
+        request.url = request.url.replace('http://v2retail.net:9005', window.location.origin);
+      }
+      return request;
+    }
+  });
+};
+</script>
+</body>
+</html>
