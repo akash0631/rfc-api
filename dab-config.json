@@ -1599,6 +1599,25 @@
           ]
         }
       ]
+    },
+    "ET_ ZADVANCE_PAYMENT": {
+      "source": {
+        "object": "dbo.ET_ ZADVANCE_PAYMENT",
+        "type": "view",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ]
     }
   }
 }
