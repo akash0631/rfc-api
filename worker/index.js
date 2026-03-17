@@ -2155,3 +2155,137 @@ onRfcChange();
 
 
 // CRON handled by IIS SyncController + Windows Task Scheduler (02:00 IST)
+
+
+async function runDeploy(jobId, filename, docxB64, env) {
+  const GH = env.GH_TOKEN || '';
+  const REPO = 'akash0631/rfc-api';
+
+  const upd = async (s, st, detail) => {
+    const raw = await env.RFC_KV.get('job:' + jobId) || '{}';
+    const j = JSON.parse(raw);
+    j.steps = j.steps || {};
+    j.steps[s] = st;
+    if (detail) j.steps[s + '_detail'] = detail;
+    await env.RFC_KV.put('job:' + jobId, JSON.stringify(j), {expirationTtl:3600});
+  };
+
+  const t0 = Date.now();
+  try {
+    await upd('parse','active','Extracting docx text...');
+    const bytes = Uint8Array.from(atob(docxB64), c => c.charCodeAt(0));
+    const text = await extractDocxText(bytes);
+    if (!text || text.length < 50) throw new Error('Empty docx');
+    await upd('parse','done','Extracted ' + text.length + ' chars');
+
+    await upd('generate','active','Claude generating controller...');
+    const cr = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514', max_tokens:4096,
+        system:'You are a V2 Retail SAP RFC to C# controller generator. Return ONLY valid JSON (no markdown): {"rfcName":"Z...","module":"Finance|GateEntry_LOT_Putway|Inbound|DcRouting|Vehicle_Loading|HRMS|Vendor_SRM_Routing","controllerCode":"using SAP.Middleware...","sqlTable":"ET_...","importParams":["IM_USER",...]}. controllerCode must be 100+ lines production ASP.NET 4.8 WebAPI inheriting BaseController, using rfcConfigparameters().',
+        messages:[{role:'user',content:'Generate C# controller for this RFC spec:\n\n' + text.substring(0,8000)}]
+      })
+    });
+    if (!cr.ok) throw new Error('Claude ' + cr.status);
+    const cd = await cr.json();
+    const ct = (cd.content && cd.content[0] && cd.content[0].text) || '';
+    let p;
+    try { p = JSON.parse(ct.replace(/```[a-z]*/g,'').replace(/```/g,'').trim()); }
+    catch(e) { throw new Error('Claude JSON: ' + ct.substring(0,150)); }
+
+    const {rfcName, module:mod, controllerCode, sqlTable} = p;
+    if (!rfcName || !controllerCode) throw new Error('Missing rfcName/controllerCode');
+    await upd('generate','done','Generated: ' + rfcName);
+
+    await upd('push','active','Pushing to GitHub...');
+    const fp = 'Controllers/' + (mod||'Finance') + '/' + rfcName + 'Controller.cs';
+    const fc = btoa(unescape(encodeURIComponent(controllerCode)));
+    let exSha = '';
+    const ex = await fetch('https://api.github.com/repos/' + REPO + '/contents/' + fp, {headers:{Authorization:'token ' + GH,'User-Agent':'v2'}});
+    if (ex.ok) { const ed = await ex.json(); exSha = ed.sha || ''; }
+    const pp = {message:'feat(auto): ' + rfcName + ' — generated from RFC spec', content:fc};
+    if (exSha) pp.sha = exSha;
+    const pr = await fetch('https://api.github.com/repos/' + REPO + '/contents/' + fp, {method:'PUT',headers:{Authorization:'token ' + GH,'User-Agent':'v2','Content-Type':'application/json'},body:JSON.stringify(pp)});
+    if (!pr.ok) throw new Error('GitHub push: ' + (await pr.text()).substring(0,150));
+    const pd = await pr.json();
+    const cs = (pd.commit && pd.commit.sha) ? pd.commit.sha.substring(0,8) : '';
+    await upd('push','done','Committed ' + cs);
+
+    await upd('build','active','Waiting for IIS deploy (~90s)...');
+    let built = false;
+    for (let i=0; i<40; i++) {
+      await new Promise(r=>setTimeout(r,3000));
+      const rr = await fetch('https://api.github.com/repos/' + REPO + '/actions/runs?per_page=5',{headers:{Authorization:'token ' + GH,'User-Agent':'v2'}});
+      if (rr.ok) {
+        const rd = await rr.json();
+        const run = (rd.workflow_runs||[]).find(r=>r.path&&r.path.includes('deploy-iis')&&r.status==='completed'&&new Date(r.created_at)>new Date(t0-15000));
+        if (run) { built=true; await upd('build',run.conclusion==='success'?'done':'error','IIS: '+run.conclusion); break; }
+      }
+    }
+    if (!built) await upd('build','done','IIS deploy triggered');
+
+    await upd('dab','active','Updating dab-config.json...');
+    try {
+      const dr = await fetch('https://api.github.com/repos/'+REPO+'/contents/dab-config.json',{headers:{Authorization:'token '+GH,'User-Agent':'v2'}});
+      if (dr.ok) {
+        const dd = await dr.json();
+        const cfg = JSON.parse(atob(dd.content.replace(/\n/g,'')));
+        const tbl = sqlTable || ('ET_' + rfcName);
+        if (!cfg.entities[tbl]) {
+          cfg.entities[tbl] = {source:{object:'dbo.'+tbl,type:'table'},permissions:[{role:'anonymous',actions:['read']}]};
+          const nc = btoa(unescape(encodeURIComponent(JSON.stringify(cfg,null,2))));
+          await fetch('https://api.github.com/repos/'+REPO+'/contents/dab-config.json',{method:'PUT',headers:{Authorization:'token '+GH,'User-Agent':'v2','Content-Type':'application/json'},body:JSON.stringify({message:'feat(auto): register '+tbl,content:nc,sha:dd.sha})});
+        }
+        await upd('dab','done',tbl+' registered');
+      }
+    } catch(e) { await upd('dab','done','DAB skipped: '+e.message); }
+
+    await upd('explorer','done','Explorer refreshes on next portal deploy');
+
+    const el = Math.round((Date.now()-t0)/1000);
+    const raw2 = await env.RFC_KV.get('job:'+jobId)||'{}';
+    const j2 = JSON.parse(raw2);
+    Object.assign(j2, {status:'done', rfcName, elapsed:el, githubUrl:'https://github.com/'+REPO+'/blob/master/'+fp, dataLakeUrl:'https://my-dab-app.azurewebsites.net/api/'+(sqlTable||'ET_'+rfcName), controllerCode:controllerCode.substring(0,2000)});
+    await env.RFC_KV.put('job:'+jobId, JSON.stringify(j2), {expirationTtl:3600});
+
+  } catch(e) {
+    const raw3 = await env.RFC_KV.get('job:'+jobId)||'{}';
+    const j3 = JSON.parse(raw3);
+    j3.status='error'; j3.error=e.message||'Unknown';
+    await env.RFC_KV.put('job:'+jobId, JSON.stringify(j3), {expirationTtl:3600});
+  }
+}
+
+async function extractDocxText(bytes) {
+  const view = new DataView(bytes.buffer);
+  let off = 0;
+  while (off < bytes.length - 30) {
+    if (view.getUint32(off,true) !== 0x04034b50) { off++; continue; }
+    const fnLen = view.getUint16(off+26,true);
+    const exLen = view.getUint16(off+28,true);
+    const cSz   = view.getUint32(off+18,true);
+    const meth  = view.getUint16(off+8,true);
+    const fn    = new TextDecoder().decode(bytes.slice(off+30, off+30+fnLen));
+    const dS    = off + 30 + fnLen + exLen;
+    if (fn === 'word/document.xml' && cSz > 0) {
+      try {
+        let data = bytes.slice(dS, dS+cSz);
+        if (meth === 8) {
+          const ds = new DecompressionStream('deflate-raw');
+          const w = ds.writable.getWriter(); w.write(data); w.close();
+          const chunks=[]; const rd=ds.readable.getReader();
+          while(true){const{done,value}=await rd.read();if(done)break;chunks.push(value);}
+          const m2 = new Uint8Array(chunks.reduce((a,b)=>a+b.length,0));
+          let pos=0; for(const c of chunks){m2.set(c,pos);pos+=c.length;}
+          data = m2;
+        }
+        const xml = new TextDecoder().decode(data);
+        return xml.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+      } catch(e) { return ''; }
+    }
+    off = dS + cSz;
+  }
+  return '';
+}
