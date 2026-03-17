@@ -145,30 +145,27 @@ jobs:
           if (-not (Test-Path "C:\RfcApp\bin")) { New-Item -ItemType Directory "C:\RfcApp\bin" -Force | Out-Null }
           & icacls "C:\RfcApp\bin" /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
 
-          # --- Step 4: Wait for destination DLL to be releasable, then delete it ---
+          # --- Step 4: Wait for destination DLL to be releasable, then delete/rename it ---
           if (Test-Path $destDll) {
-            Write-Host "Waiting for destination DLL to be releasable..."
+            Write-Host "Taking ownership and fixing permissions on destination DLL..."
             & takeown /F $destDll /A 2>&1 | Out-Null
             & icacls $destDll /grant "Administrators:F" /C /Q 2>&1 | Out-Null
             & attrib -R -S $destDll 2>&1 | Out-Null
-            $destRemoved = $false
-            for ($i = 0; $i -lt 30; $i++) {
-              try {
-                [System.IO.File]::Delete($destDll)
-                Write-Host "Destination DLL removed after $($i * 2)s"
-                $destRemoved = $true
-                break
-              } catch {
-                if ($i -eq 0) { Write-Host "Destination DLL locked, waiting up to 60s..." }
-                Start-Sleep -Seconds 2
-              }
-            }
-            if (-not $destRemoved) {
-              Write-Host "WARNING: Could not delete destination DLL - will attempt overwrite"
+            
+            # Try to move/rename the old DLL out of the way (rename works even on locked files)
+            $oldDll = "C:\RfcApp\bin\Vendor_SRM_Routing_Application.old.dll"
+            if (Test-Path $oldDll) { Remove-Item $oldDll -Force -ErrorAction SilentlyContinue }
+            try {
+              [System.IO.File]::Move($destDll, $oldDll)
+              Write-Host "Renamed existing DLL to .old"
+            } catch {
+              Write-Host "Could not rename existing DLL: $_"
+              # Try cmd ren as alternative
+              cmd /c "ren `"$destDll`" Vendor_SRM_Routing_Application.old.dll" 2>&1 | Write-Host
             }
           }
 
-          # --- Step 5: Copy captured temp DLL to destination ---
+          # --- Step 5: Copy temp DLL to destination ---
           Write-Host "Copying temp DLL to C:\RfcApp\bin..."
           cmd /c "copy /Y `"$tempDll`" `"$destDll`"" 2>&1 | Write-Host
           if (-not (Test-Path $destDll)) {
@@ -177,6 +174,8 @@ jobs:
           }
           Write-Host "DLL deployed to C:\RfcApp\bin successfully"
           Remove-Item $tempDll -Force -ErrorAction SilentlyContinue
+          # Clean up leftover .old file (may still be locked, so ignore errors)
+          Remove-Item "C:\RfcApp\bin\Vendor_SRM_Routing_Application.old.dll" -Force -ErrorAction SilentlyContinue
           Copy-Item "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\" -Force -ErrorAction SilentlyContinue
           
           # First-time setup: copy all dependencies if not already present
