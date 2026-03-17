@@ -16,72 +16,64 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     public class ZAdvancePaymentRfcController : BaseController
     {
         [HttpPost]
-        public async Task<IHttpActionResult> ExecuteRfc(ZAdvancePaymentRequest request)
+        public async Task<IHttpActionResult> GetAdvancePayment([FromBody] ZAdvancePaymentRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return BadRequest("Request cannot be null");
+                    return Json(new
+                    {
+                        Status = "Error",
+                        Message = "Request body cannot be null",
+                        Data = (object)null
+                    });
                 }
 
-                if (string.IsNullOrEmpty(request.I_COMPANY_CODE))
+                if (string.IsNullOrWhiteSpace(request.I_COMPANY_CODE))
                 {
-                    return BadRequest("I_COMPANY_CODE is required");
+                    return Json(new
+                    {
+                        Status = "Error",
+                        Message = "Company Code (I_COMPANY_CODE) is required",
+                        Data = (object)null
+                    });
                 }
 
-                if (string.IsNullOrEmpty(request.I_POSTING_DATE_LOW))
+                if (string.IsNullOrWhiteSpace(request.I_POSTING_DATE_LOW))
                 {
-                    return BadRequest("I_POSTING_DATE_LOW is required");
+                    return Json(new
+                    {
+                        Status = "Error",
+                        Message = "Posting Date Low (I_POSTING_DATE_LOW) is required",
+                        Data = (object)null
+                    });
                 }
 
-                if (string.IsNullOrEmpty(request.I_POSTING_DATE_HIGH))
+                if (string.IsNullOrWhiteSpace(request.I_POSTING_DATE_HIGH))
                 {
-                    return BadRequest("I_POSTING_DATE_HIGH is required");
+                    return Json(new
+                    {
+                        Status = "Error",
+                        Message = "Posting Date High (I_POSTING_DATE_HIGH) is required",
+                        Data = (object)null
+                    });
                 }
 
-                var rfcResult = await ExecuteSapRfc(request);
-                
-                if (rfcResult.Status == "SUCCESS")
-                {
-                    return Ok(rfcResult);
-                }
-                else
-                {
-                    return Content(HttpStatusCode.InternalServerError, rfcResult);
-                }
-            }
-            catch (Exception ex)
-            {
-                return Content(HttpStatusCode.InternalServerError, new
-                {
-                    Status = "ERROR",
-                    Message = ex.Message,
-                    Data = (object)null
-                });
-            }
-        }
+                var rfcFunction = BaseController.rfcConfigparameters().CreateFunction("ZADVANCE_PAYMENT_RFC");
 
-        private async Task<dynamic> ExecuteSapRfc(ZAdvancePaymentRequest request)
-        {
-            try
-            {
-                var parameters = rfcConfigparameters();
-                IRfcFunction function = parameters.Repository.CreateFunction("ZADVANCE_PAYMENT_RFC");
+                rfcFunction.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
+                rfcFunction.SetValue("I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW);
+                rfcFunction.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
 
-                function.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
-                function.SetValue("I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW);
-                function.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
+                rfcFunction.Invoke(BaseController.rfcConfigparameters());
 
-                function.Invoke(parameters.Destination);
-
-                IRfcTable itCreditTable = function.GetTable("IT_CREDIT");
-                List<dynamic> creditData = new List<dynamic>();
+                var itCreditTable = rfcFunction.GetTable("IT_CREDIT");
+                var creditData = new List<dynamic>();
 
                 for (int i = 0; i < itCreditTable.RowCount; i++)
                 {
                     itCreditTable.CurrentIndex = i;
-                    
                     var creditItem = new
                     {
                         DOCUMENT_TYPE = itCreditTable.GetString("DOCUMENT_TYPE"),
@@ -101,102 +93,52 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                         PAYMENT_AMT = itCreditTable.GetDecimal("PAYMENT_AMT"),
                         POSTING_DATE = itCreditTable.GetString("POSTING_DATE")
                     };
-                    
                     creditData.Add(creditItem);
                 }
 
-                return new
+                return Json(new
                 {
-                    Status = "SUCCESS",
-                    Message = "RFC executed successfully",
+                    Status = "Success",
+                    Message = "Advance payment data retrieved successfully",
                     Data = new
                     {
                         IT_CREDIT = creditData
                     }
-                };
+                });
             }
-            catch (RfcCommunicationException ex)
+            catch (RfcCommunicationException rfcCommEx)
             {
-                return new
+                return Json(new
                 {
-                    Status = "ERROR",
-                    Message = $"RFC Communication Error: {ex.Message}",
+                    Status = "Error",
+                    Message = $"RFC Communication Error: {rfcCommEx.Message}",
                     Data = (object)null
-                };
+                });
             }
-            catch (RfcLogonException ex)
+            catch (RfcLogonException rfcLogonEx)
             {
-                return new
+                return Json(new
                 {
-                    Status = "ERROR",
-                    Message = $"RFC Logon Error: {ex.Message}",
+                    Status = "Error",
+                    Message = $"RFC Logon Error: {rfcLogonEx.Message}",
                     Data = (object)null
-                };
+                });
             }
-            catch (RfcAbapRuntimeException ex)
+            catch (RfcAbapRuntimeException rfcRuntimeEx)
             {
-                return new
+                return Json(new
                 {
-                    Status = "ERROR",
-                    Message = $"ABAP Runtime Error: {ex.Message}",
+                    Status = "Error",
+                    Message = $"RFC Runtime Error: {rfcRuntimeEx.Message}",
                     Data = (object)null
-                };
-            }
-            catch (Exception ex)
-            {
-                return new
-                {
-                    Status = "ERROR",
-                    Message = $"Unexpected error: {ex.Message}",
-                    Data = (object)null
-                };
-            }
-        }
-
-        [HttpGet]
-        public IHttpActionResult GetRfcMetadata()
-        {
-            try
-            {
-                var metadata = new
-                {
-                    RfcName = "ZADVANCE_PAYMENT_RFC",
-                    Description = "SAP RFC controller for advance payment processing",
-                    ImportParameters = new[]
-                    {
-                        new { Name = "I_COMPANY_CODE", Type = "String", Required = true },
-                        new { Name = "I_POSTING_DATE_LOW", Type = "String", Required = true },
-                        new { Name = "I_POSTING_DATE_HIGH", Type = "String", Required = true }
-                    },
-                    ExportTables = new[]
-                    {
-                        new
-                        {
-                            Name = "IT_CREDIT",
-                            Fields = new[]
-                            {
-                                "DOCUMENT_TYPE", "COMPANY_CODE", "DOCUMENT_NUMBER", "FISCAL_YEAR",
-                                "LINE_ITEM", "POSTING_KEY", "ACCOUNT_TYPE", "SPECIAL_G_L_IND",
-                                "TRANSACT_TYPE", "DEBIT_CREDIT", "AMOUNT_IN_LC", "AMOUNT",
-                                "TEXT", "VENDOR", "PAYMENT_AMT", "POSTING_DATE"
-                            }
-                        }
-                    }
-                };
-
-                return Ok(new
-                {
-                    Status = "SUCCESS",
-                    Message = "Metadata retrieved successfully",
-                    Data = metadata
                 });
             }
             catch (Exception ex)
             {
-                return Content(HttpStatusCode.InternalServerError, new
+                return Json(new
                 {
-                    Status = "ERROR",
-                    Message = ex.Message,
+                    Status = "Error",
+                    Message = $"Unexpected error occurred: {ex.Message}",
                     Data = (object)null
                 });
             }
