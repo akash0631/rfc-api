@@ -53,8 +53,8 @@ jobs:
       - name: Copy to IIS
         shell: cmd
         run: |
-          if not exist "C:\inetpub\wwwroot\Store Tracker\bin\" mkdir "C:\inetpub\wwwroot\Store Tracker\bin\"
-          robocopy bin\Release\ "C:\inetpub\wwwroot\Store Tracker\bin\" *.dll *.pdb /XO /NJH /NJS
+          if not exist "C:\inetpub\wwwroot\Store Tracker\bin" mkdir "C:\inetpub\wwwroot\Store Tracker\bin"
+          robocopy bin\Release "C:\inetpub\wwwroot\Store Tracker\bin" *.dll *.pdb /XO /NJH /NJS
           if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
           copy /Y Web.config "C:\inetpub\wwwroot\Store Tracker\Web.config"
           if exist Global.asax copy /Y Global.asax "C:\inetpub\wwwroot\Store Tracker\Global.asax"
