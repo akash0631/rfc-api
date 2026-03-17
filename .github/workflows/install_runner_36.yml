@@ -5,57 +5,25 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Diagnose .36 and write results
-        shell: powershell
-        run: |
-          net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no 2>$null
-          $out = @()
-
-          # App pool state
-          $ap = & "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list apppool /name:V2RfcApiPool 2>&1
-          $out += "APPPOOL: $ap"
-
-          # Site state
-          $st = & "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list site /name:V2RfcApi 2>&1
-          $out += "SITE: $st"
-
-          # DLLs
-          $dlls = (Get-ChildItem "\\192.168.151.36\C$\V2RfcApi\bin" -Filter "*.dll" -EA SilentlyContinue).Count
-          $out += "V2RfcApi bin DLLs: $dlls"
-          $vendor = Get-ChildItem "\\192.168.151.36\C$\V2RfcApi\bin" -Filter "Vendor*.dll" -EA SilentlyContinue
-          $out += "Vendor DLLs: $($vendor.Name -join ', ')"
-          $out += "Web.config: $(Test-Path '\\192.168.151.36\C$\V2RfcApi\Web.config')"
-
-          # RfcApp (existing)
-          $rfcDlls = (Get-ChildItem "\\192.168.151.36\C$\RfcApp" -Filter "*.dll" -EA SilentlyContinue).Count
-          $out += "RfcApp root DLLs: $rfcDlls"
-          $rfcBinDlls = (Get-ChildItem "\\192.168.151.36\C$\RfcApp\bin" -Filter "*.dll" -EA SilentlyContinue).Count
-          $out += "RfcApp bin DLLs: $rfcBinDlls"
-
-          # sapnco
-          $out += "sapnco.dll: $(Test-Path '\\192.168.151.36\C$\Windows\System32\sapnco.dll')"
-          $out += "sapnco_utils.dll: $(Test-Path '\\192.168.151.36\C$\Windows\System32\sapnco_utils.dll')"
-
-          # Test :8888 existing site (DO NOT BREAK)
-          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          try {
-            $r8 = Invoke-WebRequest "http://192.168.151.36:8888/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
-            $out += "8888_EXECUTE: HTTP $($r8.StatusCode) $($r8.Content)"
-          } catch { $out += "8888_EXECUTE_ERR: $($_.Exception.Message)" }
-
-          # Test :9191 new site
-          try {
-            $r9 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
-            $out += "9191_EXECUTE: HTTP $($r9.StatusCode) $($r9.Content)"
-          } catch { $out += "9191_EXECUTE_ERR: $($_.Exception.Message)" }
-
-          $out | ForEach-Object { Write-Host $_ }
-          $out | Set-Content "\\192.168.151.36\C$\diag_result.txt"
-          net use "\\192.168.151.36\C$" /delete /y 2>$null
-
-      - name: Print results
+      - name: Find all DLLs and app locations on .36
         shell: cmd
         run: |
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          type \\192.168.151.36\C$\diag_result.txt
+          echo NET_USE: %ERRORLEVEL%
+
+          echo === Find Vendor*.dll anywhere on .36 C drive ===
+          dir \\192.168.151.36\C$\Vendor*.dll /S /B 2>nul
+          
+          echo === Find sapnco.dll anywhere on .36 ===
+          dir \\192.168.151.36\C$\sapnco.dll /S /B 2>nul
+
+          echo === All dirs under C:\ root of .36 ===
+          dir \\192.168.151.36\C$\ /B 2>nul
+
+          echo === inetpub wwwroot contents ===
+          dir \\192.168.151.36\C$\inetpub\wwwroot /B 2>nul
+
+          echo === Actions runner work folder ===
+          dir \\192.168.151.36\C$\actions-runner\_work 2>nul /B 2>nul
+
           net use \\192.168.151.36\C$ /delete /y 2>nul
