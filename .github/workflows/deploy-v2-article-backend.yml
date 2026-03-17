@@ -25,12 +25,19 @@ jobs:
           npx prisma generate
           npx tsc --skipLibCheck
           npm run postbuild
+          # Prune to production deps only before packaging
+          npm prune --production
+          echo "node_modules size: $(du -sh node_modules/)"
           echo "dist/ size: $(du -sh dist/)"
 
-      - name: Package
+      - name: Package (include node_modules)
         working-directory: Backend
         run: |
-          zip -r /tmp/backend-deploy.zip dist/ prisma/schema.prisma package.json package-lock.json
+          zip -r /tmp/backend-deploy.zip \
+            dist/ \
+            node_modules/ \
+            prisma/schema.prisma \
+            package.json
           echo "Package size: $(du -sh /tmp/backend-deploy.zip)"
 
       - name: Login to Azure
@@ -68,7 +75,7 @@ jobs:
               OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
           echo "✅ App settings applied"
 
-      - name: Deploy zip to Azure
+      - name: Deploy zip (async)
         run: |
           az webapp deploy \
             --name v2-article-backend \
@@ -77,20 +84,17 @@ jobs:
             --type zip \
             --async true \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          echo "✅ ZIP uploaded (async)"
+          echo "✅ ZIP uploaded"
 
-      - name: Restart app
+      - name: Restart & health check
         run: |
           az webapp restart \
             --name v2-article-backend \
             --resource-group dab-rg \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          echo "Waiting 45s..."
+          echo "Waiting 45s for startup..."
           sleep 45
-
-      - name: Health check
-        run: |
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://v2-article-backend.azurewebsites.net/api/health)
           BODY=$(curl -s https://v2-article-backend.azurewebsites.net/api/health)
           echo "HTTP $HTTP: $BODY"
-          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE" || echo "⚠️ Not yet healthy"
+          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE" || echo "⚠️ Check logs"
