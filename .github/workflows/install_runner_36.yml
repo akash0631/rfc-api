@@ -5,40 +5,57 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Diagnose .36:9191 — event log + app pool + direct test
+      - name: Diagnose .36 and write results
+        shell: powershell
+        run: |
+          net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no 2>$null
+          $out = @()
+
+          # App pool state
+          $ap = & "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list apppool /name:V2RfcApiPool 2>&1
+          $out += "APPPOOL: $ap"
+
+          # Site state
+          $st = & "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list site /name:V2RfcApi 2>&1
+          $out += "SITE: $st"
+
+          # DLLs
+          $dlls = (Get-ChildItem "\\192.168.151.36\C$\V2RfcApi\bin" -Filter "*.dll" -EA SilentlyContinue).Count
+          $out += "V2RfcApi bin DLLs: $dlls"
+          $vendor = Get-ChildItem "\\192.168.151.36\C$\V2RfcApi\bin" -Filter "Vendor*.dll" -EA SilentlyContinue
+          $out += "Vendor DLLs: $($vendor.Name -join ', ')"
+          $out += "Web.config: $(Test-Path '\\192.168.151.36\C$\V2RfcApi\Web.config')"
+
+          # RfcApp (existing)
+          $rfcDlls = (Get-ChildItem "\\192.168.151.36\C$\RfcApp" -Filter "*.dll" -EA SilentlyContinue).Count
+          $out += "RfcApp root DLLs: $rfcDlls"
+          $rfcBinDlls = (Get-ChildItem "\\192.168.151.36\C$\RfcApp\bin" -Filter "*.dll" -EA SilentlyContinue).Count
+          $out += "RfcApp bin DLLs: $rfcBinDlls"
+
+          # sapnco
+          $out += "sapnco.dll: $(Test-Path '\\192.168.151.36\C$\Windows\System32\sapnco.dll')"
+          $out += "sapnco_utils.dll: $(Test-Path '\\192.168.151.36\C$\Windows\System32\sapnco_utils.dll')"
+
+          # Test :8888 existing site (DO NOT BREAK)
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          try {
+            $r8 = Invoke-WebRequest "http://192.168.151.36:8888/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            $out += "8888_EXECUTE: HTTP $($r8.StatusCode) $($r8.Content)"
+          } catch { $out += "8888_EXECUTE_ERR: $($_.Exception.Message)" }
+
+          # Test :9191 new site
+          try {
+            $r9 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            $out += "9191_EXECUTE: HTTP $($r9.StatusCode) $($r9.Content)"
+          } catch { $out += "9191_EXECUTE_ERR: $($_.Exception.Message)" }
+
+          $out | ForEach-Object { Write-Host $_ }
+          $out | Set-Content "\\192.168.151.36\C$\diag_result.txt"
+          net use "\\192.168.151.36\C$" /delete /y 2>$null
+
+      - name: Print results
         shell: cmd
         run: |
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          echo NET_USE: %ERRORLEVEL%
-
-          echo === App pool state ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list apppools /name:V2RfcApiPool
-
-          echo === V2RfcApi site state ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list sites /name:V2RfcApi
-
-          echo === DLLs in C:\V2RfcApi ===
-          dir \\192.168.151.36\C$\V2RfcApi\*.dll /B 2>nul | find /c ".dll"
-          dir \\192.168.151.36\C$\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
-          dir \\192.168.151.36\C$\V2RfcApi\bin\Vendor*.dll /B 2>nul
-          dir \\192.168.151.36\C$\V2RfcApi\bin\sap*.dll /B 2>nul
-          dir \\192.168.151.36\C$\V2RfcApi\Web.config 2>nul
-
-          echo === sapnco on .36 System32 ===
-          dir \\192.168.151.36\C$\Windows\System32\sapnco.dll 2>nul
-          dir \\192.168.151.36\C$\Windows\System32\sapnco_utils.dll 2>nul
-
-          echo === RfcApp bin (existing working app) DLL count ===
-          dir \\192.168.151.36\C$\RfcApp\*.dll /B 2>nul | find /c ".dll"
-          dir \\192.168.151.36\C$\RfcApp\Vendor*.dll /B 2>nul
-          dir \\192.168.151.36\C$\RfcApp\Web.config 2>nul
-          dir \\192.168.151.36\C$\RfcApp\Global.asax 2>nul
-
-          echo === Test RfcApiApp on :8888 (existing working site) ===
-          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://192.168.151.36:8888/' -UseBasicParsing -TimeoutSec 8;Write-Host 'ROOT8888:' $r.StatusCode}catch{Write-Host 'ROOT8888_ERR:' $_.Exception.Message}"
-          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://192.168.151.36:8888/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 20;Write-Host 'EXEC8888:' $r.StatusCode $r.Content}catch{Write-Host 'EXEC8888_ERR:' $_.Exception.Message}"
-
-          echo === Windows Event Log — last 5 app errors on .36 ===
-          powershell -NoProfile -Command "Get-WinEvent -ComputerName 192.168.151.36 -Credential (New-Object PSCredential('Administrator',(ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force))) -FilterHashtable @{LogName='Application';Level=2;StartTime=(Get-Date).AddHours(-2)} -MaxEvents 5 -EA SilentlyContinue | Select TimeCreated,ProviderName,Message | ForEach-Object { Write-Host $_.TimeCreated $_.ProviderName ($_.Message.Substring(0,[Math]::Min(200,$_.Message.Length))) }"
-
+          type \\192.168.151.36\C$\diag_result.txt
           net use \\192.168.151.36\C$ /delete /y 2>nul
