@@ -1,5 +1,7 @@
-name: Fix .46 — deploy app + wire pipeline
+name: Fix .46 IIS — FINAL
+# 070638
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.github/workflows/fix_46_final.yml'
@@ -7,42 +9,99 @@ jobs:
   fix:
     runs-on: [self-hosted, test-vm]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Probe IIS on all servers and write results
+      - name: Full diagnostic + fix in one shot
         shell: powershell
         run: |
-          $results = @()
-          $endpoints = @(
-            "http://192.168.151.36:80/api/ZAdvancePaymentRfc/Health",
-            "http://192.168.151.36:8888/api/ZAdvancePaymentRfc/Health",
-            "http://192.168.151.24:80/api/ZAdvancePaymentRfc/Health",
-            "http://192.168.151.24:8888/api/ZAdvancePaymentRfc/Health",
-            "http://127.0.0.1:80/api/ZAdvancePaymentRfc/Health",
-            "http://127.0.0.1:8888/api/ZAdvancePaymentRfc/Health"
+          Write-Host "=== MACHINE ===" ; hostname
+          
+          # 1. What's in C:\RfcApp right now
+          Write-Host "=== C:\RfcApp ===" 
+          $dllCount = (Get-ChildItem C:\RfcApp -Filter "*.dll" -ErrorAction SilentlyContinue).Count
+          Write-Host "DLLs in C:\RfcApp: $dllCount"
+          
+          # 2. What's in the actions-runner work dir (from previous build runs)
+          $workDirs = @(
+            "C:\actions-runner\_work\rfc-api\rfc-api\bin\Release",
+            "C:\actions-runner\_work\rfc-api\rfc-api\bin\Debug"
           )
-          foreach ($ep in $endpoints) {
-            try {
-              $r = Invoke-WebRequest $ep -UseBasicParsing -TimeoutSec 8
-              $results += "$ep -> OK $($r.StatusCode) $($r.Content.Substring(0,50))"
-            } catch {
-              $results += "$ep -> ERR $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))"
+          foreach ($d in $workDirs) {
+            if (Test-Path $d) {
+              $c = (Get-ChildItem $d -Filter "*.dll" -ErrorAction SilentlyContinue).Count
+              Write-Host "Found build output at $d — $c DLLs"
             }
           }
-          $out = $results -join "`n"
-          Write-Host $out
-          Set-Content "probe_results.txt" $out
+          
+          # 3. If C:\RfcApp is empty, copy from work dir
+          if ($dllCount -eq 0) {
+            $src = "C:\actions-runner\_work\rfc-api\rfc-api\bin\Release"
+            if (Test-Path $src) {
+              Write-Host "Copying from $src to C:\RfcApp"
+              if (-not (Test-Path C:\RfcApp)) { New-Item -ItemType Directory C:\RfcApp -Force | Out-Null }
+              Copy-Item "$src\*" C:\RfcApp -Recurse -Force
+              $after = (Get-ChildItem C:\RfcApp -Filter "*.dll" -ErrorAction SilentlyContinue).Count
+              Write-Host "After copy: $after DLLs in C:\RfcApp"
+            } else {
+              Write-Host "No build output found — attempting build"
+            }
+          }
 
-      - name: Push results to GitHub
-        shell: powershell
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $content = Get-Content "probe_results.txt" -Raw
-          $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
-          $h = @{Authorization="token $env:GH_TOKEN";"User-Agent"="v2";"Content-Type"="application/json"}
-          $ex = try { (Invoke-WebRequest "https://api.github.com/repos/akash0631/rfc-api/contents/probe_results.txt" -Headers $h -UseBasicParsing).Content | ConvertFrom-Json } catch { $null }
-          $body = @{message="probe results";content=$b64}
-          if ($ex.sha) { $body.sha = $ex.sha }
-          Invoke-WebRequest "https://api.github.com/repos/akash0631/rfc-api/contents/probe_results.txt" -Method PUT -Headers $h -Body ($body|ConvertTo-Json) -UseBasicParsing | Out-Null
-          Write-Host "Results pushed"
+          # 4. Mount .36 and copy bin (fallback)
+          if ((Get-ChildItem C:\RfcApp -Filter "*.dll" -ErrorAction SilentlyContinue).Count -eq 0) {
+            Write-Host "=== Mounting .36 and copying compiled app ==="
+            net use "\\192.168.151.36\C$" vrl@55555 /user:Administrator /persistent:no
+            $src36 = "\\192.168.151.36\C$\actions-runner\_work\rfc-api\rfc-api\bin\Release"
+            if (Test-Path $src36) {
+              Copy-Item "$src36\*" C:\RfcApp -Recurse -Force
+              Write-Host "Copied from .36: $((Get-ChildItem C:\RfcApp -Filter '*.dll').Count) DLLs"
+            } else {
+              Write-Host ".36 src not found either — showing .36 runner dirs:"
+              Get-ChildItem "\\192.168.151.36\C$\actions-runner\_work\rfc-api\rfc-api" -ErrorAction SilentlyContinue | Select Name | Format-Table
+            }
+            net use "\\192.168.151.36\C$" /delete /y 2>$null
+          }
+          
+          # 5. Copy Web.config if missing
+          if (-not (Test-Path C:\RfcApp\Web.config)) {
+            $wc = "C:\actions-runner\_work\rfc-api\rfc-api\Web.config"
+            if (Test-Path $wc) { Copy-Item $wc C:\RfcApp\ -Force; Write-Host "Web.config copied" }
+          }
+          
+          Write-Host "=== Final C:\RfcApp contents ==="
+          Get-ChildItem C:\RfcApp | Where-Object {$_.Name -like "Vendor*" -or $_.Name -like "*sap*" -or $_.Name -like "Web*"} | Select Name, Length | Format-Table
+          Write-Host "Total DLLs: $((Get-ChildItem C:\RfcApp -Filter '*.dll' -ErrorAction SilentlyContinue).Count)"
+          
+          # 6. Set IIS app pool to .NET 4.0 and start site
+          Import-Module WebAdministration
+          Set-ItemProperty "IIS:\AppPools\RfcApiPool" -Name managedRuntimeVersion -Value "v4.0" -ErrorAction SilentlyContinue
+          Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
+          Start-Sleep 5
+          Write-Host "RfcApiApp state: $((Get-Website 'RfcApiApp').State)"
+          
+          # 7. Fix appsettings — point to localhost:8888
+          $cfg = "C:\RfcCollector\appsettings.json"
+          $json = Get-Content $cfg | ConvertFrom-Json
+          $json.IIS_HOST = "127.0.0.1"
+          $json.IIS_PORT = "8888"
+          $json | ConvertTo-Json -Depth 10 | Set-Content $cfg
+          Write-Host "Config: IIS_HOST=$($json.IIS_HOST) IIS_PORT=$($json.IIS_PORT)"
+          
+          # 8. Restart RFC Collector
+          Restart-Service RfcCollector -Force
+          Start-Sleep 12
+          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
+          
+          # 9. Test IIS directly
+          Write-Host "=== IIS :8888 health test ==="
+          try {
+            $h = Invoke-WebRequest "http://localhost:8888/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 15
+            Write-Host "IIS Health: HTTP $($h.StatusCode) — $($h.Content)"
+          } catch { Write-Host "IIS Health: $($_.Exception.Message)" }
+          
+          # 10. Full end-to-end: RFC Collector -> IIS -> SAP
+          Write-Host "=== End-to-end fetch test ==="
+          $body = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":3}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "FETCH: HTTP $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(1500,$r.Content.Length)))
+          } catch { Write-Host "FETCH ERROR: $($_.Exception.Message)" }
