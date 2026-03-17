@@ -45,16 +45,14 @@ jobs:
             }
             if (-not $copied) {
               # Write minimal stub targets file
-              @'
-<?xml version="1.0" encoding="utf-8"?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup>
-    <WebPublishMethod Condition="'$(WebPublishMethod)'==''">FileSystem</WebPublishMethod>
-  </PropertyGroup>
-  <Target Name="WebPublish" />
-  <Target Name="Package" />
-</Project>
-'@ | Set-Content $targetsFile
+              @("<?xml version=""1.0"" encoding=""utf-8""?>",
+              "<Project xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">",
+              "  <PropertyGroup>",
+              "    <WebPublishMethod Condition=""'`$(WebPublishMethod)'=='''>FileSystem</WebPublishMethod>",
+              "  </PropertyGroup>",
+              "  <Target Name=""WebPublish"" />",
+              "  <Target Name=""Package"" />",
+              "</Project>") -join [System.Environment]::NewLine | Set-Content $targetsFile
               Write-Host "Stub targets written to $targetsFile"
             }
           } else {
