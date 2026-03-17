@@ -109,11 +109,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
             }
         }
 
-        private async Task<object> ExecuteRfcCall(AdvancePaymentRequest request)
+        private async Task<dynamic> ExecuteRfcCall(AdvancePaymentRequest request)
         {
             try
             {
-                var rfcConfigParameters = base.rfcConfigparameters();
+                var rfcConfigParameters = BaseController.rfcConfigparameters();
                 
                 if (rfcConfigParameters == null)
                 {
