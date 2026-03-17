@@ -48,22 +48,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
                 if (tbl != null)
                 {
-                    resultData = tbl.AsEnumerable().Select(row =>
+                    for (int i = 0; i < tbl.RowCount; i++)
                     {
+                        tbl.CurrentIndex = i;
                         var rowDict = new Dictionary<string, object>();
-                        var metadata = row.GetMetadata();
-                        
-                        for (int i = 0; i < metadata.FieldCount; i++)
+                        var metadata = tbl.Metadata.LineType;
+                        for (int j = 0; j < metadata.FieldCount; j++)
                         {
-                            var field = metadata[i];
+                            var field = metadata[j];
                             if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                             {
-                                rowDict[field.Name] = row.GetValue(field.Name);
+                                rowDict[field.Name] = tbl.GetString(field.Name);
                             }
                         }
-                        
-                        return rowDict;
-                    }).ToList();
+                        resultData.Add(rowDict);
+                    }
                 }
 
                 return Ok(new

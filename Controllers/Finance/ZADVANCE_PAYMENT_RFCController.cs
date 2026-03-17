@@ -60,13 +60,16 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     });
                 }
 
-                var rfcFunction = BaseController.rfcConfigparameters().CreateFunction("ZADVANCE_PAYMENT_RFC");
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction rfcFunction = rfcrep.CreateFunction("ZADVANCE_PAYMENT_RFC");
 
                 rfcFunction.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
                 rfcFunction.SetValue("I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW);
                 rfcFunction.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
 
-                rfcFunction.Invoke(BaseController.rfcConfigparameters());
+                rfcFunction.Invoke(dest);
 
                 var itCreditTable = rfcFunction.GetTable("IT_CREDIT");
                 var creditData = new List<dynamic>();

@@ -39,7 +39,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     });
                 }
 
-                RfcDestination destination = RfcDestinationManager.GetDestination(rfcConfigparameters("192.168.144.174", "210"));
+                RfcDestination destination = RfcDestinationManager.GetDestination(BaseController.rfcConfigparameters());
                 RfcRepository repository = destination.Repository;
                 IRfcFunction function = repository.CreateFunction("ZFINANCE_DOCUMENT_RFC");
 
