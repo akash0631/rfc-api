@@ -493,6 +493,35 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     FilePath = "Controllers/PaperlessPicklist/GetPicklistDataController.cs"
                 },
                 // ── Vehicle Loading ────────────────────────────────────────────
+                                // -- PO Update (Cost & Quantity) -----------------------------------
+                new RfcEndpoint
+                {
+                    Name = "ZPO_COST_UPD_RFC", Route = "api/ZPO_COST_UPD_RFC",
+                    Group = "Finance", SapRfc = "ZPO_COST_UPD_RFC",
+                    Description = "Update PO cost in SAP for one or more PO line items. Pass IM_DATA table with EBELN, MATNR, PO_ITEM, COST.",
+                    Parameters = new List<RfcParam>
+                    {
+                        new RfcParam { Name="IM_DATA", SapType="ZTT_PO_IMP",
+                            Description="Table rows: EBELN(CHAR10) PO number, MATNR(CHAR40) Material, PO_ITEM(NUMC5) Item no, COST(CHAR13) New cost",
+                            IsTable=true }
+                    },
+                    ResponseTables = new List<string> { "MSG_TYPE (CHAR1)", "MESSAGE (CHAR100)" },
+                    FilePath = "Controllers/Finance/ZPO_COST_UPD_RFCController.cs"
+                },
+                new RfcEndpoint
+                {
+                    Name = "ZPO_QTY_UPD_RFC", Route = "api/ZPO_QTY_UPD_RFC",
+                    Group = "Finance", SapRfc = "ZPO_QTY_UPD_RFC",
+                    Description = "Update PO quantity in SAP for one or more PO line items. Pass IM_DATA table with EBELN, MATNR, PO_ITEM, QTY.",
+                    Parameters = new List<RfcParam>
+                    {
+                        new RfcParam { Name="IM_DATA", SapType="ZTT_PO_IMP_QTY",
+                            Description="Table rows: EBELN(CHAR10) PO number, MATNR(CHAR40) Material, PO_ITEM(NUMC5) Item no, QTY(CHAR13) New quantity",
+                            IsTable=true }
+                    },
+                    ResponseTables = new List<string> { "MSG_TYPE (CHAR1)", "MESSAGE (CHAR100)" },
+                    FilePath = "Controllers/Finance/ZPO_QTY_UPD_RFCController.cs"
+                },
                 new RfcEndpoint
                 {
                     Name = "ZWM_HU_SELECTION_RFC", Route = "api/ZWM_HU_SELECTION_RFC",
