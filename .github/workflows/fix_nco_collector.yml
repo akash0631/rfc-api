@@ -1,0 +1,79 @@
+name: Fix NCo DLLs + Rebuild RFC Collector
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy SAP NCo x64 DLLs from .36 to Store Tracker bin
+        shell: cmd
+        run: |
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE: %ERRORLEVEL%
+          echo === NCo DLLs on .36 Store Tracker bin ===
+          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco*.dll" /B 2>nul
+          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\*sap*.dll" /B 2>nul
+          echo === NCo in System32 on .36 ===
+          dir "\\192.168.151.36\C$\Windows\System32\sapnco*.dll" /B 2>nul
+          echo === Copying NCo DLLs to .46 ===
+          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco.dll" "C:\inetpub\wwwroot\Store Tracker\bin\" 2>nul && echo OK: sapnco.dll
+          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco_utils.dll" "C:\inetpub\wwwroot\Store Tracker\bin\" 2>nul && echo OK: sapnco_utils.dll
+          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin\sapnco3.dll" "C:\inetpub\wwwroot\Store Tracker\bin\" 2>nul && echo OK: sapnco3.dll
+          copy /Y "\\192.168.151.36\C$\Windows\System32\sapnco.dll" "C:\inetpub\wwwroot\Store Tracker\bin\" 2>nul && echo OK: sys32 sapnco.dll
+          copy /Y "\\192.168.151.36\C$\Windows\System32\sapnco_utils.dll" "C:\inetpub\wwwroot\Store Tracker\bin\" 2>nul && echo OK: sys32 sapnco_utils.dll
+          echo === Also copy to System32 on .46 ===
+          copy /Y "\\192.168.151.36\C$\Windows\System32\sapnco.dll" "C:\Windows\System32\" 2>nul && echo OK: System32 sapnco.dll
+          copy /Y "\\192.168.151.36\C$\Windows\System32\sapnco_utils.dll" "C:\Windows\System32\" 2>nul && echo OK: System32 sapnco_utils.dll
+          net use \\192.168.151.36\C$ /delete /y 2>nul
+          echo === NCo in Store Tracker\bin ===
+          dir "C:\inetpub\wwwroot\Store Tracker\bin\*sap*.dll" /B 2>nul
+          dir "C:\inetpub\wwwroot\Store Tracker\bin\sapnco*.dll" /B 2>nul
+
+      - name: Rebuild RFC Collector with Pascal case fix
+        shell: powershell
+        run: |
+          $env:PATH = "C:\dotnet8;" + $env:PATH
+          $dotnet = if (Get-Command dotnet -EA SilentlyContinue) {"dotnet"} else {"C:\dotnet8\dotnet.exe"}
+          Write-Host "dotnet: $dotnet"
+          & $dotnet publish rfc-collector/RfcCollector/RfcCollector.csproj -c Release -r win-x64 --self-contained true -o C:\RfcCollector
+          Write-Host "Publish: $LASTEXITCODE"
+          (Get-Item "C:\RfcCollector\RfcCollector.exe").LastWriteTime
+
+      - name: Update appsettings and restart everything
+        shell: powershell
+        run: |
+          # Config
+          $cfg = @{ Logging=@{LogLevel=@{Default="Information";"Microsoft.AspNetCore"="Warning"}}; AllowedHosts="*"; IIS_HOST="127.0.0.1"; IIS_PORT="80" }
+          $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
+          Write-Host "Config: $(Get-Content C:\RfcCollector\appsettings.json)"
+          # Recycle IIS
+          Import-Module WebAdministration
+          Restart-WebAppPool "StoreTracker" -ErrorAction SilentlyContinue
+          Restart-WebAppPool "DefaultAppPool" -ErrorAction SilentlyContinue
+          Start-Sleep 8
+          Get-Website | Select Name, State | Format-Table
+          # Restart RFC Collector
+          Restart-Service RfcCollector -Force
+          Start-Sleep 12
+          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
+
+      - name: Full pipeline smoke test
+        shell: powershell
+        run: |
+          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          Write-Host "=== IIS :80 direct test ==="
+          try {
+            $r = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "HTTP $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(400,$r.Content.Length)))"
+          } catch { Write-Host "$($_.Exception.Message)" }
+
+          Write-Host ""
+          Write-Host "=== RFC Collector /fetch ==="
+          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":3}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "HTTP $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(600,$r.Content.Length)))
+          } catch { Write-Host "$($_.Exception.Message)" }
