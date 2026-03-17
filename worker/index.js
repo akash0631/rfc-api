@@ -2258,34 +2258,4 @@ async function runDeploy(jobId, filename, docxB64, env) {
   }
 }
 
-async function extractDocxText(bytes) {
-  const view = new DataView(bytes.buffer);
-  let off = 0;
-  while (off < bytes.length - 30) {
-    if (view.getUint32(off,true) !== 0x04034b50) { off++; continue; }
-    const fnLen = view.getUint16(off+26,true);
-    const exLen = view.getUint16(off+28,true);
-    const cSz   = view.getUint32(off+18,true);
-    const meth  = view.getUint16(off+8,true);
-    const fn    = new TextDecoder().decode(bytes.slice(off+30, off+30+fnLen));
-    const dS    = off + 30 + fnLen + exLen;
-    if (fn === 'word/document.xml' && cSz > 0) {
-      try {
-        let data = bytes.slice(dS, dS+cSz);
-        if (meth === 8) {
-          const ds = new DecompressionStream('deflate-raw');
-          const w = ds.writable.getWriter(); w.write(data); w.close();
-          const chunks=[]; const rd=ds.readable.getReader();
-          while(true){const{done,value}=await rd.read();if(done)break;chunks.push(value);}
-          const m2 = new Uint8Array(chunks.reduce((a,b)=>a+b.length,0));
-          let pos=0; for(const c of chunks){m2.set(c,pos);pos+=c.length;}
-          data = m2;
-        }
-        const xml = new TextDecoder().decode(data);
-        return xml.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-      } catch(e) { return ''; }
-    }
-    off = dS + cSz;
-  }
-  return '';
-}
+
