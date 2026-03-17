@@ -118,8 +118,30 @@ jobs:
           # Fix permissions and clear read-only
           & icacls "C:\RfcApp\bin" /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
           
-          # Copy the DLL using robocopy /B (backup mode)
-          $rc = robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2
+          # Delete destination DLL first to release any file locks on destination
+          $destDll = "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
+          if (Test-Path $destDll) {
+            Write-Host "Removing old destination DLL..."
+            $removed = $false
+            for ($i = 0; $i -lt 10; $i++) {
+              try {
+                Remove-Item $destDll -Force -ErrorAction Stop
+                Write-Host "Old DLL removed on attempt $($i+1)"
+                $removed = $true
+                break
+              } catch {
+                Write-Host "Attempt $($i+1) to remove old DLL failed: $_"
+                Start-Sleep -Seconds 3
+              }
+            }
+            if (-not $removed) {
+              Write-Host "ERROR: Could not remove old DLL after 10 attempts"
+              exit 1
+            }
+          }
+          
+          # Copy the DLL using robocopy /B (backup mode) - output visible in log
+          robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2
           if ($LASTEXITCODE -gt 7) {
             Write-Host "ERROR: robocopy /B failed with exit code $LASTEXITCODE"
             exit 1
