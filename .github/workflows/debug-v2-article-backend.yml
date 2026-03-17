@@ -1,0 +1,72 @@
+name: Debug v2ArticleCreation Backend
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get Kudu publishing credentials & fetch runtime logs
+        run: |
+          # Get publishing credentials
+          CREDS=$(az webapp deployment list-publishing-credentials \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --query "{user:publishingUserName, pass:publishingPassword}" -o json)
+          
+          KUDU_USER=$(echo $CREDS | python3 -c "import sys,json; print(json.load(sys.stdin)['user'])")
+          KUDU_PASS=$(echo $CREDS | python3 -c "import sys,json; print(json.load(sys.stdin)['pass'])")
+          
+          echo "=== DOCKER/RUNTIME LOGS ==="
+          curl -s -u "$KUDU_USER:$KUDU_PASS" \
+            "https://v2-article-backend.scm.azurewebsites.net/api/logs/docker" | \
+            python3 -c "
+import sys, json
+logs = json.load(sys.stdin)
+for log in logs[-5:]:
+    print(log.get('href',''))
+" 
+          
+          echo "=== LATEST LOG FILE ==="
+          LOG_URL=$(curl -s -u "$KUDU_USER:$KUDU_PASS" \
+            "https://v2-article-backend.scm.azurewebsites.net/api/logs/docker" | \
+            python3 -c "
+import sys, json
+logs = json.load(sys.stdin)
+# get the most recent non-ci log
+for log in reversed(logs):
+    href = log.get('href','')
+    if '_default_docker.log' in href or 'docker.log' in href:
+        print(href)
+        break
+")
+          echo "Log URL: $LOG_URL"
+          
+          if [ -n "$LOG_URL" ]; then
+            curl -s -u "$KUDU_USER:$KUDU_PASS" "$LOG_URL" | tail -80
+          fi
+
+      - name: Check app settings are correct
+        run: |
+          echo "=== APP SETTINGS (keys only) ==="
+          az webapp config appsettings list \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --query "[].name" -o tsv
+
+      - name: Check startup command
+        run: |
+          echo "=== STARTUP CONFIG ==="
+          az webapp config show \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --query "{startupFile:appCommandLine, linuxFxVersion:linuxFxVersion, nodeVersion:nodeVersion}" -o json
