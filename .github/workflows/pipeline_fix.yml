@@ -5,64 +5,53 @@ jobs:
   test:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Fix registry env vars + start IIS app pool
+      - name: Check collector health and test IIS directly
         shell: powershell
         run: |
-          # Fix registry env vars for RFC Collector service
-          Write-Host "=== Setting registry env vars ==="
+          # Check health
+          $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8
+          Write-Host "HEALTH: $($h.Content)"
+          
+          # Check what URL it would build
+          Write-Host "Route test: ZADVANCE_PAYMENT_RFC → parts = Z,ADVANCE,PAYMENT,RFC → ZAdvancePaymentRfc"
+          
+          # Test IIS :80 directly
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          
+          Write-Host "=== Testing IIS :80 routes ==="
+          foreach ($route in @("/api/ZAdvancePaymentRfc/Execute", "/api/ZAdvancePaymentRfc/Health", "/", "/swagger")) {
+            try {
+              $m = if ($route -like "*/Execute") {"POST"} else {"GET"}
+              $b = if ($m -eq "POST") {$body} else {$null}
+              $r = Invoke-WebRequest "http://localhost:80$route" -Method $m -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+              Write-Host "OK :80$route → $($r.StatusCode): $($r.Content)"
+            } catch {
+              Write-Host "FAIL :80$route → $($_.Exception.Message)"
+            }
+          }
+
+      - name: Force correct registry + restart + test
+        shell: powershell
+        run: |
+          # Remove old env then set fresh
+          Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" -Name "Environment" -EA SilentlyContinue
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" `
             -Name "Environment" `
             -Value @("IIS_HOST=127.0.0.1","IIS_PORT=80","SQL_SERVER=192.168.151.46","SQL_USER=sa","SQL_PASS=vrl@55555","SQL_DB=claudetestv2","ASPNETCORE_URLS=http://0.0.0.0:9090") `
             -Type MultiString
-          Write-Host "Registry env set ✅"
+          Write-Host "Registry updated"
           
-          # Check IIS app pool state and start if needed
-          Import-Module WebAdministration
-          Write-Host "=== App Pools ==="
-          Get-ChildItem IIS:\AppPools | Select Name, State | Format-Table
-          Write-Host "=== Sites ==="
-          Get-Website | Select Name, State | Format-Table
-          
-          # Start all stopped pools
-          Get-ChildItem IIS:\AppPools | Where-Object {$_.State -ne "Started"} | ForEach-Object {
-            Start-WebAppPool $_.Name -EA SilentlyContinue
-            Write-Host "Started pool: $($_.Name)"
-          }
-          # Start stopped sites
-          Get-Website | Where-Object {$_.State -ne "Started"} | ForEach-Object {
-            Start-Website $_.Name -EA SilentlyContinue
-            Write-Host "Started site: $($_.Name)"
-          }
-          Start-Sleep 5
-          
-          # Restart RFC Collector to pick up new registry env
           Restart-Service RfcCollector -Force
-          Start-Sleep 12
-          $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8
-          Write-Host "Collector health: $($h.Content)"
+          Start-Sleep 15
+          $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 10
+          Write-Host "NEW HEALTH: $($h.Content)"
 
-      - name: Test IIS :80 is alive
-        shell: powershell
-        run: |
-          # Check if IIS Store Tracker is actually serving
-          try {
-            $r = Invoke-WebRequest "http://localhost:80/" -UseBasicParsing -TimeoutSec 8
-            Write-Host "IIS :80 root: HTTP $($r.StatusCode)"
-          } catch { Write-Host "IIS :80 root ERR: $($_.Exception.Message)" }
-          
-          # Test the RFC route
-          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          try {
-            $r = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
-            Write-Host "EXECUTE: HTTP $($r.StatusCode) $($r.Content)"
-          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
-
-      - name: Full RFC Collector pipeline
+      - name: Full pipeline test company 1100
         shell: powershell
         run: |
           $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
           try {
             $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
-            Write-Host "FETCH: HTTP $($r.StatusCode)"
+            Write-Host "PIPELINE: HTTP $($r.StatusCode)"
             Write-Host $r.Content
-          } catch { Write-Host "FETCH ERR: $($_.Exception.Message)" }
+          } catch { Write-Host "PIPELINE ERR: $($_.Exception.Message)" }
