@@ -62,7 +62,7 @@ jobs:
             "SQL_DB=claudetestv2",
             "ASPNETCORE_URLS=http://0.0.0.0:9090"
           )
-          Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" -Name Environment -Value $envVars
+          [string[]]$envArr = $envVars; Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" -Name Environment -Value $envArr
           
           # Start the service
           sc.exe start RfcCollector
