@@ -42,13 +42,21 @@ jobs:
       - name: Build (Release)
         shell: cmd
         run: |
-          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          set ROSLYN=packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\tools\Roslyn45
-          if not exist "%ROSLYN%\csc.exe" set ROSLYN=packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\tools\Roslyn47
-          if not exist "%ROSLYN%\csc.exe" set ROSLYN=packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\tools\Roslyn
-          echo Using Roslyn at: %ROSLYN%
-          dir "%ROSLYN%\csc.exe" 2>nul || echo WARNING: Roslyn csc.exe not found at %ROSLYN%
-          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0 /p:CscToolPath="%ROSLYN%" /p:VbcToolPath="%ROSLYN%"
+          rem --- Find newest MSBuild via vswhere (supports C#7+) ---
+          set MSBUILD=
+          set VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe
+          if exist "%VSWHERE%" (
+            for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe`) do set MSBUILD=%%i
+          )
+          if not defined MSBUILD (
+            for /f "delims=" %%i in ('dir /b /s "C:\Program Files\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin\MSBuild.exe" 2^>nul') do if not defined MSBUILD set MSBUILD=%%i
+          )
+          if not defined MSBUILD (
+            for /f "delims=" %%i in ('dir /b /s "C:\Program Files (x86)\Microsoft Visual Studio\2019\*\MSBuild\Current\Bin\MSBuild.exe" 2^>nul') do if not defined MSBUILD set MSBUILD=%%i
+          )
+          if not defined MSBUILD set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+          echo Using MSBuild: %MSBUILD%
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
           if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
       - name: Copy to IIS
