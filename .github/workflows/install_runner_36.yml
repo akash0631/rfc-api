@@ -5,42 +5,28 @@ jobs:
   install:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Enable WinRM on .36 and create V2RfcApi site
+      - name: Find compiled app on .36 and populate V2RfcApi
         shell: cmd
         run: |
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
           echo NET_USE: %ERRORLEVEL%
 
-          echo === Enable WinRM on .36 via PsExec or sc ===
-          sc \\192.168.151.36 start WinRM 2>nul
-          echo WinRM start: %ERRORLEVEL%
-          sc \\192.168.151.36 config WinRM start= auto 2>nul
+          echo === Find all DLL locations on .36 ===
+          dir \\192.168.151.36\C$\inetpub\wwwroot /B 2>nul
+          dir \\192.168.151.36\C$\RfcApp\*.dll /B 2>nul | find /c ".dll"
+          dir \\192.168.151.36\C$\RfcApp\Vendor*.dll /B 2>nul
 
-          echo === Create V2RfcApi directory on .36 ===
-          mkdir \\192.168.151.36\C$\V2RfcApi 2>nul
-          mkdir \\192.168.151.36\C$\V2RfcApi\bin 2>nul
+          echo === Copy from RfcApp on .36 to V2RfcApi ===
+          robocopy \\192.168.151.36\C$\RfcApp \\192.168.151.36\C$\V2RfcApi /E /IS /IT /NFL /NDL
+          echo ROBOCOPY from RfcApp: %ERRORLEVEL%
 
-          echo === Copy compiled app from Store Tracker to V2RfcApi (read-only copy) ===
-          robocopy "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin" "\\192.168.151.36\C$\V2RfcApi\bin" /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
-          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\Web.config" "\\192.168.151.36\C$\V2RfcApi\" 2>nul
-          copy /Y "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\Global.asax" "\\192.168.151.36\C$\V2RfcApi\" 2>nul
+          echo === DLL count in V2RfcApi after copy ===
+          dir \\192.168.151.36\C$\V2RfcApi\*.dll /B 2>nul | find /c ".dll"
+          dir \\192.168.151.36\C$\V2RfcApi\Vendor*.dll /B 2>nul
 
-          echo === DLL count in V2RfcApi bin ===
-          dir "\\192.168.151.36\C$\V2RfcApi\bin\*.dll" /B 2>nul | find /c ".dll"
-          dir "\\192.168.151.36\C$\V2RfcApi\bin\Vendor*.dll" /B 2>nul
-
-          echo === Create IIS site via appcmd on .36 ===
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" add apppool /name:V2RfcApiPool /managedRuntimeVersion:v4.0 2>nul
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" add site /name:V2RfcApi /bindings:http/*:9191: /physicalPath:C:\V2RfcApi 2>nul
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" set site /site.name:V2RfcApi /[path='/'].applicationPool:V2RfcApiPool 2>nul
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" start site /site.name:V2RfcApi 2>nul
-          echo Site created: %ERRORLEVEL%
-
-          echo === Current sites on .36 ===
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list sites
-          "\\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe" list apppools
-
+          echo === Recycle V2RfcApiPool ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          
           net use \\192.168.151.36\C$ /delete /y 2>nul
 
       - name: Test V2RfcApi :9191 from .46
@@ -57,19 +43,7 @@ jobs:
             Write-Host "EXECUTE OK: $($r2.StatusCode) $($r2.Content)"
           } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
 
-      - name: Install GitHub Actions runner on .36
-        shell: cmd
-        run: |
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          mkdir \\192.168.151.36\C$\actions-runner 2>nul
-          echo === Downloading runner to .36 ===
-          powershell -NoProfile -Command "Invoke-WebRequest 'https://github.com/actions/runner/releases/download/v2.322.0/actions-runner-win-x64-2.322.0.zip' -OutFile '\\192.168.151.36\C$\actions-runner\runner.zip' -UseBasicParsing; Write-Host Downloaded"
-          echo === Extracting ===
-          powershell -NoProfile -Command "Expand-Archive '\\192.168.151.36\C$\actions-runner\runner.zip' '\\192.168.151.36\C$\actions-runner' -Force; Write-Host Extracted"
-          net use \\192.168.151.36\C$ /delete /y 2>nul
-          echo Runner files copied to .36
-
-      - name: Configure runner and update collector
+      - name: Configure runner on .36 and update RFC Collector
         shell: powershell
         env:
           V2_PAT: ${{ secrets.V2_GH_PAT }}
@@ -78,35 +52,37 @@ jobs:
             -Method POST -Headers @{Authorization="token $env:V2_PAT";"User-Agent"="v2"}).token
           Write-Host "Token: $($tok.Substring(0,8))..."
 
-          # Write config script to .36 and run it via schtasks
-          $configScript = "C:\actions-runner\config.cmd --url https://github.com/akash0631/rfc-api --token $tok --name V2DC-ADDVERB --labels self-hosted,Windows,X64,iis --runasservice --windowslogonaccount `"NT AUTHORITY\SYSTEM`" --unattended"
+          # Write config bat to .36 via share
           $net = "\\192.168.151.36\C$"
-          $cred = New-Object PSCredential("Administrator",(ConvertTo-SecureString "vrl@55555" -AsPlainText -Force))
           net use $net "vrl@55555" /user:Administrator /persistent:no 2>$null
 
-          $configScript | Set-Content "$net\actions-runner\do_config.bat"
-          Write-Host "Config script written to .36"
+          $bat = "@echo off`r`ncd C:\actions-runner`r`ncall config.cmd --url https://github.com/akash0631/rfc-api --token $tok --name V2DC-ADDVERB --labels self-hosted,Windows,X64,iis --runasservice --windowslogonaccount `"NT AUTHORITY\SYSTEM`" --unattended`r`necho DONE > C:\runner_config_done.txt"
+          [System.IO.File]::WriteAllText("$net\actions-runner\do_config.bat", $bat)
+          Write-Host "Config bat written"
 
-          # Use schtasks to run on .36
-          schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "InstallRunner" /tr "C:\actions-runner\do_config.bat" /sc once /st 00:00 /ru SYSTEM /f 2>$null
-          schtasks /run /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "InstallRunner" 2>$null
-          Write-Host "Config task triggered on .36"
-          Start-Sleep 60
+          # Run via schtasks
+          schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerConfig" /tr "C:\actions-runner\do_config.bat" /sc once /st 00:00 /ru SYSTEM /f
+          schtasks /run /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerConfig"
+          Write-Host "Config task running on .36..."
+          Start-Sleep 90
+
+          # Check if done
+          $done = Test-Path "$net\runner_config_done.txt"
+          Write-Host "Config done file: $done"
 
           # Update RFC Collector to use .36:9191
           $cfg = Get-Content "C:\RfcCollector\appsettings.json" | ConvertFrom-Json
-          $cfg.IIS_HOST = "192.168.151.36"
-          $cfg.IIS_PORT = "9191"
+          $cfg.IIS_HOST = "192.168.151.36"; $cfg.IIS_PORT = "9191"
           $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
           Restart-Service RfcCollector -Force
           Start-Sleep 12
           $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8
           Write-Host "Collector: $($h.Content)"
 
-          # Final pipeline test
+          # Full pipeline test
           $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
           try {
             $r2 = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
-            Write-Host "PIPELINE: HTTP $($r2.StatusCode)"
+            Write-Host "=== PIPELINE: HTTP $($r2.StatusCode) ==="
             Write-Host $r2.Content
           } catch { Write-Host "PIPELINE ERR: $($_.Exception.Message)" }
