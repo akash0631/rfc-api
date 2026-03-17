@@ -50,6 +50,24 @@ jobs:
           "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0 /p:CscToolPath="%ROSLYN%" /p:VbcToolPath="%ROSLYN%"
           if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
+      - name: Stop IIS App Pool (before copy)
+        shell: powershell
+        run: |
+          try {
+            Import-Module WebAdministration -ErrorAction Stop
+            $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
+            if ($site) {
+              Stop-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 3
+              Write-Host "Stopped app pool: $($site.applicationPool)"
+            } else {
+              & "$env:windir\System32\inetsrv\appcmd.exe" stop apppool /apppool.name:RfcApiPool 2>$null
+              Write-Host "Stopped via appcmd"
+            }
+          } catch {
+            Write-Host "Stop warning (non-fatal): $_"
+          }
+
       - name: Copy to IIS
         timeout-minutes: 10
         shell: cmd
@@ -57,6 +75,10 @@ jobs:
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
           rem --- ALWAYS copy the freshly-built project DLL (this is the only file that changes per code commit) ---
           copy /Y "bin\Release\Vendor_SRM_Routing_Application.dll" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
+          if %ERRORLEVEL% NEQ 0 (
+            echo ERROR: Failed to copy DLL - app pool may still be running
+            exit /b 1
+          )
           copy /Y "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.pdb" 2>nul
           rem --- FIRST-TIME SETUP: if NuGet deps are not yet deployed, do a full robocopy (slow, but only needed once) ---
           if not exist "C:\RfcApp\bin\System.Web.Http.dll" (
