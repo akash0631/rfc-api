@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_DD_UPD_RFC")]
-        public IHttpActionResult ZPO_DD_UPD_RFC(ZPO_DD_UPD_RFCRequest request)
+        public IHttpActionResult ZPO_DD_UPD_RFC([FromBody] ZPO_DD_UPD_RFCRequest request)
         {
             try
             {
@@ -27,35 +27,58 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_DD_UPD_RFC");
 
                 myfun.Invoke(dest);
-
+                
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetString("TYPE");
-                string returnMessage = EX_RETURN.GetString("MESSAGE");
-
-                if (returnType == "E")
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return Ok(new { Status = "E", Message = returnMessage });
+                    return Ok(new ZPO_DD_UPD_RFCResponse
+                    {
+                        Status = "E",
+                        Message = EX_RETURN.GetString("MESSAGE")
+                    });
                 }
 
-                return Ok(new { Status = returnType, Message = returnMessage });
+                return Ok(new ZPO_DD_UPD_RFCResponse
+                {
+                    Status = EX_RETURN.GetString("TYPE"),
+                    Message = EX_RETURN.GetString("MESSAGE")
+                });
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Ok(new ZPO_DD_UPD_RFCResponse
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (CommunicationException ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Ok(new ZPO_DD_UPD_RFCResponse
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (Exception ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Ok(new ZPO_DD_UPD_RFCResponse
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
         }
     }
 
     public class ZPO_DD_UPD_RFCRequest
     {
+    }
+
+    public class ZPO_DD_UPD_RFCResponse
+    {
+        public string Status { get; set; }
+        public string Message { get; set; }
     }
 }
