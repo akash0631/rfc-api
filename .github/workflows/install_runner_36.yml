@@ -1,0 +1,68 @@
+name: Install GitHub Actions runner on .36
+on:
+  workflow_dispatch:
+jobs:
+  install:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Check .36 accessibility and existing runner
+        shell: cmd
+        run: |
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          echo NET_USE: %ERRORLEVEL%
+          echo === actions-runner on .36 ===
+          dir \\192.168.151.36\C$\actions-runner /B 2>nul || echo NOT_FOUND
+          echo === IIS on .36 ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list sites 2>nul
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list apppools 2>nul
+          echo === Test RFC route on .36 ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://192.168.151.36:80/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 8;Write-Host 'RFC_HEALTH' $r.StatusCode $r.Content}catch{Write-Host 'RFC_HEALTH_ERR' $_.Exception.Message}"
+          net use \\192.168.151.36\C$ /delete /y 2>nul
+
+      - name: Install runner on .36 via PSRemoting
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get fresh registration token
+          $token = (Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners/registration-token" `
+            -Method POST -Headers @{Authorization="token $env:GH_TOKEN";"User-Agent"="v2"}).token
+          Write-Host "Got token: $($token.Substring(0,8))..."
+
+          $cred = New-Object PSCredential("Administrator",(ConvertTo-SecureString "vrl@55555" -AsPlainText -Force))
+          $sess = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop
+          Write-Host "Connected to .36 ✅"
+
+          Invoke-Command -Session $sess -ArgumentList $token -ScriptBlock {
+            param($tok)
+            $ErrorActionPreference = "Continue"
+            if (-not (Test-Path "C:\actions-runner")) { New-Item -ItemType Directory "C:\actions-runner" -Force | Out-Null }
+            Set-Location "C:\actions-runner"
+            if (Test-Path ".runner") {
+              Write-Host "Runner already configured — checking service..."
+              Get-Service -DisplayName "*actions.runner*" -EA SilentlyContinue | Select Name,Status | Format-Table
+              $svc = Get-Service -DisplayName "*actions.runner*" -EA SilentlyContinue
+              if ($svc -and $svc.Status -ne "Running") { Start-Service $svc.Name; Write-Host "Started" }
+            } else {
+              Write-Host "Downloading runner..."
+              Invoke-WebRequest "https://github.com/actions/runner/releases/download/v2.322.0/actions-runner-win-x64-2.322.0.zip" -OutFile runner.zip -UseBasicParsing
+              Expand-Archive runner.zip -DestinationPath . -Force
+              Write-Host "Configuring..."
+              & ".\config.cmd" --url "https://github.com/akash0631/rfc-api" --token $tok --name "V2DC-ADDVERB" --labels "self-hosted,Windows,X64,iis" --runasservice --windowslogonaccount "NT AUTHORITY\SYSTEM" --unattended
+              Write-Host "Config: $LASTEXITCODE"
+              $svc = Get-Service -DisplayName "*actions.runner*" -EA SilentlyContinue
+              if ($svc) { Start-Service $svc.Name; Write-Host "Service $($svc.Name): $($svc.Status)" }
+            }
+            Get-Service -DisplayName "*actions.runner*" -EA SilentlyContinue | Select Name,Status
+          }
+          Remove-PSSession $sess
+
+      - name: Verify runner online
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Start-Sleep 25
+          $r = Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners" `
+            -Headers @{Authorization="token $env:GH_TOKEN";"User-Agent"="v2"}
+          $r.runners | Select name,status,busy | Format-Table
