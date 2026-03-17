@@ -1,0 +1,68 @@
+name: P2 Rebuild DAB Docker with full dab-config
+on:
+  workflow_dispatch:
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name dabacr123
+          echo "ACR login done"
+
+      - name: Pull current DAB image
+        run: |
+          docker pull dabacr123.azurecr.io/dab-app:latest || \
+          docker pull dabacr123.azurecr.io/dab-app:v20.7.26
+          docker images | grep dab
+
+      - name: Build new image with full dab-config.json
+        run: |
+          # Get current image as base
+          IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep dab-app | head -1)
+          echo "Base image: $IMAGE"
+          
+          # Create temp container to update config
+          docker create --name dab_temp $IMAGE
+          
+          # Find dab-config.json inside the container
+          docker cp dab_temp:/ /tmp/container_root/ 2>/dev/null || true
+          find /tmp/container_root -name "dab-config*.json" 2>/dev/null || echo "searching..."
+          
+          # Copy in the full config
+          docker cp dab-config.json dab_temp:/App/dab-config.json 2>/dev/null || \
+          docker cp dab-config.json dab_temp:/app/dab-config.json 2>/dev/null || \
+          docker cp dab-config.json dab_temp:/dab-config.json
+          
+          # Commit as new image
+          NEW_TAG="dabacr123.azurecr.io/dab-app:v$(date +%Y%m%d-%H%M%S)"
+          docker commit dab_temp $NEW_TAG
+          docker commit dab_temp dabacr123.azurecr.io/dab-app:latest
+          docker rm dab_temp
+          echo "New image: $NEW_TAG"
+          docker images | grep dab
+
+      - name: Push new image to ACR
+        run: |
+          docker push dabacr123.azurecr.io/dab-app:latest
+          echo "Pushed latest"
+
+      - name: Restart DAB App Service with new image
+        run: |
+          az webapp restart \
+            --name my-dab-app \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          echo "DAB restarted — waiting 45s for startup"
+          sleep 45
+          STATUS=$(curl -s https://my-dab-app.azurewebsites.net/ | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','?'), 'entities:', len(d))" 2>/dev/null || echo "checking...")
+          echo "DAB status: $STATUS"
+          # Check entity count
+          curl -s "https://my-dab-app.azurewebsites.net/swagger/v1/swagger.json" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Paths:', len(d.get('paths',{})))" 2>/dev/null || echo "swagger check pending"
