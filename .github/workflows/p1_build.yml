@@ -1,0 +1,71 @@
+name: P1 Build RFC app on .46
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stub VS17 targets
+        shell: powershell
+        run: |
+          $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          if (-not (Test-Path $d)) { New-Item -ItemType Directory $d -Force | Out-Null }
+          $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish" /><Target Name="Package" /></Project>'
+          [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets", $xml, [System.Text.Encoding]::UTF8)
+          Write-Host "Targets written"
+
+      - name: NuGet restore
+        shell: cmd
+        run: |
+          nuget restore Vendor_SRM_Routing_Application.sln 2>&1
+          echo NUGET: %ERRORLEVEL%
+
+      - name: MSBuild
+        shell: cmd
+        run: |
+          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
+          echo BUILD: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 exit /b 1
+          dir bin\Release\Vendor*.dll /B 2>nul
+          dir bin\Release\*.dll /B 2>nul | find /c ".dll"
+
+      - name: Deploy to C:\RfcApp
+        shell: cmd
+        run: |
+          if not exist C:\RfcApp mkdir C:\RfcApp
+          xcopy /E /Y /I bin\Release C:\RfcApp
+          copy /Y Web.config C:\RfcApp\ 2>nul
+          dir C:\RfcApp\Vendor*.dll /B 2>nul
+          dir C:\RfcApp\*.dll /B 2>nul | find /c ".dll"
+
+      - name: Wire RFC Collector to 127.0.0.1:8888 and restart
+        shell: powershell
+        run: |
+          $j = Get-Content C:\RfcCollector\appsettings.json | ConvertFrom-Json
+          $j.IIS_HOST = "127.0.0.1"; $j.IIS_PORT = "8888"
+          $j | ConvertTo-Json -Depth 10 | Set-Content C:\RfcCollector\appsettings.json
+          Write-Host "Config: $(Get-Content C:\RfcCollector\appsettings.json)"
+          Import-Module WebAdministration
+          Restart-WebAppPool "RfcApiPool" -ErrorAction SilentlyContinue
+          Start-Sleep 6
+          Write-Host "Pool recycled"
+          Restart-Service RfcCollector -Force
+          Start-Sleep 12
+          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
+
+      - name: Smoke test
+        shell: powershell
+        run: |
+          try {
+            $h = Invoke-WebRequest "http://localhost:8888/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "IIS Health: HTTP $($h.StatusCode)"
+          } catch { Write-Host "IIS Health: $($_.Exception.Message)" }
+          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "FETCH HTTP $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(1000,$r.Content.Length)))
+          } catch { Write-Host "FETCH ERROR: $($_.Exception.Message)" }
