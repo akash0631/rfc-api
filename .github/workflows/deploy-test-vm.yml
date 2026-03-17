@@ -54,11 +54,22 @@ jobs:
         shell: cmd
         run: |
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
+          rem --- Remove native DLL from bin if it was incorrectly placed there before ---
+          if exist "C:\RfcApp\bin\sapnco_utils.dll" del /F "C:\RfcApp\bin\sapnco_utils.dll"
           robocopy bin\Release "C:\RfcApp\bin" *.dll *.pdb /XO /NJH /NJS
           if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
-          rem --- Copy SAP NCo native DLLs (not copied by MSBuild) ---
+          rem --- sapnco.dll (managed) goes in bin so .NET finds it ---
           copy /Y packages\sapnco_x64.3.0.18\lib\sapnco.dll "C:\RfcApp\bin\sapnco.dll"
-          copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\RfcApp\bin\sapnco_utils.dll"
+          rem --- sapnco_utils.dll is a NATIVE DLL - must NOT be in bin (ASP.NET tries to load it as managed assembly and fails)
+          rem --- Put it in the app root so Windows native loader finds it via LoadLibrary, not ASP.NET compilation scanner ---
+          copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\RfcApp\sapnco_utils.dll"
+          rem --- Also copy to System32 so it's always findable by the IIS worker process ---
+          copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\Windows\System32\sapnco_utils.dll"
+          rem --- Copy any other native DLLs from the NCo package (libsapucum.dll, ICU, etc.) ---
+          for %%f in (packages\sapnco_x64.3.0.18\lib\lib*.dll packages\sapnco_x64.3.0.18\lib\*icu*.dll) do (
+            echo Copying native dep: %%f
+            copy /Y "%%f" "C:\Windows\System32\" 2>nul
+          )
           copy /Y Web.config "C:\RfcApp\Web.config"
           if exist Global.asax copy /Y Global.asax "C:\RfcApp\Global.asax"
           xcopy /Y /E /I Views "C:\RfcApp\Views" >nul 2>&1
