@@ -42,7 +42,7 @@ jobs:
           $fixed = $fixed -replace '<Import Project=\"\$\(MSBuildExtensionsPath32\)\\Microsoft\\VisualStudio\\v\$\(VisualStudioVersion\)\\WebApplications\\Microsoft.WebApplication.targets\" \/>',
             '<Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets" Condition="Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" /><Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" Condition="!Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" />'
           # Simpler: just make the import conditional so it doesnt fail if missing
-          $fixed2 = (Get-Content $csproj -Raw) -replace '(<Import Project=\".*WebApplication\.targets\" )(/>)', '$1Condition="Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" $2'
+          $fixed2 = (Get-Content $csproj -Raw) -replace '(<Import Project=\".*WebApplication\.targets\" )(/>)', '$1Condition="Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" $2'
           Set-Content $csproj $fixed2 -NoNewline
           Write-Host "csproj patched"
 
