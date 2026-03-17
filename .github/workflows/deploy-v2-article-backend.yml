@@ -38,7 +38,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Set startup command & app settings BEFORE deploy
+      - name: Set startup command & app settings
         run: |
           az webapp config set \
             --name v2-article-backend \
@@ -64,11 +64,11 @@ jobs:
               ENABLE_RATE_LIMITING=true \
               JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-              ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}"
-          echo "App settings applied"
+              DIRECT_URL="${{ secrets.DIRECT_URL }}" \
+              OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
+          echo "✅ App settings applied"
 
-      - name: Deploy zip (async - no startup wait)
+      - name: Deploy zip to Azure
         run: |
           az webapp deploy \
             --name v2-article-backend \
@@ -77,16 +77,20 @@ jobs:
             --type zip \
             --async true \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          echo "✅ ZIP deployed (async)"
+          echo "✅ ZIP uploaded (async)"
 
-      - name: Restart & wait for startup
+      - name: Restart app
         run: |
           az webapp restart \
             --name v2-article-backend \
             --resource-group dab-rg \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          echo "Waiting 45s for startup..."
+          echo "Waiting 45s..."
           sleep 45
+
+      - name: Health check
+        run: |
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://v2-article-backend.azurewebsites.net/api/health)
-          BODY=$(curl -s https://v2-article-backend.azurewebsites.net/api/health || echo "no response")
-          echo "Health check HTTP $HTTP: $BODY"
+          BODY=$(curl -s https://v2-article-backend.azurewebsites.net/api/health)
+          echo "HTTP $HTTP: $BODY"
+          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE" || echo "⚠️ Not yet healthy"
