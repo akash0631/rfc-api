@@ -109,7 +109,7 @@ jobs:
           attrib -R "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" 2>nul
           rem --- Use robocopy /B (backup mode) to bypass file share locks ---
           rem --- This uses SeBackupPrivilege to copy locked files ---
-          robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2
+          robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:10 /W:3
           if %ERRORLEVEL% GTR 7 (
             echo ERROR: robocopy /B failed to copy DLL
             exit /b 1
