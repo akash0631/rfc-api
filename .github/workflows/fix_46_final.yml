@@ -7,39 +7,42 @@ jobs:
   fix:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Diagnose then point RFC Collector to working .36 IIS
+      - uses: actions/checkout@v4
+
+      - name: Probe IIS on all servers and write results
         shell: powershell
         run: |
-          Write-Host "=== Test .36:80 directly ==="
-          try {
-            $b = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-            $r = Invoke-WebRequest "http://192.168.151.36:80/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $b -ContentType application/json -UseBasicParsing -TimeoutSec 15
-            Write-Host ".36 IIS OK: $($r.StatusCode)"
-            Write-Host ($r.Content.Substring(0,[Math]::Min(500,$r.Content.Length)))
-          } catch {
-            Write-Host ".36 IIS ERR: $($_.Exception.Message)"
+          $results = @()
+          $endpoints = @(
+            "http://192.168.151.36:80/api/ZAdvancePaymentRfc/Health",
+            "http://192.168.151.36:8888/api/ZAdvancePaymentRfc/Health",
+            "http://192.168.151.24:80/api/ZAdvancePaymentRfc/Health",
+            "http://192.168.151.24:8888/api/ZAdvancePaymentRfc/Health",
+            "http://127.0.0.1:80/api/ZAdvancePaymentRfc/Health",
+            "http://127.0.0.1:8888/api/ZAdvancePaymentRfc/Health"
+          )
+          foreach ($ep in $endpoints) {
+            try {
+              $r = Invoke-WebRequest $ep -UseBasicParsing -TimeoutSec 8
+              $results += "$ep -> OK $($r.StatusCode) $($r.Content.Substring(0,50))"
+            } catch {
+              $results += "$ep -> ERR $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))"
+            }
           }
+          $out = $results -join "`n"
+          Write-Host $out
+          Set-Content "probe_results.txt" $out
 
-          Write-Host "=== Test .36:8888 ==="
-          try {
-            $r = Invoke-WebRequest "http://192.168.151.36:8888/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host ".36:8888 OK: $($r.StatusCode) $($r.Content)"
-          } catch {
-            Write-Host ".36:8888 ERR: $($_.Exception.Message)"
-          }
-
-          Write-Host "=== Test .24:80 ==="
-          try {
-            $r = Invoke-WebRequest "http://192.168.151.24:80/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host ".24:80 OK: $($r.StatusCode) $($r.Content)"
-          } catch {
-            Write-Host ".24:80 ERR: $($_.Exception.Message)"
-          }
-
-          Write-Host "=== Test .24:8888 ==="
-          try {
-            $r = Invoke-WebRequest "http://192.168.151.24:8888/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host ".24:8888 OK: $($r.StatusCode) $($r.Content)"
-          } catch {
-            Write-Host ".24:8888 ERR: $($_.Exception.Message)"
-          }
+      - name: Push results to GitHub
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $content = Get-Content "probe_results.txt" -Raw
+          $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
+          $h = @{Authorization="token $env:GH_TOKEN";"User-Agent"="v2";"Content-Type"="application/json"}
+          $ex = try { (Invoke-WebRequest "https://api.github.com/repos/akash0631/rfc-api/contents/probe_results.txt" -Headers $h -UseBasicParsing).Content | ConvertFrom-Json } catch { $null }
+          $body = @{message="probe results";content=$b64}
+          if ($ex.sha) { $body.sha = $ex.sha }
+          Invoke-WebRequest "https://api.github.com/repos/akash0631/rfc-api/contents/probe_results.txt" -Method PUT -Headers $h -Body ($body|ConvertTo-Json) -UseBasicParsing | Out-Null
+          Write-Host "Results pushed"
