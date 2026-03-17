@@ -40,6 +40,37 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Check current app service plan
+        run: |
+          echo "=== APP SERVICE PLAN ==="
+          az webapp show \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --query "{plan:appServicePlanId, state:state, linuxFx:siteConfig.linuxFxVersion}" -o json
+
+      - name: Move app to dab-plan (P2v3) if on F1
+        run: |
+          PLAN_ID=$(az webapp show \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --query appServicePlanId -o tsv)
+          echo "Current plan: $PLAN_ID"
+          
+          # If not already on dab-plan, move it
+          if [[ "$PLAN_ID" != *"dab-plan"* ]]; then
+            echo "Moving to dab-plan..."
+            az webapp update \
+              --name v2-article-backend \
+              --resource-group dab-rg \
+              --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+              --set serverFarmId="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/dab-rg/providers/Microsoft.Web/serverfarms/dab-plan"
+            echo "✅ Moved to dab-plan"
+          else
+            echo "✅ Already on dab-plan"
+          fi
+
       - name: Set startup command & app settings
         run: |
           az webapp config set \
@@ -79,28 +110,49 @@ jobs:
             --type zip \
             --async true \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} || true
-          echo "✅ Deploy command completed (startup errors ignored)"
+          echo "✅ ZIP uploaded"
 
-      - name: Force restart
+      - name: Restart & wait
         run: |
           sleep 10
           az webapp restart \
             --name v2-article-backend \
             --resource-group dab-rg \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          echo "✅ Restarted. Waiting 60s..."
+          echo "Waiting 60s..."
           sleep 60
 
-      - name: Health check
+      - name: Health check + print runtime logs
         run: |
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://v2-article-backend.azurewebsites.net/api/health)
           BODY=$(curl -s https://v2-article-backend.azurewebsites.net/api/health)
           echo "HTTP $HTTP: $BODY"
-          if [ "$HTTP" = "200" ]; then
-            echo "✅ BACKEND LIVE — https://v2-article-backend.azurewebsites.net"
-          else
-            echo "⚠️ HTTP $HTTP — check runtime logs"
-            # Get runtime logs via Kudu
-            curl -s "https://v2-article-backend.scm.azurewebsites.net/api/logs/docker/zip" -o /tmp/dockerlogs.zip || true
-            exit 0
+
+          echo "=== GETTING RUNTIME LOGS ==="
+          CREDS=$(az webapp deployment list-publishing-credentials \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --query "{user:publishingUserName, pass:publishingPassword}" -o json)
+          KUDU_USER=$(echo $CREDS | python3 -c "import sys,json; print(json.load(sys.stdin)['user'])")
+          KUDU_PASS=$(echo $CREDS | python3 -c "import sys,json; print(json.load(sys.stdin)['pass'])")
+
+          LOG_URL=$(curl -s -u "$KUDU_USER:$KUDU_PASS" \
+            "https://v2-article-backend.scm.azurewebsites.net/api/logs/docker" | \
+            python3 -c "
+import sys, json
+try:
+    logs = json.load(sys.stdin)
+    for log in reversed(logs):
+        href = log.get('href','')
+        if 'docker' in href and href.endswith('.log'):
+            print(href)
+            break
+except: pass
+")
+          echo "Log: $LOG_URL"
+          if [ -n "$LOG_URL" ]; then
+            curl -s -u "$KUDU_USER:$KUDU_PASS" "$LOG_URL" | tail -60
           fi
+
+          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE" || echo "⚠️ Still failing - see logs above"
