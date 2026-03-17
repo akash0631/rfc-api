@@ -5,84 +5,40 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Wire RFC Collector on .46 to .36:9191 and test full pipeline
+      - name: Test .36:9191 and write results to file
         shell: powershell
         run: |
-          # Update collector config
-          $cfg = Get-Content "C:\RfcCollector\appsettings.json" | ConvertFrom-Json
-          $cfg.IIS_HOST = "192.168.151.36"
-          $cfg.IIS_PORT = "9191"
-          $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
-          Restart-Service RfcCollector -Force
-          Start-Sleep 12
-          $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8
-          Write-Host "Collector: $($h.Content)"
-
-          # Test .36:9191 directly
+          $out = @()
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          Write-Host "=== Testing .36:9191 directly ==="
+
           try {
             $r = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
-          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+            $out += "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
+          } catch { $out += "HEALTH ERR: $($_.Exception.Message)" }
 
           try {
             $r2 = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "EXECUTE: HTTP $($r2.StatusCode)"
-            Write-Host $r2.Content
-          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
+            $out += "EXECUTE: HTTP $($r2.StatusCode)"
+            $out += $r2.Content
+          } catch { $out += "EXECUTE ERR: $($_.Exception.Message)" }
 
-          # Full pipeline test via collector
-          Write-Host "=== Full pipeline via RFC Collector ==="
           $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
           try {
             $r3 = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
-            Write-Host "PIPELINE: HTTP $($r3.StatusCode)"
-            Write-Host $r3.Content
-          } catch { Write-Host "PIPELINE ERR: $($_.Exception.Message)" }
+            $out += "PIPELINE: HTTP $($r3.StatusCode)"
+            $out += $r3.Content
+          } catch { $out += "PIPELINE ERR: $($_.Exception.Message)" }
 
-      - name: Install runner on .36 via schtasks
-        shell: powershell
-        env:
-          V2_PAT: ${{ secrets.V2_GH_PAT }}
+          $out | ForEach-Object { Write-Host $_ }
+
+          # Also write to .36 share for persistence
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no 2>$null
+          $out | Set-Content "\\192.168.151.36\C$\pipeline_test_result.txt"
+          net use \\192.168.151.36\C$ /delete /y 2>$null
+
+      - name: Read results from .36
+        shell: cmd
         run: |
-          $tok = (Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners/registration-token" `
-            -Method POST -Headers @{Authorization="token $env:V2_PAT"; "User-Agent"="v2"}).token
-          Write-Host "Token: $($tok.Substring(0,8))..."
-
-          net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no 2>$null
-
-          # Check if runner already configured
-          if (Test-Path "\\192.168.151.36\C$\actions-runner\.runner") {
-            Write-Host "Runner already configured on .36 — starting service..."
-            schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerStart" /tr "sc start actions.runner.akash0631-rfc-api.V2DC-ADDVERB" /sc once /st 00:00 /ru SYSTEM /f 2>$null
-            schtasks /run /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerStart" 2>$null
-          } else {
-            # Download if not present
-            if (-not (Test-Path "\\192.168.151.36\C$\actions-runner\config.cmd")) {
-              Write-Host "Downloading runner..."
-              Invoke-WebRequest "https://github.com/actions/runner/releases/download/v2.322.0/actions-runner-win-x64-2.322.0.zip" `
-                -OutFile "\\192.168.151.36\C$\actions-runner\runner.zip" -UseBasicParsing
-              Add-Type -AssemblyName System.IO.Compression.FileSystem
-              [System.IO.Compression.ZipFile]::ExtractToDirectory(
-                "\\192.168.151.36\C$\actions-runner\runner.zip",
-                "\\192.168.151.36\C$\actions-runner")
-              Write-Host "Extracted"
-            }
-            # Write and run config bat
-            $bat = "@echo off`r`ncd /d C:\actions-runner`r`ncall config.cmd --url https://github.com/akash0631/rfc-api --token $tok --name V2DC-ADDVERB --labels self-hosted,Windows,X64,iis --runasservice --windowslogonaccount `"NT AUTHORITY\SYSTEM`" --unattended`r`necho done > C:\runner_done.txt"
-            [System.IO.File]::WriteAllText("\\192.168.151.36\C$\actions-runner\do_config.bat", $bat, [System.Text.Encoding]::ASCII)
-            schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerSetup" /tr "C:\actions-runner\do_config.bat" /sc once /st 00:00 /ru SYSTEM /f 2>$null
-            schtasks /run /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2RunnerSetup" 2>$null
-            Write-Host "Waiting 90s for config..."
-            Start-Sleep 90
-            Write-Host "Done file: $(Test-Path '\\192.168.151.36\C$\runner_done.txt')"
-          }
-          net use "\\192.168.151.36\C$" /delete /y 2>$null
-
-          # Check GitHub
-          Start-Sleep 20
-          $r = Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners" `
-            -Headers @{Authorization="token $env:V2_PAT"; "User-Agent"="v2"}
-          Write-Host "=== Runners ==="
-          $r.runners | Select name, status | Format-Table
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          type \\192.168.151.36\C$\pipeline_test_result.txt
+          net use \\192.168.151.36\C$ /delete /y 2>nul
