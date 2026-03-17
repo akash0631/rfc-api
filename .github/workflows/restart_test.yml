@@ -1,29 +1,48 @@
-name: Restart IIS and test pipeline
+name: Rebuild RFC Collector on .46
 on:
   workflow_dispatch:
 jobs:
-  restart:
+  rebuild:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Restart IIS pools and RFC Collector via cmd
+      - uses: actions/checkout@v4
+
+      - name: Find dotnet and rebuild RFC Collector
         shell: cmd
         run: |
-          echo === NCo DLLs in Store Tracker bin ===
-          dir "C:\inetpub\wwwroot\Store Tracker\bin\sapnco*.dll" /B 2>nul
-          dir "C:\inetpub\wwwroot\Store Tracker\bin\*sap*.dll" /B 2>nul
-          echo === Recycle app pools ===
-          %windir%\system32\inetsrv\appcmd recycle apppool /apppool.name:"StoreTracker" 2>nul
-          %windir%\system32\inetsrv\appcmd recycle apppool /apppool.name:"DefaultAppPool" 2>nul
-          timeout /t 6 /nobreak
-          echo === Update RFC Collector config ===
-          powershell -NoProfile -Command "$c=@{Logging=@{LogLevel=@{Default='Information'}};AllowedHosts='*';IIS_HOST='127.0.0.1';IIS_PORT='80'};$c|ConvertTo-Json -Depth 10|Set-Content 'C:\RfcCollector\appsettings.json'"
-          echo === Restart RFC Collector ===
+          echo === Finding dotnet ===
+          where dotnet 2>nul
+          dotnet --version 2>nul
+          dir "C:\Program Files\dotnet\dotnet.exe" 2>nul
+          dir "C:\dotnet8\dotnet.exe" 2>nul
+          dir "C:\Program Files\dotnet\" /B 2>nul
+          echo.
+          echo === Current RFC Collector binary date ===
+          dir "C:\RfcCollector\RfcCollector.exe" 2>nul
+          echo.
+          echo === Rebuild ===
+          set DOTNET=dotnet
+          if not exist "%DOTNET%" set DOTNET=C:\Program Files\dotnet\dotnet.exe
+          "%DOTNET%" publish rfc-collector\RfcCollector\RfcCollector.csproj -c Release -r win-x64 --self-contained true -o C:\RfcCollector
+          echo PUBLISH_EXIT: %ERRORLEVEL%
+          echo.
+          echo === New binary date ===
+          dir "C:\RfcCollector\RfcCollector.exe" 2>nul
+
+      - name: Restart RFC Collector and test route
+        shell: cmd
+        run: |
           net stop RfcCollector
           timeout /t 4 /nobreak
           net start RfcCollector
           timeout /t 12 /nobreak
           sc query RfcCollector | findstr STATE
-          echo === Test IIS :80 ===
-          powershell -NoProfile -Command "$b='{\"I_COMPANY_CODE\":\"1000\",\"I_POSTING_DATE_LOW\":\"20260301\",\"I_POSTING_DATE_HIGH\":\"20260317\"}';try{$r=Invoke-WebRequest 'http://localhost/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host \"IIS HTTP $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(400,$r.Content.Length)))\"}catch{Write-Host \"IIS: $($_.Exception.Message)\"}"
-          echo === Test RFC Collector /fetch ===
-          powershell -NoProfile -Command "$b='{\"rfc\":\"ZADVANCE_PAYMENT_RFC\",\"params\":{\"I_COMPANY_CODE\":\"1000\",\"I_POSTING_DATE_LOW\":\"20260301\",\"I_POSTING_DATE_HIGH\":\"20260317\"},\"targetTable\":\"ET_ZADVANCE_PAYMENT\",\"targetDb\":\"claudetestv2\",\"maxRows\":3}';try{$r=Invoke-WebRequest 'http://localhost:9090/fetch' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60;Write-Host \"FETCH HTTP $($r.StatusCode)\";Write-Host($r.Content.Substring(0,[Math]::Min(800,$r.Content.Length)))}catch{Write-Host \"FETCH: $($_.Exception.Message)\"}"
+          echo.
+          echo === Test RFC Collector health ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9090/' -UseBasicParsing -TimeoutSec 8;Write-Host $r.Content}catch{Write-Host $_.Exception.Message}"
+          echo.
+          echo === Test IIS route directly ===
+          powershell -NoProfile -Command "$b='{\"I_COMPANY_CODE\":\"1000\",\"I_POSTING_DATE_LOW\":\"20260301\",\"I_POSTING_DATE_HIGH\":\"20260317\"}';try{$r=Invoke-WebRequest 'http://localhost/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 25;Write-Host \"IIS HTTP $($r.StatusCode): $($r.Content.Substring(0,300))\"}catch{Write-Host \"IIS: $($_.Exception.Message)\"}"
+          echo.
+          echo === Test full fetch pipeline ===
+          powershell -NoProfile -Command "$b='{\"rfc\":\"ZADVANCE_PAYMENT_RFC\",\"params\":{\"I_COMPANY_CODE\":\"1000\",\"I_POSTING_DATE_LOW\":\"20260301\",\"I_POSTING_DATE_HIGH\":\"20260317\"},\"targetTable\":\"ET_ZADVANCE_PAYMENT\",\"targetDb\":\"claudetestv2\",\"maxRows\":3}';try{$r=Invoke-WebRequest 'http://localhost:9090/fetch' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60;Write-Host \"FETCH $($r.StatusCode):\";Write-Host($r.Content.Substring(0,[Math]::Min(800,$r.Content.Length)))}catch{Write-Host \"FETCH: $($_.Exception.Message)\"}"
