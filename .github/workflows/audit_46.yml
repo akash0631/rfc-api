@@ -5,60 +5,85 @@ jobs:
   audit:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Full audit of .46
+      - uses: actions/checkout@v4
+
+      - name: Full audit and push results
         shell: powershell
         run: |
+          $out = @()
           Import-Module WebAdministration -EA SilentlyContinue
 
-          Write-Host "======== IIS SITES ========"
-          Get-Website | Select Name, State, @{n='Port';e={($_.Bindings.Collection[0].bindingInformation -split ':')[1]}}, @{n='Path';e={$_.PhysicalPath}} | Format-Table -AutoSize
-
-          Write-Host "======== APP POOLS ========"
-          Get-ChildItem IIS:\AppPools | Select Name, State, @{n='Runtime';e={$_.managedRuntimeVersion}} | Format-Table
-
-          Write-Host "======== ALL IIS PHYSICAL PATHS - DLL COUNTS ========"
+          $out += "=== IIS SITES ==="
           Get-Website | ForEach-Object {
             $p = $_.PhysicalPath
             $dlls = (Get-ChildItem $p -Filter "*.dll" -Recurse -EA SilentlyContinue).Count
-            Write-Host "$($_.Name) → $p → $dlls DLLs"
+            $port = ($_.Bindings.Collection[0].bindingInformation -split ':')[1]
+            $out += "SITE: $($_.Name) | Port: $port | State: $($_.State) | Path: $p | DLLs: $dlls"
           }
 
-          Write-Host "======== WHAT ROUTES DOES :80 SERVE ========"
-          try { $r = Invoke-WebRequest "http://localhost:80/" -UseBasicParsing -TimeoutSec 5; Write-Host ":80/ → $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(150,$r.Content.Length)))" } catch { Write-Host ":80/ → $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))" }
-          try { $r = Invoke-WebRequest "http://localhost:80/swagger" -UseBasicParsing -TimeoutSec 5; Write-Host ":80/swagger → $($r.StatusCode)" } catch { Write-Host ":80/swagger → $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))" }
-          try { $b = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'; $r = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 8; Write-Host ":80/api/ZAdvancePaymentRfc/Execute → $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))" } catch { Write-Host ":80/api/ZAdvancePaymentRfc/Execute → $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))" }
+          $out += ""
+          $out += "=== IIS ROUTE TESTS ==="
+          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          foreach ($url in @(
+            "http://localhost:80/",
+            "http://localhost:80/swagger",
+            "http://localhost:80/api/ZAdvancePaymentRfc/Execute",
+            "http://localhost:8888/",
+            "http://localhost:8888/swagger",
+            "http://localhost:8888/api/ZAdvancePaymentRfc/Execute"
+          )) {
+            try {
+              $m = if ($url -like "*/Execute") {"POST"} else {"GET"}
+              $b = if ($m -eq "POST") {$body} else {$null}
+              $r = Invoke-WebRequest $url -Method $m -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 8
+              $out += "OK $($r.StatusCode) $url : $($r.Content.Substring(0,[Math]::Min(120,$r.Content.Length)))"
+            } catch {
+              $out += "ERR $url : $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))"
+            }
+          }
 
-          Write-Host "======== WHAT ROUTES DOES :8888 SERVE ========"
-          try { $r = Invoke-WebRequest "http://localhost:8888/swagger" -UseBasicParsing -TimeoutSec 5; Write-Host ":8888/swagger → $($r.StatusCode)" } catch { Write-Host ":8888/swagger → $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))" }
-          try { $b = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'; $r = Invoke-WebRequest "http://localhost:8888/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 8; Write-Host ":8888/api/ZAdvancePaymentRfc/Execute → $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))" } catch { Write-Host ":8888/api/ZAdvancePaymentRfc/Execute → $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))" }
+          $out += ""
+          $out += "=== RFC COLLECTOR ==="
+          $svc = Get-Service RfcCollector -EA SilentlyContinue
+          $out += "Status: $($svc.Status)"
+          $out += "Exe modified: $((Get-Item 'C:\RfcCollector\RfcCollector.exe' -EA SilentlyContinue).LastWriteTime)"
+          $cfg = Get-Content "C:\RfcCollector\appsettings.json" -EA SilentlyContinue
+          $out += "Config: $cfg"
 
-          Write-Host "======== RFC COLLECTOR ========"
-          Get-Service RfcCollector -EA SilentlyContinue | Select Name, Status, StartType
-          Get-Content "C:\RfcCollector\appsettings.json" -EA SilentlyContinue
-          Write-Host "RfcCollector.exe last modified: $((Get-Item 'C:\RfcCollector\RfcCollector.exe' -EA SilentlyContinue).LastWriteTime)"
+          $out += ""
+          $out += "=== SAP NCo ==="
+          $out += "sapnco.dll: $(Test-Path 'C:\Windows\System32\sapnco.dll')"
+          $out += "sapnco_utils.dll: $(Test-Path 'C:\Windows\System32\sapnco_utils.dll')"
 
-          Write-Host "======== SAP NCo ========"
-          Test-Path "C:\Windows\System32\sapnco.dll"
-          Test-Path "C:\Windows\System32\sapnco_utils.dll"
-          Get-ChildItem "C:\Windows\System32" -Filter "sapnco*.dll" -EA SilentlyContinue | Select Name, Length
-
-          Write-Host "======== SQL SERVER ON .28 ========"
+          $out += ""
+          $out += "=== RFC COLLECTOR FETCH TEST ==="
           try {
-            $conn = New-Object System.Data.SqlClient.SqlConnection("Server=192.168.151.28,1433;Database=DataV2;User Id=sa;Password=vrl@55555;TrustServerCertificate=true;")
-            $conn.Open()
-            $cmd = $conn.CreateCommand(); $cmd.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_CATALOG='DataV2'"
-            Write-Host "DataV2 tables: $($cmd.ExecuteScalar())"
-            $conn.Close()
-          } catch { Write-Host "DataV2 SQL error: $($_.Exception.Message.Substring(0,[Math]::Min(100,$_.Exception.Message.Length)))" }
+            $b2 = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":3}'
+            $r2 = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b2 -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            $out += "FETCH HTTP $($r2.StatusCode)"
+            $out += $r2.Content.Substring(0,[Math]::Min(600,$r2.Content.Length))
+          } catch { $out += "FETCH ERROR: $($_.Exception.Message)" }
 
-          Write-Host "======== claudetestv2 on .46 ========"
+          $out += ""
+          $out += "=== claudetestv2 TABLES ==="
           try {
             $conn = New-Object System.Data.SqlClient.SqlConnection("Server=192.168.151.46,1433;Database=claudetestv2;User Id=sa;Password=vrl@55555;TrustServerCertificate=true;")
             $conn.Open()
             $cmd = $conn.CreateCommand(); $cmd.CommandText = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME"
-            $r = $cmd.ExecuteReader()
-            $tables = @(); while($r.Read()) { $tables += $r[0] }
+            $r3 = $cmd.ExecuteReader()
+            while($r3.Read()) { $out += "  TABLE: $($r3[0])" }
             $conn.Close()
-            Write-Host "Tables in claudetestv2: $($tables.Count)"
-            $tables | ForEach-Object { Write-Host "  $_" }
-          } catch { Write-Host "claudetestv2 error: $($_.Exception.Message.Substring(0,[Math]::Min(100,$_.Exception.Message.Length)))" }
+          } catch { $out += "claudetestv2 error: $($_.Exception.Message.Substring(0,[Math]::Min(100,$_.Exception.Message.Length)))" }
+
+          # Write to file and push to GitHub
+          $text = $out -join "`n"
+          $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($text))
+          $h = @{ Authorization="token $env:GH_TOKEN"; "User-Agent"="v2"; "Content-Type"="application/json" }
+          $ex = try { Invoke-WebRequest "https://api.github.com/repos/akash0631/rfc-api/contents/audit_output.txt" -Headers $h -UseBasicParsing } catch { $null }
+          $sha2 = if ($ex) { ($ex.Content | ConvertFrom-Json).sha } else { "" }
+          $body3 = @{ message="ci: .46 audit output"; content=$b64 }
+          if ($sha2) { $body3.sha = $sha2 }
+          Invoke-WebRequest "https://api.github.com/repos/akash0631/rfc-api/contents/audit_output.txt" -Method PUT -Headers $h -Body ($body3 | ConvertTo-Json) -UseBasicParsing | Out-Null
+          Write-Host "Output pushed"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
