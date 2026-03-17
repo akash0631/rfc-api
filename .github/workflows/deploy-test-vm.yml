@@ -53,49 +53,61 @@ jobs:
       - name: Stop IIS App Pool (before copy)
         shell: powershell
         run: |
+          # Create App_Offline.htm to force ASP.NET to release file handles
+          Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>"
+          Write-Host "App_Offline.htm placed"
+          Start-Sleep -Seconds 2
+          
+          # Stop the IIS site and app pool
           try {
-            # Create App_Offline.htm to force ASP.NET to release file handles
-            Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>"
-            Write-Host "App_Offline.htm placed - ASP.NET will release handles"
-            Start-Sleep -Seconds 3
-            
             Import-Module WebAdministration -ErrorAction Stop
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
-              $poolName = $site.applicationPool
-              Stop-WebAppPool $poolName -ErrorAction SilentlyContinue
-              # Wait up to 15 seconds for w3wp.exe to fully terminate
-              $deadline = [DateTime]::UtcNow.AddSeconds(15)
-              while ([DateTime]::UtcNow -lt $deadline) {
-                $w3wp = Get-Process -Name w3wp -ErrorAction SilentlyContinue
-                if (-not $w3wp) { break }
-                Start-Sleep -Seconds 1
-              }
-              # Force-kill any remaining w3wp
-              Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-              Start-Sleep -Seconds 2
-              Write-Host "Stopped app pool: $poolName"
-            } else {
-              & "$env:windir\System32\inetsrv\appcmd.exe" stop apppool /apppool.name:RfcApiPool 2>$null
-              Start-Sleep -Seconds 5
-              Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-              Write-Host "Stopped via appcmd"
+              Stop-Website $site.name -ErrorAction SilentlyContinue
+              Stop-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
+              Write-Host "Stopped site + pool: $($site.name) / $($site.applicationPool)"
             }
           } catch {
-            Write-Host "Stop warning (non-fatal): $_"
+            Write-Host "WebAdmin stop warning: $_"
           }
+          
+          # Stop IIS W3SVC service entirely to release all file handles
+          Write-Host "Stopping W3SVC service..."
+          & net stop W3SVC /y 2>&1 | Write-Host
+          Start-Sleep -Seconds 3
+          
+          # Kill any remaining w3wp
+          Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          Write-Host "IIS stopped"
 
       - name: Copy to IIS
         timeout-minutes: 10
         shell: cmd
         run: |
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
-          rem --- Delete the old DLL first to break any file locks ---
+          rem --- Diagnostic: show who owns the DLL and its attributes ---
+          if exist "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" (
+            echo Current DLL attributes:
+            attrib "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
+            icacls "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
+            whoami
+          )
+          rem --- Fix permissions and clear read-only ---
+          icacls "C:\RfcApp\bin" /grant Administrators:(OI)(CI)F /T /C /Q 2>nul
+          icacls "C:\RfcApp\bin" /grant "%USERNAME%":(OI)(CI)F /T /C /Q 2>nul
+          attrib -R "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" 2>nul
+          rem --- Delete the old DLL ---
           if exist "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" (
             del /F /Q "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
             if %ERRORLEVEL% NEQ 0 (
-              echo ERROR: Cannot delete old DLL - still locked by another process
-              exit /b 1
+              echo ERROR: Cannot delete old DLL even after icacls fix
+              echo Trying rename workaround...
+              ren "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" "Vendor_SRM_Routing_Application.dll.old" 2>nul
+              if %ERRORLEVEL% NEQ 0 (
+                echo FATAL: File is undeleteable, deployment cannot proceed
+                exit /b 1
+              )
             )
           )
           rem --- ALWAYS copy the freshly-built project DLL ---
@@ -138,10 +150,16 @@ jobs:
               Remove-Item "C:\RfcApp\App_Offline.htm" -Force
               Write-Host "Removed App_Offline.htm"
             }
+            # Start W3SVC service (we stopped it fully in the Stop step)
+            Write-Host "Starting W3SVC service..."
+            & net start W3SVC 2>&1 | Write-Host
+            Start-Sleep -Seconds 3
+            
             Import-Module WebAdministration -ErrorAction Stop
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
               Start-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 2
               Restart-WebAppPool $site.applicationPool
               Write-Host "Recycled: $($site.applicationPool) (site: $($site.name))"
             } else {
