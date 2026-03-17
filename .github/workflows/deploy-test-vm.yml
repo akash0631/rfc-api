@@ -53,33 +53,41 @@ jobs:
       - name: Stop IIS App Pool (before copy)
         shell: powershell
         run: |
-          # Create App_Offline.htm to force ASP.NET to release file handles
-          Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>"
-          Write-Host "App_Offline.htm placed"
-          Start-Sleep -Seconds 2
-          
-          # Stop the IIS site and app pool
           try {
-            Import-Module WebAdministration -ErrorAction Stop
-            $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
-            if ($site) {
-              Stop-Website $site.name -ErrorAction SilentlyContinue
-              Stop-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
-              Write-Host "Stopped site + pool: $($site.name) / $($site.applicationPool)"
+            # Create App_Offline.htm to force ASP.NET to release file handles
+            if (Test-Path "C:\RfcApp") {
+              Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>" -ErrorAction SilentlyContinue
+              Write-Host "App_Offline.htm placed"
             }
+            Start-Sleep -Seconds 2
+            
+            # Stop the IIS site and app pool
+            try {
+              Import-Module WebAdministration -ErrorAction Stop
+              $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
+              if ($site) {
+                Stop-Website $site.name -ErrorAction SilentlyContinue
+                Stop-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
+                Write-Host "Stopped site + pool: $($site.name) / $($site.applicationPool)"
+              }
+            } catch {
+              Write-Host "WebAdmin stop warning (non-fatal): $_"
+            }
+            
+            # Stop IIS W3SVC service entirely to release all file handles
+            Write-Host "Stopping W3SVC service..."
+            & net stop W3SVC /y 2>&1 | ForEach-Object { Write-Host $_ }
+            Start-Sleep -Seconds 3
+            
+            # Kill any remaining w3wp
+            Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+            Write-Host "IIS stopped"
           } catch {
-            Write-Host "WebAdmin stop warning: $_"
+            Write-Host "Stop step warning (non-fatal): $_"
           }
-          
-          # Stop IIS W3SVC service entirely to release all file handles
-          Write-Host "Stopping W3SVC service..."
-          & net stop W3SVC /y 2>&1 | Write-Host
-          Start-Sleep -Seconds 3
-          
-          # Kill any remaining w3wp
-          Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
-          Write-Host "IIS stopped"
+          # Always exit 0 - failure to stop IIS should not abort deploy
+          exit 0
 
       - name: Copy to IIS
         timeout-minutes: 10
