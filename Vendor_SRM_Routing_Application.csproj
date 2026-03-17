@@ -219,6 +219,9 @@
     <Compile Include="Controllers\DcRouting\ZWM_GATE_ENTRY_RFCController.cs" />
     <Compile Include="Controllers\Finance\ZSALES_MOP_RFCController.cs" />
     <Compile Include="Controllers\Finance\ZRFC_CREDITORS_LOVABLController.cs" />
+    <Compile Include="Controllers\Finance\ZADVANCE_PAYMENT_RFCController.cs" />
+    <Compile Include="Controllers\Finance\ZFINANCE_DOCUMENT_RFCController.cs" />
+    <Compile Include="Controllers\Finance\ZTEST_RFCController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\FMSAutoUpdateController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Post_FABPUTWAYGRCController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Validate_GRCController.cs" />
