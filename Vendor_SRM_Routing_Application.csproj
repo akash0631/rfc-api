@@ -280,6 +280,7 @@
     <Compile Include="Controllers\PaperlessPicklist\AuthenticateController.cs" />
     <Compile Include="Controllers\PaperlessPicklist\GetPicklistNumberController.cs" />
     <Compile Include="Controllers\PaperlessPicklist\PostPickListScannedDataController.cs" />
+    <Compile Include="Controllers\RfcDeployController.cs" />
     <Compile Include="Controllers\Sampling\ArticleYesOrNoDataController.cs" />
     <Compile Include="Controllers\Sampling\QcDoneController.cs" />
     <Compile Include="Controllers\Sampling\ArticleYesOrNoController.cs" />
@@ -418,6 +419,9 @@
     <Content Include="Views\Home\About.cshtml" />
     <Content Include="Views\Home\Contact.cshtml" />
     <Content Include="Views\Home\Index.cshtml" />
+    <Content Include="Views\RfcDeploy\Explorer.cshtml" />
+    <Content Include="Views\RfcDeploy\Index.cshtml" />
+    <Content Include="Views\RfcDeploy\SwaggerUI.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="App_Data\" />
