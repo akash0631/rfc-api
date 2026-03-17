@@ -91,54 +91,66 @@ jobs:
 
       - name: Copy to IIS
         timeout-minutes: 10
-        shell: cmd
+        shell: powershell
         run: |
-          rem --- Wait a moment for MSBuild/Roslyn to release file handles on bin\Release ---
-          ping -n 6 127.0.0.1 >nul
-          if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
-          rem --- Diagnostic: show who owns the DLL and its attributes ---
-          if exist "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" (
-            echo Current DLL attributes:
-            attrib "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-            icacls "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-            whoami
-          )
-          rem --- Fix permissions and clear read-only ---
-          icacls "C:\RfcApp\bin" /grant Administrators:(OI)(CI)F /T /C /Q 2>nul
-          icacls "C:\RfcApp\bin" /grant "%USERNAME%":(OI)(CI)F /T /C /Q 2>nul
-          attrib -R "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" 2>nul
-          rem --- Use robocopy /B (backup mode) to bypass file share locks ---
-          rem --- This uses SeBackupPrivilege to copy locked files ---
-          robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:10 /W:3
-          if %ERRORLEVEL% GTR 7 (
-            echo ERROR: robocopy /B failed to copy DLL
-            exit /b 1
-          )
-          echo DLL copied successfully via robocopy /B
-          copy /Y "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.pdb" 2>nul
-          rem --- FIRST-TIME SETUP: if NuGet deps are not yet deployed, do a full robocopy (slow, but only needed once) ---
-          if not exist "C:\RfcApp\bin\System.Web.Http.dll" (
-            echo First-time deploy detected - copying all dependencies...
-            robocopy bin\Release "C:\RfcApp\bin" /E /NJH /NJS /NFL /NDL /NP /XF sapnco_utils.dll
-            if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
-            rem --- sapnco_utils.dll is NATIVE: NOT in bin. Copy to System32 so IIS w3wp.exe LoadLibrary finds it ---
-            copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\Windows\System32\sapnco_utils.dll" 2>nul
-            rem --- Copy other native SAP NCo deps (libsapucum.dll, ICU DLLs) to System32 ---
-            for %%f in (packages\sapnco_x64.3.0.18\lib\lib*.dll packages\sapnco_x64.3.0.18\lib\*icu*.dll) do (
-              copy /Y "%%f" "C:\Windows\System32\" 2>nul
-            )
-          ) else (
-            echo Incremental deploy - NuGet deps already in place, skipping full robocopy
-          )
-          rem --- Safety net: delete sapnco_utils.dll from bin if it somehow got there ---
-          if exist "C:\RfcApp\bin\sapnco_utils.dll" del /F /Q "C:\RfcApp\bin\sapnco_utils.dll"
-          rem --- Always update config and static files ---
-          copy /Y Web.config "C:\RfcApp\Web.config"
-          if exist Global.asax copy /Y Global.asax "C:\RfcApp\Global.asax"
-          xcopy /Y /E /I Views "C:\RfcApp\Views" >nul 2>&1
-          xcopy /Y /E /I Scripts "C:\RfcApp\Scripts" >nul 2>&1
-          xcopy /Y /E /I Content "C:\RfcApp\Content" >nul 2>&1
-          echo Deployed to C:\RfcApp
+          # Wait for the source DLL to become accessible (Windows Defender may scan it after build)
+          $srcDll = "bin\Release\Vendor_SRM_Routing_Application.dll"
+          $maxWait = 120  # seconds
+          $waited = 0
+          Write-Host "Waiting for source DLL to become accessible..."
+          while ($waited -lt $maxWait) {
+            try {
+              $fs = [System.IO.File]::Open($srcDll, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
+              $fs.Close()
+              Write-Host "Source DLL is accessible after ${waited}s"
+              break
+            } catch {
+              Start-Sleep -Seconds 2
+              $waited += 2
+            }
+          }
+          if ($waited -ge $maxWait) {
+            Write-Host "WARNING: Source DLL still locked after ${maxWait}s, attempting copy anyway"
+          }
+          
+          if (-not (Test-Path "C:\RfcApp\bin")) { New-Item -ItemType Directory "C:\RfcApp\bin" -Force | Out-Null }
+          
+          # Fix permissions and clear read-only
+          & icacls "C:\RfcApp\bin" /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
+          
+          # Copy the DLL using robocopy /B (backup mode)
+          $rc = robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2
+          if ($LASTEXITCODE -gt 7) {
+            Write-Host "ERROR: robocopy /B failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "DLL copied successfully"
+          
+          # Copy PDB (optional, non-fatal)
+          Copy-Item "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\" -Force -ErrorAction SilentlyContinue
+          
+          # First-time setup: copy all dependencies if not already present
+          if (-not (Test-Path "C:\RfcApp\bin\System.Web.Http.dll")) {
+            Write-Host "First-time deploy detected - copying all dependencies..."
+            robocopy "bin\Release" "C:\RfcApp\bin" /E /NJH /NJS /NFL /NDL /NP /XF sapnco_utils.dll | Out-Null
+            # Copy native SAP NCo DLLs to System32
+            Copy-Item "packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll" "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
+            Get-ChildItem "packages\sapnco_x64.3.0.18\lib" -Filter "lib*.dll" | Copy-Item -Destination "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
+            Get-ChildItem "packages\sapnco_x64.3.0.18\lib" -Filter "*icu*.dll" | Copy-Item -Destination "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "Incremental deploy - NuGet deps already in place"
+          }
+          
+          # Safety: remove sapnco_utils.dll from bin if it got there
+          Remove-Item "C:\RfcApp\bin\sapnco_utils.dll" -Force -ErrorAction SilentlyContinue
+          
+          # Update config and static files
+          Copy-Item "Web.config" "C:\RfcApp\Web.config" -Force
+          if (Test-Path "Global.asax") { Copy-Item "Global.asax" "C:\RfcApp\Global.asax" -Force }
+          robocopy "Views" "C:\RfcApp\Views" /E /NJH /NJS /NFL /NDL /NP | Out-Null
+          robocopy "Scripts" "C:\RfcApp\Scripts" /E /NJH /NJS /NFL /NDL /NP | Out-Null
+          robocopy "Content" "C:\RfcApp\Content" /E /NJH /NJS /NFL /NDL /NP | Out-Null
+          Write-Host "Deployed to C:\RfcApp"
 
       - name: Recycle IIS App Pool
         shell: powershell
