@@ -57,11 +57,23 @@ jobs:
             Import-Module WebAdministration -ErrorAction Stop
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
-              Stop-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
-              Start-Sleep -Seconds 3
-              Write-Host "Stopped app pool: $($site.applicationPool)"
+              $poolName = $site.applicationPool
+              Stop-WebAppPool $poolName -ErrorAction SilentlyContinue
+              # Wait up to 15 seconds for w3wp.exe to release file handles
+              $deadline = [DateTime]::UtcNow.AddSeconds(15)
+              while ([DateTime]::UtcNow -lt $deadline) {
+                $w3wp = Get-Process -Name w3wp -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '' }
+                if (-not $w3wp) { break }
+                Start-Sleep -Seconds 1
+              }
+              # Force-kill any remaining w3wp for this pool
+              Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 2
+              Write-Host "Stopped app pool: $poolName"
             } else {
               & "$env:windir\System32\inetsrv\appcmd.exe" stop apppool /apppool.name:RfcApiPool 2>$null
+              Start-Sleep -Seconds 5
+              Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
               Write-Host "Stopped via appcmd"
             }
           } catch {
