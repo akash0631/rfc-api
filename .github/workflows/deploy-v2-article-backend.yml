@@ -25,29 +25,20 @@ jobs:
           npx prisma generate
           npx tsc --skipLibCheck
           npm run postbuild
-          ls dist/
+          echo "dist/ size: $(du -sh dist/)"
 
       - name: Package
         working-directory: Backend
         run: |
           zip -r /tmp/backend-deploy.zip dist/ prisma/schema.prisma package.json package-lock.json
-          echo "Size: $(du -sh /tmp/backend-deploy.zip)"
+          echo "Package size: $(du -sh /tmp/backend-deploy.zip)"
 
       - name: Login to Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy to Azure App Service
-        run: |
-          az webapp deploy \
-            --name v2-article-backend \
-            --resource-group dab-rg \
-            --src-path /tmp/backend-deploy.zip \
-            --type zip \
-            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Configure app settings
+      - name: Set startup command & app settings BEFORE deploy
         run: |
           az webapp config set \
             --name v2-article-backend \
@@ -68,12 +59,34 @@ jobs:
               VLM_FUSION_MODE=default \
               DEVELOPMENT_MODE=false \
               DEBUG_API_ENDPOINTS=false \
-              SENTRY_ENABLED=false
+              DEBUG_VLM_PIPELINE=false \
+              SENTRY_ENABLED=false \
+              ENABLE_RATE_LIMITING=true \
+              JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}"
+          echo "App settings applied"
 
-      - name: Restart & health check
+      - name: Deploy zip (async - no startup wait)
         run: |
-          az webapp restart --name v2-article-backend --resource-group dab-rg \
+          az webapp deploy \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --src-path /tmp/backend-deploy.zip \
+            --type zip \
+            --async true \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          sleep 30
-          curl -sf https://v2-article-backend.azurewebsites.net/api/health \
-            && echo "✅ Health OK" || echo "⚠️ Health pending (need DB/API keys)"
+          echo "✅ ZIP deployed (async)"
+
+      - name: Restart & wait for startup
+        run: |
+          az webapp restart \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          echo "Waiting 45s for startup..."
+          sleep 45
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://v2-article-backend.azurewebsites.net/api/health)
+          BODY=$(curl -s https://v2-article-backend.azurewebsites.net/api/health || echo "no response")
+          echo "Health check HTTP $HTTP: $BODY"
