@@ -1,0 +1,355 @@
+@model IEnumerable<Vendor_SRM_Routing_Application.Controllers.RfcEndpoint>
+@{
+    ViewBag.Title = "V2 Retail · RFC API Explorer";
+    Layout = null;
+    var groups = Model.GroupBy(e => e.Group).ToList();
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>@ViewBag.Title</title>
+<style>
+@@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f2f7;--white:#fff;--surface:#f7f8fc;--border:#e0e4ef;--border2:#c8d0e3;
+  --text:#111827;--sub:#374151;--muted:#6b7280;--dim:#9ca3af;
+  --accent:#2563eb;--al:#eff6ff;--ab:#bfdbfe;
+  --green:#15803d;--gl:#f0fdf4;--gb:#86efac;
+  --orange:#c2410c;--ol:#fff7ed;
+  --red:#dc2626;--rl:#fef2f2;--rb:#fca5a5;
+  --purple:#7c3aed;
+  --sans:'Inter',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+}
+body{background:var(--bg);font-family:var(--sans);color:var(--text);min-height:100vh;display:flex;flex-direction:column;}
+/* TOPBAR */
+.topbar{background:var(--white);border-bottom:1.5px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-mark{width:30px;height:30px;background:var(--accent);border-radius:7px;display:grid;place-items:center;font-weight:800;color:#fff;font-size:13px;font-family:var(--mono);}
+.logo-name{font-size:14px;font-weight:700;letter-spacing:-.3px;}
+.logo-name span{color:var(--accent);}
+.nav a{font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:6px;transition:.15s;}
+.nav a:hover,.nav a.active{color:var(--accent);background:var(--al);}
+.topbar-stats{display:flex;gap:20px;font-size:11.5px;color:var(--muted);}
+.topbar-stats strong{color:var(--text);font-weight:600;}
+/* LAYOUT */
+.layout{display:flex;flex:1;overflow:hidden;height:calc(100vh - 56px);}
+/* SIDEBAR */
+.sidebar{width:260px;min-width:260px;background:var(--white);border-right:1.5px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.search-wrap{padding:12px;border-bottom:1px solid var(--border);position:relative;}
+.search-icon{position:absolute;left:21px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:13px;}
+.search{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:7px;padding:7px 10px 7px 28px;color:var(--text);font-size:12.5px;outline:none;transition:.15s;font-family:var(--sans);}
+.search:focus{border-color:var(--accent);background:var(--white);}
+.search::placeholder{color:var(--dim);}
+.sidebar-list{overflow-y:auto;flex:1;}
+.sidebar-list::-webkit-scrollbar{width:4px;}
+.sidebar-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.grp-hdr{padding:10px 14px 4px;font-size:9.5px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-top:6px;}
+.grp-count{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0 6px;font-size:9px;color:var(--dim);}
+.ep-item{padding:6px 14px 6px 20px;font-size:12px;color:var(--sub);cursor:pointer;border-left:2.5px solid transparent;transition:.1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ep-item:hover{color:var(--text);background:var(--surface);}
+.ep-item.active{color:var(--accent);border-left-color:var(--accent);background:var(--al);font-weight:500;}
+/* MAIN */
+.main{flex:1;overflow-y:auto;padding:28px 32px;background:var(--bg);}
+.main::-webkit-scrollbar{width:6px;}
+.main::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+/* WELCOME */
+.welcome{max-width:600px;margin:60px auto;text-align:center;}
+.welcome-icon{font-size:44px;margin-bottom:14px;}
+.welcome h2{font-size:22px;font-weight:700;margin-bottom:8px;}
+.welcome p{color:var(--muted);font-size:13.5px;line-height:1.75;}
+.wstats{display:flex;gap:14px;justify-content:center;margin-top:24px;flex-wrap:wrap;}
+.wstat{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:14px 22px;text-align:center;}
+.wstat .n{font-size:26px;font-weight:700;color:var(--accent);display:block;font-family:var(--mono);}
+.wstat .l{font-size:11px;color:var(--muted);margin-top:2px;}
+/* ENDPOINT DETAIL */
+.ep-header{margin-bottom:20px;}
+.ep-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;}
+.method-badge{font-family:var(--mono);font-size:11px;font-weight:700;background:var(--gl);color:var(--green);border:1.5px solid var(--gb);padding:3px 10px;border-radius:5px;}
+.ep-name{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.4px;}
+.ep-meta{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.ep-meta span{color:var(--purple);font-family:var(--mono);}
+.env-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:var(--mono);}
+.env-tag.dev{background:var(--gl);color:var(--green);border:1px solid var(--gb);}
+.env-tag.prd{background:var(--rl);color:var(--red);border:1px solid var(--rb);}
+.route-box{display:inline-flex;align-items:center;gap:6px;background:var(--ol);border:1px solid #fed7aa;border-radius:7px;padding:7px 14px;font-family:var(--mono);font-size:12.5px;margin-bottom:8px;}
+.rb-base{color:var(--muted);}
+.rb-path{color:var(--orange);}
+.source-link{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);text-decoration:none;}
+.source-link:hover{color:var(--accent);}
+/* CARDS */
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:10px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.03);}
+.card-hdr{padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-label{font-size:9.5px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px;}
+.ccount{background:var(--white);border:1px solid var(--border);border-radius:6px;padding:0 7px;font-size:9.5px;color:var(--muted);}
+/* PARAM TABLE */
+.ptable{width:100%;border-collapse:collapse;}
+.ptable th{padding:8px 16px;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);background:var(--surface);}
+.ptable td{padding:9px 16px;font-size:12.5px;border-bottom:1px solid var(--border);color:var(--sub);vertical-align:middle;}
+.ptable tr:last-child td{border-bottom:none;}
+.ptable tr:hover td{background:#fafbff;}
+.pname{color:var(--accent);font-family:var(--mono);font-weight:600;}
+.ptype{color:var(--purple);font-family:var(--mono);font-size:11.5px;}
+.req-badge{font-size:9px;font-weight:700;background:var(--ol);color:var(--orange);border:1px solid #fed7aa;padding:1px 6px;border-radius:3px;font-family:var(--mono);}
+.no-params{padding:18px 16px;font-size:12.5px;color:var(--dim);font-style:italic;}
+/* BODY PREVIEW */
+.body-pre{background:#1e293b;border-radius:0 0 8px 8px;padding:14px 16px;font-family:var(--mono);font-size:12px;color:#94a3b8;overflow-x:auto;line-height:1.7;white-space:pre;}
+.kw{color:#7dd3fc;}.sv{color:#86efac;}.nv{color:#fca5a5;}
+/* TABLE CHIPS */
+.table-chips{padding:12px 16px;display:flex;flex-wrap:wrap;gap:7px;}
+.tc{font-family:var(--mono);font-size:11.5px;background:var(--ol);border:1px solid #fed7aa;color:var(--orange);padding:4px 10px;border-radius:5px;}
+/* DATA LAKE */
+.datalake-link{margin:0 16px 14px;padding:10px 14px;background:var(--al);border:1px solid var(--ab);border-radius:8px;font-size:12px;display:flex;align-items:center;gap:8px;}
+.datalake-link a{color:var(--accent);font-family:var(--mono);text-decoration:none;word-break:break-all;}
+.datalake-link a:hover{text-decoration:underline;}
+/* TRY IT */
+.try-section{padding:14px 16px;}
+.try-grid{display:grid;gap:8px;}
+.try-field label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;}
+.try-field input{width:100%;border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:var(--mono);font-size:13px;color:var(--text);background:var(--white);outline:none;transition:.15s;}
+.try-field input:focus{border-color:var(--accent);}
+.try-field input::placeholder{color:var(--dim);}
+.try-btn{margin-top:8px;padding:9px 18px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;}
+.try-btn:hover{background:#1d4ed8;}
+.try-result{margin-top:10px;background:#1e293b;border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:11.5px;color:#94a3b8;overflow-x:auto;white-space:pre-wrap;display:none;max-height:200px;}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">V2</div>
+    <div class="logo-name">Retail <span>RFC</span> Explorer</div>
+  </div>
+  <div class="nav" style="display:flex;gap:4px">
+    <a href="@Url.Action("Index","RfcDeploy")">⚡ Deploy RFC</a>
+    <a href="@Url.Action("Explorer","RfcDeploy")" class="active">🔍 Explorer</a>
+    <a href="@Url.Action("Swagger","RfcDeploy")">📖 Swagger UI</a>
+    <a href="@Url.Action("Manifest","RfcDeploy")" target="_blank">📋 JSON Manifest</a>
+  </div>
+  <div class="topbar-stats">
+    <div><strong>@Model.Count()</strong> RFCs</div>
+    <div><strong>@groups.Count</strong> modules</div>
+    <div><strong>@Model.Sum(e => e.Parameters.Count)</strong> params</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search" id="srch" placeholder="Search RFCs, params..." oninput="doSearch(this.value)">
+    </div>
+    <div class="sidebar-list" id="sidebarList">
+      @foreach (var grp in groups)
+      {
+        <div class="grp-hdr" onclick="toggleGrp('@grp.Key.Replace(" ", "_").Replace("—","dash")')">
+          <span>@grp.Key</span>
+          <span class="grp-count">@grp.Count()</span>
+        </div>
+        <div id="g_@(grp.Key.Replace(" ", "_").Replace("—","dash"))">
+          @foreach (var ep in grp)
+          {
+            <div class="ep-item" id="i_@ep.Name" onclick="showEndpoint('@ep.Name')">
+              @ep.Name
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main" id="mainContent">
+    <div id="welcome" class="welcome">
+      <div class="welcome-icon">⚙️</div>
+      <h2>RFC API Explorer</h2>
+      <p>All SAP RFC endpoints from the IIS codebase — parameters, response tables, try-it-out, and Data Lake links in one place.</p>
+      <div class="wstats">
+        <div class="wstat"><span class="n">@Model.Count()</span><div class="l">Total RFCs</div></div>
+        <div class="wstat"><span class="n">@groups.Count</span><div class="l">Modules</div></div>
+        <div class="wstat"><span class="n">@Model.Sum(e => e.Parameters.Count)</span><div class="l">Parameters</div></div>
+        <div class="wstat"><span class="n">@Model.Count(e => !string.IsNullOrEmpty(e.DataLakeEndpoint))</span><div class="l">Data Lake Links</div></div>
+      </div>
+    </div>
+    <div id="detail" style="display:none"></div>
+  </div>
+</div>
+
+@* Serialize all endpoints as JSON for client-side search/render *@
+<script>
+const ENDPOINTS = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(
+    Model.Select(e => new {
+        e.Name, e.Route, e.Group, e.SapRfc, e.Environment, e.SapHost,
+        e.Description, e.FilePath, e.DataLakeEndpoint,
+        Parameters = e.Parameters.Select(p => new { p.Name, p.SapType, p.Description, p.Required }),
+        ResponseTables = e.ResponseTables
+    })
+));
+const GH_BASE = "https://github.com/akash0631/rfc-api/blob/master/";
+const IIS_BASE = "http://v2retail.net:9005/";
+
+function toggleGrp(id) {
+  const el = document.getElementById('g_' + id);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+function doSearch(q) {
+  q = q.toLowerCase().trim();
+  ENDPOINTS.forEach(ep => {
+    const match = !q ||
+      ep.Name.toLowerCase().includes(q) ||
+      ep.Group.toLowerCase().includes(q) ||
+      ep.SapRfc.toLowerCase().includes(q) ||
+      ep.Parameters.some(p => p.Name.toLowerCase().includes(q)) ||
+      ep.Description.toLowerCase().includes(q);
+    const el = document.getElementById('i_' + ep.Name);
+    if (el) el.style.display = match ? '' : 'none';
+  });
+}
+
+function showEndpoint(name) {
+  const ep = ENDPOINTS.find(e => e.Name === name);
+  if (!ep) return;
+
+  // Sidebar highlight
+  document.querySelectorAll('.ep-item').forEach(el => el.classList.remove('active'));
+  const itm = document.getElementById('i_' + name);
+  if (itm) { itm.classList.add('active'); itm.scrollIntoView({ block: 'nearest' }); }
+
+  document.getElementById('welcome').style.display = 'none';
+  const detail = document.getElementById('detail');
+  detail.style.display = 'block';
+
+  // Build request body preview
+  const bodyObj = {};
+  ep.Parameters.forEach(p => { bodyObj[p.Name] = `[${p.SapType}]`; });
+  const bodyJson = JSON.stringify(bodyObj, null, 2)
+    .replace(/"([^"]+)":/g, '<span class="kw">"$1"</span>:')
+    .replace(/: "([^"]+)"/g, ': <span class="sv">"$1"</span>');
+
+  // Params table rows
+  const paramsHtml = ep.Parameters.length
+    ? ep.Parameters.map(p => `
+        <tr>
+          <td class="pname">${p.Name}</td>
+          <td class="ptype">${p.SapType}</td>
+          <td>${p.Description || '—'}</td>
+          <td><span class="req-badge">${p.Required !== false ? 'REQUIRED' : 'OPTIONAL'}</span></td>
+        </tr>`).join('')
+    : `<tr><td colspan="4" class="no-params">No parameters — view source file for details.</td></tr>`;
+
+  // Response table chips
+  const tablesHtml = ep.ResponseTables.length
+    ? ep.ResponseTables.map(t => `<span class="tc">${t}</span>`).join('')
+    : '<span style="color:var(--dim);font-size:12.5px;padding:4px">No tables</span>';
+
+  // Data lake section
+  const dataLakeHtml = ep.DataLakeEndpoint
+    ? `<div class="datalake-link">
+        📡 <strong>Data Lake:</strong>
+        <a href="${ep.DataLakeEndpoint}" target="_blank">${ep.DataLakeEndpoint}</a>
+       </div>` : '';
+
+  // Try-it-out inputs
+  const tryFields = ep.Parameters.map(p => `
+    <div class="try-field">
+      <label>${p.Name} <span style="color:var(--dim);font-weight:400;font-family:var(--mono)">[${p.SapType}]</span></label>
+      <input id="ti_${p.Name}" placeholder="${p.Description || p.Name}">
+    </div>`).join('');
+
+  detail.innerHTML = `
+    <div class="ep-header">
+      <div class="ep-title-row">
+        <span class="method-badge">POST</span>
+        <span class="ep-name">${ep.Name}</span>
+      </div>
+      <div class="ep-meta">
+        SAP RFC: <span>${ep.SapRfc}</span> &nbsp;·&nbsp;
+        Module: <span>${ep.Group}</span> &nbsp;·&nbsp;
+        <span class="env-tag ${ep.Environment.toLowerCase()}">${ep.Environment} · ${ep.SapHost}</span>
+      </div>
+      <div class="route-box">
+        <span class="rb-base">POST /${ep.Route}</span>
+      </div>
+      <br>
+      <a class="source-link" href="${GH_BASE}${ep.FilePath}" target="_blank">↗ View source on GitHub</a>
+    </div>
+
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-label">Request Parameters <span class="ccount">${ep.Parameters.length}</span></span>
+      </div>
+      <table class="ptable">
+        <thead><tr><th>Parameter</th><th>SAP Type</th><th>Description</th><th>Required</th></tr></thead>
+        <tbody>${paramsHtml}</tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-hdr"><span class="card-label">Request Body (JSON)</span></div>
+      <div class="body-pre">${bodyJson}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-label">SAP Response Tables <span class="ccount">${ep.ResponseTables.length}</span></span>
+      </div>
+      <div class="table-chips">${tablesHtml}</div>
+      ${dataLakeHtml}
+    </div>
+
+    <div class="card">
+      <div class="card-hdr"><span class="card-label">⚡ Try It Out</span></div>
+      <div class="try-section">
+        <div class="try-grid" id="tryGrid">
+          ${tryFields || '<div style="color:var(--dim);font-size:12.5px">No parameters required for this endpoint.</div>'}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+          <select id="tryEnv" style="border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px;background:var(--white);color:var(--text);outline:none;font-family:var(--mono)">
+            <option value="dev">Dev · 192.168.144.174</option>
+            <option value="quality">Quality · 192.168.144.179</option>
+            <option value="production">Production · 192.168.144.170</option>
+          </select>
+          <button class="try-btn" onclick="tryIt('${ep.Name}')">▶ Execute</button>
+        </div>
+        <div class="try-result" id="tryResult_${ep.Name}"></div>
+      </div>
+    </div>`;
+}
+
+function tryIt(name) {
+  const ep = ENDPOINTS.find(e => e.Name === name); if (!ep) return;
+  const resultEl = document.getElementById('tryResult_' + name);
+  resultEl.style.display = 'block';
+  resultEl.textContent = 'Calling ' + IIS_BASE + ep.Route + ' ...';
+
+  const body = {};
+  ep.Parameters.forEach(p => {
+    const val = document.getElementById('ti_' + p.Name)?.value?.trim() || '';
+    if (val) body[p.Name] = val;
+  });
+
+  fetch(IIS_BASE + ep.Route, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  .then(r => r.json())
+  .then(d => { resultEl.textContent = JSON.stringify(d, null, 2); })
+  .catch(e => { resultEl.textContent = '✗ Error: ' + e.message + '\n(IIS server may not be reachable from this browser)'; });
+}
+
+// Hash-based routing
+if (location.hash) {
+  const name = location.hash.slice(1);
+  if (ENDPOINTS.find(e => e.Name === name)) showEndpoint(name);
+}
+</script>
+</body>
+</html>
