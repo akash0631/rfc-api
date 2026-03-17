@@ -54,18 +54,16 @@ jobs:
         shell: cmd
         run: |
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
-          rem --- Remove native DLL from bin if it was incorrectly placed there before ---
-          if exist "C:\RfcApp\bin\sapnco_utils.dll" del /F "C:\RfcApp\bin\sapnco_utils.dll"
-          robocopy bin\Release "C:\RfcApp\bin" *.dll *.pdb /XO /NJH /NJS
+          rem --- Robocopy built DLLs, EXCLUDE sapnco_utils.dll (native DLL - ASP.NET LoadAllAssemblies must never scan it in bin) ---
+          robocopy bin\Release "C:\RfcApp\bin" *.dll *.pdb /XO /NJH /NJS /XF sapnco_utils.dll
           if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
-          rem --- sapnco.dll (managed) goes in bin so .NET finds it ---
+          rem --- Safety net: delete if it somehow landed in bin from a prior deployment ---
+          if exist "C:\RfcApp\bin\sapnco_utils.dll" del /F /Q "C:\RfcApp\bin\sapnco_utils.dll"
+          rem --- sapnco.dll (managed wrapper) goes in bin so .NET Assembly.Load finds it ---
           copy /Y packages\sapnco_x64.3.0.18\lib\sapnco.dll "C:\RfcApp\bin\sapnco.dll"
-          rem --- sapnco_utils.dll is a NATIVE DLL - must NOT be in bin (ASP.NET tries to load it as managed assembly and fails)
-          rem --- Put it in the app root so Windows native loader finds it via LoadLibrary, not ASP.NET compilation scanner ---
-          copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\RfcApp\sapnco_utils.dll"
-          rem --- Also copy to System32 so it's always findable by the IIS worker process ---
+          rem --- sapnco_utils.dll is NATIVE: NOT in bin. Copy to System32 so IIS w3wp.exe LoadLibrary finds it ---
           copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\Windows\System32\sapnco_utils.dll"
-          rem --- Copy any other native DLLs from the NCo package (libsapucum.dll, ICU, etc.) ---
+          rem --- Copy other native SAP NCo deps (libsapucum.dll, ICU DLLs) to System32 ---
           for %%f in (packages\sapnco_x64.3.0.18\lib\lib*.dll packages\sapnco_x64.3.0.18\lib\*icu*.dll) do (
             echo Copying native dep: %%f
             copy /Y "%%f" "C:\Windows\System32\" 2>nul
@@ -101,10 +99,11 @@ jobs:
           if ($rfc) { $urls += "http://localhost:8888/api/$rfc" }
           foreach ($url in $urls) {
             try {
-              $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
+              $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 15
               Write-Host "OK  HTTP $($r.StatusCode)  $url"
             } catch {
-              Write-Host "ERR $url - $_"
+              Write-Host "FAIL $url - $_"
+              exit 1
             }
           }
 
