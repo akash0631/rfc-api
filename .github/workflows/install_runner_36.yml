@@ -5,75 +5,35 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Copy published app from D drive to C:\V2RfcApi and test
+      - name: Write event log and test results to file on .36
         shell: cmd
         run: |
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          net use \\192.168.151.36\D$ vrl@55555 /user:Administrator /persistent:no
 
-          echo === Published bin DLLs on D: ===
-          dir "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC\bin\Vendor*.dll" /B 2>nul
-          dir "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC\bin\*.dll" /B 2>nul | find /c ".dll"
+          echo === Write diagnostic script to .36 ===
+          echo @echo off > \\192.168.151.36\C$\diag.bat
+          echo cd /d C:\ >> \\192.168.151.36\C$\diag.bat
+          echo echo === SITE AND POOL STATUS === > C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo C:\Windows\System32\inetsrv\appcmd.exe list sites >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo C:\Windows\System32\inetsrv\appcmd.exe list apppools >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo echo === TEST LOCALHOST:9191 === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'OK' $r.StatusCode $r.Content}catch{Write-Host 'ERR' $_.Exception.Message}" >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo echo === TEST LOCALHOST:8888 === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:8888/' -UseBasicParsing -TimeoutSec 8;Write-Host 'OK' $r.StatusCode}catch{Write-Host 'ERR' $_.Exception.Message}" >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo echo === LAST 10 APP ERRORS === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo powershell -NoProfile -Command "Get-EventLog Application -Newest 20 -EntryType Error,Warning -EA SilentlyContinue | Where-Object {$_.Source -like '*IIS*' -or $_.Source -like '*ASP*' -or $_.Source -like '*W3SVC*' -or $_.Source -like '*WAS*'} | Select TimeGenerated,Source,Message | Format-List | Out-String" >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo echo === SAPNCO ON .36 === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo if exist C:\Windows\System32\sapnco.dll echo sapnco.dll PRESENT >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo if not exist C:\Windows\System32\sapnco.dll echo sapnco.dll MISSING >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo if exist C:\Windows\System32\sapnco_utils.dll echo sapnco_utils.dll PRESENT >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo echo === V2RfcApi bin DLL count === >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
+          echo dir C:\V2RfcApi\bin\*.dll /B >> C:\diag_out.txt 2^>^&1 >> \\192.168.151.36\C$\diag.bat
+          echo echo DONE >> C:\diag_out.txt >> \\192.168.151.36\C$\diag.bat
 
-          echo === Copy entire Published app to C:\V2RfcApi ===
-          robocopy "\\192.168.151.36\D$\V2_Vendor_PPT_SRM\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC" "\\192.168.151.36\C$\V2RfcApi" /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
-
-          echo === Verify V2RfcApi bin ===
-          dir \\192.168.151.36\C$\V2RfcApi\bin\Vendor*.dll /B 2>nul
-          dir \\192.168.151.36\C$\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
-          dir \\192.168.151.36\C$\V2RfcApi\Web.config 2>nul
-
-          echo === Recycle V2RfcApiPool ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
-          echo Recycle: %ERRORLEVEL%
-
-          net use \\192.168.151.36\D$ /delete /y 2>nul
+          schtasks /create /s 192.168.151.36 /u Administrator /p vrl@55555 /tn V2Diag /tr C:\diag.bat /sc once /st 00:00 /ru SYSTEM /f 2>nul
+          schtasks /run /s 192.168.151.36 /u Administrator /p vrl@55555 /tn V2Diag 2>nul
+          echo Task triggered, waiting 20s...
+          timeout /t 20 /nobreak
+          echo === DIAGNOSTIC OUTPUT ===
+          type \\192.168.151.36\C$\diag_out.txt
           net use \\192.168.151.36\C$ /delete /y 2>nul
-
-      - name: Test all routes on .36 — existing + new
-        shell: powershell
-        run: |
-          Start-Sleep 15
-          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-
-          Write-Host "=== EXISTING SITES (must not be broken) ==="
-          foreach ($port in @(80, 8888)) {
-            try {
-              $r = Invoke-WebRequest "http://192.168.151.36:$port/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
-              Write-Host "PORT $port : HTTP $($r.StatusCode) $($r.Content.Substring(0,[Math]::Min(150,$r.Content.Length)))"
-            } catch { Write-Host "PORT $port : $($_.Exception.Message)" }
-          }
-
-          Write-Host ""
-          Write-Host "=== NEW SITE :9191 ==="
-          try {
-            $r = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
-            Write-Host "PORT 9191 : HTTP $($r.StatusCode)"
-            Write-Host $r.Content
-          } catch { Write-Host "PORT 9191 : $($_.Exception.Message)" }
-
-      - name: If 9191 works wire RFC Collector and do full pipeline
-        shell: powershell
-        run: |
-          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          $test = $null
-          try { $test = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 15 } catch {}
-
-          if ($test -and $test.StatusCode -eq 200) {
-            Write-Host "9191 is live — wiring RFC Collector..."
-            $cfg = Get-Content "C:\RfcCollector\appsettings.json" | ConvertFrom-Json
-            $cfg.IIS_HOST = "192.168.151.36"; $cfg.IIS_PORT = "9191"
-            $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
-            Restart-Service RfcCollector -Force; Start-Sleep 12
-            Write-Host "Collector: $((Invoke-WebRequest 'http://localhost:9090/' -UseBasicParsing).Content)"
-            $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
-            try {
-              $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
-              Write-Host "=== PIPELINE SUCCESS ==="
-              Write-Host "HTTP: $($r.StatusCode)"; Write-Host $r.Content
-            } catch { Write-Host "PIPELINE ERR: $($_.Exception.Message)" }
-          } else {
-            Write-Host "9191 not responding — check event log on .36 for app pool error"
-            Write-Host "Error: $($_.Exception.Message)"
-          }
