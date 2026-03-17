@@ -71,6 +71,8 @@ jobs:
           copy /Y Web.config "C:\RfcApp\Web.config"
           if exist Global.asax copy /Y Global.asax "C:\RfcApp\Global.asax"
           xcopy /Y /E /I Views "C:\RfcApp\Views" >nul 2>&1
+          xcopy /Y /E /I Scripts "C:\RfcApp\Scripts" >nul 2>&1
+          xcopy /Y /E /I Content "C:\RfcApp\Content" >nul 2>&1
           echo Deployed to C:\RfcApp
 
       - name: Recycle IIS App Pool
