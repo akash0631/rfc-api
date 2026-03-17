@@ -5,41 +5,36 @@ jobs:
   fix:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Recycle IIS and verify NCo
-        shell: powershell
+      - name: Check NCo state
+        shell: cmd
         run: |
-          Write-Host "sapnco.dll in System32: $(Test-Path 'C:\Windows\System32\sapnco.dll')"
-          Write-Host "sapnco_utils.dll in System32: $(Test-Path 'C:\Windows\System32\sapnco_utils.dll')"
-          Write-Host "Collector config:"
-          Get-Content "C:\RfcCollector\appsettings.json"
-          Write-Host "Collector service: $((Get-Service RfcCollector).Status)"
-          Import-Module WebAdministration
-          Get-ChildItem IIS:\AppPools | ForEach-Object {
-            Restart-WebAppPool $_.Name -EA SilentlyContinue
-            Write-Host "Recycled: $($_.Name)"
-          }
-          Start-Sleep 10
-          Get-Website | Select Name, State | Format-Table
+          echo === NCo DLLs ===
+          dir "C:\Windows\System32\sapnco.dll" 2>nul && echo sapnco.dll PRESENT || echo sapnco.dll MISSING
+          dir "C:\Windows\System32\sapnco_utils.dll" 2>nul && echo sapnco_utils.dll PRESENT || echo sapnco_utils.dll MISSING
+          echo === IIS bin sapnco ===
+          dir "C:\inetpub\wwwroot\Store Tracker\bin\sapnco*" 2>nul
+          dir "C:\RfcApp\sapnco*" 2>nul
 
-      - name: Test IIS :80 health
-        shell: powershell
+      - name: Recycle IIS app pools via appcmd
+        shell: cmd
         run: |
-          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          try {
-            $r = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "Health HTTP $($r.StatusCode): $($r.Content)"
-          } catch { Write-Host "Health error: $($_.Exception.Message)" }
-          try {
-            $r2 = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
-            Write-Host "Execute HTTP $($r2.StatusCode): $($r2.Content.Substring(0,[Math]::Min(300,$r2.Content.Length)))"
-          } catch { Write-Host "Execute error: $($_.Exception.Message)" }
+          echo === Recycling app pools ===
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:"DefaultAppPool" 2>nul && echo DefaultAppPool recycled
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:"StoreTracker" 2>nul && echo StoreTracker recycled
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:"RfcApiPool" 2>nul && echo RfcApiPool recycled
+          timeout /t 8 /nobreak
+          echo === IIS site states ===
+          C:\Windows\System32\inetsrv\appcmd.exe list sites
 
-      - name: Full pipeline end-to-end
-        shell: powershell
+      - name: Test IIS :80 Execute route
+        shell: cmd
         run: |
-          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
-          try {
-            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
-            Write-Host "PIPELINE_OK|HTTP:$($r.StatusCode)"
-            Write-Host ($r.Content.Substring(0,[Math]::Min(1000,$r.Content.Length)))
-          } catch { Write-Host "PIPELINE_ERR: $($_.Exception.Message)" }
+          echo === Test health ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:80/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH' $r.StatusCode $r.Content}catch{Write-Host 'HEALTH_ERR' $_.Exception.Message.Substring(0,100)}"
+          echo === Test Execute ===
+          powershell -NoProfile -Command "$b='{\"I_COMPANY_CODE\":\"1000\",\"I_POSTING_DATE_LOW\":\"20260301\",\"I_POSTING_DATE_HIGH\":\"20260317\"}';try{$r=Invoke-WebRequest 'http://localhost:80/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 20;Write-Host 'EXECUTE' $r.StatusCode ($r.Content.Substring(0,[Math]::Min(400,$r.Content.Length)))}catch{Write-Host 'EXECUTE_ERR' $_.Exception.Message.Substring(0,150)}"
+
+      - name: Full pipeline test via RFC Collector
+        shell: cmd
+        run: |
+          powershell -NoProfile -Command "$b='{\"rfc\":\"ZADVANCE_PAYMENT_RFC\",\"params\":{\"I_COMPANY_CODE\":\"1000\",\"I_POSTING_DATE_LOW\":\"20260301\",\"I_POSTING_DATE_HIGH\":\"20260317\"},\"targetTable\":\"ET_ZADVANCE_PAYMENT\",\"targetDb\":\"claudetestv2\",\"maxRows\":5}';try{$r=Invoke-WebRequest 'http://localhost:9090/fetch' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60;Write-Host 'FETCH_OK' $r.StatusCode;Write-Host ($r.Content.Substring(0,[Math]::Min(1000,$r.Content.Length)))}catch{Write-Host 'FETCH_ERR' $_.Exception.Message}"
