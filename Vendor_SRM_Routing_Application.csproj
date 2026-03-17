@@ -223,6 +223,8 @@
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Post_FABPUTWAYGRCController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Validate_GRCController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\Validation_BINController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZVND_PUTWAY_BIN_VAL_RFCController.cs" />
+    <Compile Include="Controllers\GateEntry_LOT_Putway\ZVND_PUTWAY_PALETTE_VAL_RFCController.cs" />
     <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GATE_SAVE3_NController.cs" />
     <Compile Include="Controllers\GateEntry_LOT_Putway\Gate_Box_ValidationController.cs" />
     <Compile Include="Controllers\GateEntry_LOT_Putway\ZWM_GATE_PALLATE_VALIDATE4_NController.cs" />
@@ -261,6 +263,11 @@
     <Compile Include="Controllers\HU_PRINT\HU_PrintController.cs" />
     <Compile Include="Controllers\HU_SCAN\ZWM_SAVE_HUController.cs" />
     <Compile Include="Controllers\HU_SCAN\ZWM_SCAN_HUController.cs" />
+    <Compile Include="Controllers\Inbound\ZVND_PUTWAY_BIN_VAL_RFCController.cs" />
+    <Compile Include="Controllers\Inbound\ZVND_PUTWAY_PALETTE_VAL_RFCController.cs" />
+    <Compile Include="Controllers\Inbound\ZVND_UNLOAD_HU_VALIDATE_RFCController.cs" />
+    <Compile Include="Controllers\Inbound\ZVND_UNLOAD_PALLATE_VALIDATIONController.cs" />
+    <Compile Include="Controllers\Inbound\ZVND_UNLOAD_SAVE_RFCController.cs" />
     <Compile Include="Controllers\NSO\NSOSiteListController.cs" />
     <Compile Include="Controllers\NSO\NSOConfigPostController.cs" />
     <Compile Include="Controllers\NSO\NSOConfigRoutingController.cs" />
