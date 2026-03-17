@@ -1,11 +1,12 @@
-name: Fix Plan and Deploy v2 Backend
+name: Deploy v2ArticleCreation Backend
 
 on:
-  repository_dispatch:
-    types: [fix-and-deploy-v2-backend]
+  push:
+    paths:
+      - '.github/workflows/fix-and-deploy-v2-backend.yml'
 
 jobs:
-  fix-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Login to Azure
@@ -13,32 +14,28 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Move app to dab-plan (P2v3) + configure
+      - name: Move to dab-plan (P2v3)
         run: |
           SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          
-          echo "=== Current plan ==="
-          az webapp show --name v2-article-backend --resource-group dab-rg \
-            --subscription $SUB \
-            --query "{plan:appServicePlanId, state:state}" -o json
+          PLAN=$(az webapp show --name v2-article-backend --resource-group dab-rg \
+            --subscription $SUB --query appServicePlanId -o tsv)
+          echo "Current plan: $PLAN"
+          if [[ "$PLAN" != *"dab-plan"* ]]; then
+            az webapp update --name v2-article-backend --resource-group dab-rg \
+              --subscription $SUB \
+              --set serverFarmId="/subscriptions/$SUB/resourceGroups/dab-rg/providers/Microsoft.Web/serverfarms/dab-plan"
+            echo "✅ Moved to dab-plan (P2v3)"
+          else
+            echo "✅ Already on dab-plan"
+          fi
 
-          echo "=== Moving to dab-plan ==="
-          az webapp update \
-            --name v2-article-backend \
-            --resource-group dab-rg \
-            --subscription $SUB \
-            --set serverFarmId="/subscriptions/$SUB/resourceGroups/dab-rg/providers/Microsoft.Web/serverfarms/dab-plan"
-          echo "✅ Moved to dab-plan"
-
-          echo "=== Setting startup command ==="
+      - name: Set startup command & env vars
+        run: |
+          SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           az webapp config set \
-            --name v2-article-backend \
-            --resource-group dab-rg \
-            --subscription $SUB \
+            --name v2-article-backend --resource-group dab-rg --subscription $SUB \
             --startup-file "node --max-old-space-size=512 dist/index.js" \
             --linux-fx-version "NODE|22-lts"
-
-          echo "=== Setting app settings ==="
           az webapp config appsettings set \
             --name v2-article-backend --resource-group dab-rg --subscription $SUB \
             --settings \
@@ -47,8 +44,7 @@ jobs:
               CORS_ORIGINS="https://articles.v2retail.net,https://v2-article-creation.pages.dev" \
               ENABLE_REDIS=false VLM_FUSION_MODE=default \
               DEVELOPMENT_MODE=false DEBUG_API_ENDPOINTS=false \
-              DEBUG_VLM_PIPELINE=false SENTRY_ENABLED=false \
-              ENABLE_RATE_LIMITING=true \
+              DEBUG_VLM_PIPELINE=false SENTRY_ENABLED=false ENABLE_RATE_LIMITING=true \
               JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               DIRECT_URL="${{ secrets.DIRECT_URL }}" \
@@ -61,7 +57,7 @@ jobs:
           repository: akash0631/v2ArticleCreation
           token: ${{ secrets.PIPELINE_GITHUB_TOKEN }}
 
-      - name: Setup Node 22 & build
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -81,34 +77,29 @@ jobs:
         run: |
           zip -r /tmp/v2-backend.zip dist/ node_modules/ prisma/schema.prisma package.json
           echo "Zip: $(du -sh /tmp/v2-backend.zip)"
-          
           az webapp deploy \
             --name v2-article-backend --resource-group dab-rg \
             --src-path /tmp/v2-backend.zip --type zip --async true \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} || true
           echo "✅ Deployed"
 
-      - name: Restart
+      - name: Restart & health check + logs
         run: |
-          az webapp restart --name v2-article-backend --resource-group dab-rg \
-            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          echo "Restarted. Waiting 60s..."
+          SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          az webapp restart --name v2-article-backend --resource-group dab-rg --subscription $SUB
+          echo "Waiting 60s..."
           sleep 60
 
-      - name: Health check + show runtime logs
-        run: |
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://v2-article-backend.azurewebsites.net/api/health)
           BODY=$(curl -s https://v2-article-backend.azurewebsites.net/api/health)
-          echo "HTTP $HTTP: $BODY"
+          echo "=== HEALTH: HTTP $HTTP ==="
+          echo "$BODY"
 
-          # Get kudu logs
+          # Get runtime logs via Kudu
           CREDS=$(az webapp deployment list-publishing-credentials \
-            --name v2-article-backend --resource-group dab-rg \
-            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --name v2-article-backend --resource-group dab-rg --subscription $SUB \
             --query "{user:publishingUserName, pass:publishingPassword}" -o json)
           KU=$(echo $CREDS | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['user']+':'+d['pass'])")
-          
-          echo "=== Runtime logs ==="
           LOG_URL=$(curl -s -u "$KU" \
             "https://v2-article-backend.scm.azurewebsites.net/api/logs/docker" | \
             python3 -c "
@@ -118,9 +109,9 @@ try:
   for log in reversed(logs):
     h=log.get('href','')
     if h.endswith('.log') and 'docker' in h: print(h); break
-except Exception as e: print('err:',e)
+except: pass
 ")
-          echo "Log URL: $LOG_URL"
-          [ -n "$LOG_URL" ] && curl -s -u "$KU" "$LOG_URL" | tail -100
+          echo "=== RUNTIME LOGS ==="
+          [ -n "$LOG_URL" ] && curl -s -u "$KU" "$LOG_URL" | tail -100 || echo "No log URL found"
 
-          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE!" || echo "⚠️ HTTP $HTTP"
+          [ "$HTTP" = "200" ] && echo "✅ BACKEND LIVE: https://v2-article-backend.azurewebsites.net" || echo "⚠️ HTTP $HTTP — see logs above"
