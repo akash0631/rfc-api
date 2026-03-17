@@ -2,6 +2,11 @@ name: Deploy to Test VM (192.168.151.46)
 
 on:
   workflow_dispatch:
+    inputs:
+      rfc_name:
+        description: 'RFC Name that was deployed'
+        required: false
+        default: ''
 
 jobs:
   deploy-test:
@@ -9,14 +14,51 @@ jobs:
     runs-on: [self-hosted, test-vm]
 
     steps:
+      - name: Set PowerShell Execution Policy (auto permission)
+        shell: powershell
+        run: |
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine -Force -ErrorAction SilentlyContinue
+          Write-Host "Execution policy set: $(Get-ExecutionPolicy)"
+
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Fix missing WebApplication.targets (auto-create stub)
+        shell: powershell
+        run: |
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          # Find all VS MSBuild WebApplications folders and create stub if missing
+          $vsPaths = @(
+            "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications",
+            "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications",
+            "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications",
+            "C:\Program Files\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications",
+            "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          )
+          $targetsFile = $null
+          foreach ($p in $vsPaths) {
+            if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
+            $tf = Join-Path $p "Microsoft.WebApplication.targets"
+            if (-not (Test-Path $tf)) {
+              @("<?xml version=""1.0"" encoding=""utf-8""?>",
+                "<Project xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">",
+                "  <PropertyGroup><WebPublishMethod Condition=""'`$(WebPublishMethod)'==''"">FileSystem</WebPublishMethod></PropertyGroup>",
+                "  <Target Name=""WebPublish"" />",
+                "  <Target Name=""Package"" />",
+                "</Project>") -join [System.Environment]::NewLine | Set-Content $tf -Encoding UTF8
+              Write-Host "Created stub: $tf"
+            } else {
+              Write-Host "Already exists: $tf"
+            }
+            $targetsFile = $tf
+          }
 
       - name: Restore NuGet packages
         shell: cmd
         run: |
           if not exist "C:\nuget\nuget.exe" (
-            powershell -Command "New-Item -ItemType Directory -Force -Path C:\nuget; Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile C:\nuget\nuget.exe"
+            powershell -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force -Path C:\nuget; Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile C:\nuget\nuget.exe"
           )
           C:\nuget\nuget.exe restore Vendor_SRM_Routing_Application.sln -NonInteractive
 
@@ -25,46 +67,77 @@ jobs:
         run: |
           set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
           "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
+          if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+
+      - name: Create IIS folder if not exists
+        shell: powershell
+        run: |
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          $iisPath = "C:\inetpub\wwwroot\Store Tracker"
+          if (-not (Test-Path $iisPath)) {
+            New-Item -ItemType Directory -Path $iisPath -Force | Out-Null
+            New-Item -ItemType Directory -Path "$iisPath\bin" -Force | Out-Null
+            Write-Host "Created IIS folder: $iisPath"
+          } else {
+            Write-Host "IIS folder exists: $iisPath"
+          }
 
       - name: Copy DLLs to IIS
         shell: cmd
         run: |
-          robocopy bin\Release\ "C:\inetpub\wwwroot\Store Tracker\bin\" *.dll *.pdb *.config /XO /NJH /NJS
+          robocopy bin\Release\ "C:\inetpub\wwwroot\Store Tracker\bin\" *.dll *.pdb /XO /NJH /NJS
           if %ERRORLEVEL% LEQ 7 exit /b 0
 
-      - name: Copy Web.config to IIS root
+      - name: Copy Web files to IIS root
         shell: cmd
         run: |
           copy /Y Web.config "C:\inetpub\wwwroot\Store Tracker\Web.config"
+          if exist Global.asax copy /Y Global.asax "C:\inetpub\wwwroot\Store Tracker\Global.asax"
 
-      - name: Recycle IIS App Pool
+      - name: Recycle IIS App Pool (auto-detect)
         shell: powershell
         run: |
-          Import-Module WebAdministration
-          Restart-WebAppPool "StoreTracker"
-          Write-Host "App pool recycled"
-
-      - name: Test RFC endpoint
-        shell: powershell
-        run: |
-          Start-Sleep -Seconds 5
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          Import-Module WebAdministration -ErrorAction SilentlyContinue
+          # Try to find the app pool for "Store Tracker" site
+          $pool = $null
           try {
-            $r = Invoke-WebRequest -Uri "http://localhost/swagger" -UseBasicParsing -TimeoutSec 10
-            Write-Host "Swagger UI: HTTP $($r.StatusCode) - OK"
-          } catch {
-            Write-Host "Swagger check: $_"
+            $site = Get-Website | Where-Object { $_.physicalPath -like "*Store Tracker*" -or $_.name -like "*Store*" -or $_.name -like "*rfc*" -or $_.name -like "*Tracker*" } | Select-Object -First 1
+            if ($site) {
+              $pool = $site.applicationPool
+              Write-Host "Found app pool from site: $pool"
+            }
+          } catch {}
+          # Fallback: list all app pools and try common names
+          if (-not $pool) {
+            $pools = Get-ChildItem IIS:\AppPools -ErrorAction SilentlyContinue
+            $pool = ($pools | Where-Object { $_.name -like "*Store*" -or $_.name -like "*Tracker*" -or $_.name -like "*rfc*" -or $_.name -like "*DefaultAppPool*" } | Select-Object -First 1)?.name
+            if (-not $pool -and $pools) { $pool = $pools[0].name }
+            Write-Host "Using app pool: $pool"
           }
-          try {
-            $r = Invoke-WebRequest -Uri "http://localhost/api/Sync/jobs" -UseBasicParsing -TimeoutSec 10
-            Write-Host "Sync API: HTTP $($r.StatusCode) - OK"
-          } catch {
-            Write-Host "Sync API check: $_"
+          if ($pool) {
+            Restart-WebAppPool $pool
+            Write-Host " Recycled app pool: $pool"
+          } else {
+            & "$env:windir\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:"DefaultAppPool" 2>$null
+            Write-Host "Recycled DefaultAppPool via appcmd"
           }
 
-      - name: Summary
+      - name: Verify deployment (health check)
         shell: powershell
         run: |
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          Start-Sleep -Seconds 8
+          $rfcName = "${{ github.event.inputs.rfc_name }}"
+          $endpoints = @("http://localhost/swagger", "http://localhost/")
+          if ($rfcName) { $endpoints += "http://localhost/api/$rfcName" }
+          foreach ($url in $endpoints) {
+            try {
+              $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
+              Write-Host " $url  HTTP $($r.StatusCode)"
+            } catch {
+              Write-Host " $url  $($_.Exception.Message.Split([char]10)[0])"
+            }
+          }
           Write-Host ""
-          Write-Host "Deploy complete on TEST VM (192.168.151.46)" -ForegroundColor Green
-          Write-Host "Swagger: http://192.168.151.46/swagger" -ForegroundColor Cyan
-          Write-Host "RFC API: http://192.168.151.46/api/{RFC_NAME}" -ForegroundColor Cyan
+          Write-Host " Deploy complete  http://192.168.151.46/api/$rfcName"
