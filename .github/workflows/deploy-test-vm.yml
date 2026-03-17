@@ -14,45 +14,21 @@ jobs:
     runs-on: [self-hosted, test-vm]
 
     steps:
-      - name: Set PowerShell Execution Policy (auto permission)
-        shell: powershell
-        run: |
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-          Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine -Force -ErrorAction SilentlyContinue
-          Write-Host "Execution policy set: $(Get-ExecutionPolicy)"
-
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Fix missing WebApplication.targets (auto-create stub)
-        shell: powershell
+      - name: Fix WebApplication.targets stub (MUST run before MSBuild)
+        shell: cmd
         run: |
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-          # Find all VS MSBuild WebApplications folders and create stub if missing
-          $vsPaths = @(
-            "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications",
-            "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications",
-            "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications",
-            "C:\Program Files\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications",
-            "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
-          )
-          $targetsFile = $null
-          foreach ($p in $vsPaths) {
-            if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
-            $tf = Join-Path $p "Microsoft.WebApplication.targets"
-            if (-not (Test-Path $tf)) {
-              @("<?xml version=""1.0"" encoding=""utf-8""?>",
-                "<Project xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">",
-                "  <PropertyGroup><WebPublishMethod Condition=""'`$(WebPublishMethod)'==''"">FileSystem</WebPublishMethod></PropertyGroup>",
-                "  <Target Name=""WebPublish"" />",
-                "  <Target Name=""Package"" />",
-                "</Project>") -join [System.Environment]::NewLine | Set-Content $tf -Encoding UTF8
-              Write-Host "Created stub: $tf"
-            } else {
-              Write-Host "Already exists: $tf"
-            }
-            $targetsFile = $tf
-          }
+          powershell -ExecutionPolicy Bypass -NonInteractive -Command ^
+            "$targetDir = 'C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications'; ^
+             if (!(Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }; ^
+             $tf = Join-Path $targetDir 'Microsoft.WebApplication.targets'; ^
+             if (!(Test-Path $tf)) { ^
+               $xml = '<?xml version=""1.0"" encoding=""utf-8""?>' + [char]10 + '<Project xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">' + [char]10 + '  <Target Name=""WebPublish"" />' + [char]10 + '  <Target Name=""Package"" />' + [char]10 + '</Project>'; ^
+               [System.IO.File]::WriteAllText($tf, $xml); ^
+               Write-Host ('Created: ' + $tf) ^
+             } else { Write-Host ('Exists: ' + $tf) }"
 
       - name: Restore NuGet packages
         shell: cmd
@@ -70,17 +46,14 @@ jobs:
           if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
       - name: Create IIS folder if not exists
-        shell: powershell
+        shell: cmd
         run: |
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-          $iisPath = "C:\inetpub\wwwroot\Store Tracker"
-          if (-not (Test-Path $iisPath)) {
-            New-Item -ItemType Directory -Path $iisPath -Force | Out-Null
-            New-Item -ItemType Directory -Path "$iisPath\bin" -Force | Out-Null
-            Write-Host "Created IIS folder: $iisPath"
-          } else {
-            Write-Host "IIS folder exists: $iisPath"
-          }
+          if not exist "C:\inetpub\wwwroot\Store Tracker\bin\" (
+            mkdir "C:\inetpub\wwwroot\Store Tracker\bin"
+            echo Created IIS folder
+          ) else (
+            echo IIS folder exists
+          )
 
       - name: Copy DLLs to IIS
         shell: cmd
@@ -95,49 +68,27 @@ jobs:
           if exist Global.asax copy /Y Global.asax "C:\inetpub\wwwroot\Store Tracker\Global.asax"
 
       - name: Recycle IIS App Pool (auto-detect)
-        shell: powershell
+        shell: cmd
         run: |
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-          Import-Module WebAdministration -ErrorAction SilentlyContinue
-          # Try to find the app pool for "Store Tracker" site
-          $pool = $null
-          try {
-            $site = Get-Website | Where-Object { $_.physicalPath -like "*Store Tracker*" -or $_.name -like "*Store*" -or $_.name -like "*rfc*" -or $_.name -like "*Tracker*" } | Select-Object -First 1
-            if ($site) {
-              $pool = $site.applicationPool
-              Write-Host "Found app pool from site: $pool"
-            }
-          } catch {}
-          # Fallback: list all app pools and try common names
-          if (-not $pool) {
-            $pools = Get-ChildItem IIS:\AppPools -ErrorAction SilentlyContinue
-            $pool = ($pools | Where-Object { $_.name -like "*Store*" -or $_.name -like "*Tracker*" -or $_.name -like "*rfc*" -or $_.name -like "*DefaultAppPool*" } | Select-Object -First 1)?.name
-            if (-not $pool -and $pools) { $pool = $pools[0].name }
-            Write-Host "Using app pool: $pool"
-          }
-          if ($pool) {
-            Restart-WebAppPool $pool
-            Write-Host " Recycled app pool: $pool"
-          } else {
-            & "$env:windir\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:"DefaultAppPool" 2>$null
-            Write-Host "Recycled DefaultAppPool via appcmd"
-          }
+          powershell -ExecutionPolicy Bypass -NonInteractive -Command ^
+            "try { Import-Module WebAdministration -ErrorAction Stop; ^
+             $site = Get-Website | Where-Object { $_.physicalPath -like '*Store Tracker*' -or $_.name -like '*Store*' -or $_.name -like '*Tracker*' } | Select-Object -First 1; ^
+             if ($site) { Restart-WebAppPool $site.applicationPool; Write-Host ('Recycled: ' + $site.applicationPool) } ^
+             else { $pools = Get-ChildItem IIS:\AppPools; $p = ($pools | Where-Object { $_.name -like '*Default*' } | Select-Object -First 1).name; Restart-WebAppPool $p; Write-Host ('Recycled: ' + $p) } ^
+            } catch { Write-Host ('appcmd fallback: ' + $_); & $env:windir\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:DefaultAppPool }"
 
-      - name: Verify deployment (health check)
-        shell: powershell
+      - name: Health check
+        shell: cmd
         run: |
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-          Start-Sleep -Seconds 8
-          $rfcName = "${{ github.event.inputs.rfc_name }}"
-          $endpoints = @("http://localhost/swagger", "http://localhost/")
-          if ($rfcName) { $endpoints += "http://localhost/api/$rfcName" }
-          foreach ($url in $endpoints) {
-            try {
-              $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
-              Write-Host " $url  HTTP $($r.StatusCode)"
-            } catch {
-              Write-Host " $url  $($_.Exception.Message.Split([char]10)[0])"
-            }
-          }
-          Write-Host ""
-          Write-Host " Deploy complete  http://192.168.151.46/api/$rfcName"
+          timeout /t 8 /nobreak > nul
+          powershell -ExecutionPolicy Bypass -NonInteractive -Command ^
+            "$rfc = '${{ github.event.inputs.rfc_name }}'; ^
+             $urls = @('http://localhost/', 'http://localhost/swagger'); ^
+             if ($rfc) { $urls += 'http://localhost/api/' + $rfc }; ^
+             foreach ($url in $urls) { ^
+               try { $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 8; Write-Host ('OK ' + $url + ' HTTP ' + $r.StatusCode) } ^
+               catch { Write-Host ('NO ' + $url + ' ' + $_.Exception.Message.Split([char]10)[0]) } ^
+             }; ^
+             Write-Host ''; ^
+             Write-Host '=== DEPLOY COMPLETE ==='; ^
+             Write-Host ('API: http://192.168.151.46/api/' + $rfc)"
