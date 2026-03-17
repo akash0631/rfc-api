@@ -97,25 +97,14 @@ jobs:
           icacls "C:\RfcApp\bin" /grant Administrators:(OI)(CI)F /T /C /Q 2>nul
           icacls "C:\RfcApp\bin" /grant "%USERNAME%":(OI)(CI)F /T /C /Q 2>nul
           attrib -R "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" 2>nul
-          rem --- Delete the old DLL ---
-          if exist "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" (
-            del /F /Q "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-            if %ERRORLEVEL% NEQ 0 (
-              echo ERROR: Cannot delete old DLL even after icacls fix
-              echo Trying rename workaround...
-              ren "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" "Vendor_SRM_Routing_Application.dll.old" 2>nul
-              if %ERRORLEVEL% NEQ 0 (
-                echo FATAL: File is undeleteable, deployment cannot proceed
-                exit /b 1
-              )
-            )
-          )
-          rem --- ALWAYS copy the freshly-built project DLL ---
-          copy /Y "bin\Release\Vendor_SRM_Routing_Application.dll" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-          if %ERRORLEVEL% NEQ 0 (
-            echo ERROR: Failed to copy DLL
+          rem --- Use robocopy /B (backup mode) to bypass file share locks ---
+          rem --- This uses SeBackupPrivilege to copy locked files ---
+          robocopy "bin\Release" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2
+          if %ERRORLEVEL% GTR 7 (
+            echo ERROR: robocopy /B failed to copy DLL
             exit /b 1
           )
+          echo DLL copied successfully via robocopy /B
           copy /Y "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.pdb" 2>nul
           rem --- FIRST-TIME SETUP: if NuGet deps are not yet deployed, do a full robocopy (slow, but only needed once) ---
           if not exist "C:\RfcApp\bin\System.Web.Http.dll" (
