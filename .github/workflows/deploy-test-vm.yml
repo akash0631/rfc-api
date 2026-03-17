@@ -85,10 +85,18 @@ jobs:
         shell: cmd
         run: |
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
-          rem --- ALWAYS copy the freshly-built project DLL (this is the only file that changes per code commit) ---
+          rem --- Delete the old DLL first to break any file locks ---
+          if exist "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" (
+            del /F /Q "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
+            if %ERRORLEVEL% NEQ 0 (
+              echo ERROR: Cannot delete old DLL - still locked by another process
+              exit /b 1
+            )
+          )
+          rem --- ALWAYS copy the freshly-built project DLL ---
           copy /Y "bin\Release\Vendor_SRM_Routing_Application.dll" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
           if %ERRORLEVEL% NEQ 0 (
-            echo ERROR: Failed to copy DLL - app pool may still be running
+            echo ERROR: Failed to copy DLL
             exit /b 1
           )
           copy /Y "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.pdb" 2>nul
