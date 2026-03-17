@@ -1,0 +1,115 @@
+name: Fix and verify full pipeline
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit IIS and find what's available
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          Write-Host "=== IIS Sites ==="
+          Get-Website | Select Name, State, @{n='Port';e={($_.Bindings.Collection[0].bindingInformation -split ':')[1]}}, @{n='Path';e={$_.PhysicalPath}} | Format-Table
+          
+          Write-Host "=== Store Tracker bin DLLs ==="
+          $st = "C:\inetpub\wwwroot\Store Tracker\bin"
+          $stCount = (Get-ChildItem $st -Filter "*.dll" -EA SilentlyContinue).Count
+          Write-Host "Count: $stCount"
+          if ($stCount -gt 0) {
+            Get-ChildItem $st -Filter "Vendor*.dll" -EA SilentlyContinue | Select Name | Format-Table
+            Get-ChildItem $st -Filter "*sap*.dll" -EA SilentlyContinue | Select Name | Format-Table
+          }
+          
+          Write-Host "=== Test IIS routes ==="
+          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          foreach ($route in @(
+            "http://localhost:80/",
+            "http://localhost:80/api/ZAdvancePaymentRfc/Execute",
+            "http://localhost:80/swagger",
+            "http://localhost:8888/api/ZAdvancePaymentRfc/Execute",
+            "http://localhost:8888/swagger"
+          )) {
+            try {
+              $m = if ($route -like "*/Execute") {"POST"} else {"GET"}
+              $b = if ($m -eq "POST") {$body} else {$null}
+              $r = Invoke-WebRequest $route -Method $m -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 8
+              Write-Host "✅ $route → $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(80,$r.Content.Length)))"
+            } catch {
+              Write-Host "❌ $route → $($_.Exception.Message.Substring(0,[Math]::Min(60,$_.Exception.Message.Length)))"
+            }
+          }
+
+      - name: Deploy compiled app from NuGet packages cache
+        shell: powershell
+        run: |
+          # Check if packages folder exists from previous checkout
+          $pkgCount = (Get-ChildItem "$env:GITHUB_WORKSPACE\packages" -EA SilentlyContinue).Count
+          Write-Host "Packages in workspace: $pkgCount"
+          
+          # Check NuGet cache
+          $nugetCache = "$env:USERPROFILE\.nuget\packages"
+          $cacheCount = (Get-ChildItem $nugetCache -EA SilentlyContinue).Count
+          Write-Host "NuGet cache packages: $cacheCount"
+          
+          # Try build with packages
+          $msbuild = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+          
+          # First restore
+          $nuget = Get-Command nuget -EA SilentlyContinue
+          if ($nuget) {
+            & nuget restore Vendor_SRM_Routing_Application.sln -NonInteractive
+            Write-Host "NuGet restore exit: $LASTEXITCODE"
+          }
+          
+          # Stub VS17 targets
+          $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          if (-not (Test-Path $d)) { New-Item $d -ItemType Directory -Force | Out-Null }
+          $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/><Target Name="Package"/></Project>'
+          [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets", $xml, [System.Text.Encoding]::UTF8)
+          
+          # Build
+          & $msbuild Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=17.0
+          $buildExit = $LASTEXITCODE
+          Write-Host "Build exit: $buildExit"
+          
+          if ($buildExit -eq 0) {
+            $dllCount = (Get-ChildItem "bin\Release" -Filter "*.dll" -EA SilentlyContinue).Count
+            Write-Host "Built DLLs: $dllCount"
+            
+            # Deploy to Store Tracker
+            $dst = "C:\inetpub\wwwroot\Store Tracker"
+            if (-not (Test-Path $dst)) { New-Item $dst -ItemType Directory -Force | Out-Null }
+            Copy-Item "bin\Release\*" $dst -Recurse -Force
+            Copy-Item "Web.config" $dst -Force -EA SilentlyContinue
+            Write-Host "Deployed: $((Get-ChildItem "$dst\bin" -Filter '*.dll' -EA SilentlyContinue).Count) DLLs to Store Tracker"
+          } else {
+            # Show errors
+            & $msbuild Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:OutputPath=bin\Release\ /nologo /verbosity:normal /p:VisualStudioVersion=17.0 2>&1 | Select-String "error :"
+          }
+
+      - name: Wire RFC Collector and verify
+        shell: powershell
+        run: |
+          # Set IIS_HOST to Store Tracker on :80
+          $cfg = @{ Logging=@{LogLevel=@{Default="Information"}}; AllowedHosts="*"; IIS_HOST="127.0.0.1"; IIS_PORT="80" }
+          $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
+          Write-Host "Config: IIS_HOST=127.0.0.1:80"
+          
+          Import-Module WebAdministration
+          Get-ChildItem IIS:\AppPools | ForEach-Object { Restart-WebAppPool $_.Name -EA SilentlyContinue }
+          Start-Sleep 6
+          Restart-Service RfcCollector -Force
+          Start-Sleep 12
+          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
+          
+          # Test
+          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":3}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "=== PIPELINE TEST ==="
+            Write-Host "HTTP: $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(500,$r.Content.Length)))
+          } catch { Write-Host "Pipeline error: $($_.Exception.Message)" }
