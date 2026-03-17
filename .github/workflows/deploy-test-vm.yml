@@ -56,6 +56,9 @@ jobs:
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
           robocopy bin\Release "C:\RfcApp\bin" *.dll *.pdb /XO /NJH /NJS
           if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
+          rem --- Copy SAP NCo native DLLs (not copied by MSBuild) ---
+          copy /Y packages\sapnco_x64.3.0.18\lib\sapnco.dll "C:\RfcApp\bin\sapnco.dll"
+          copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\RfcApp\bin\sapnco_utils.dll"
           copy /Y Web.config "C:\RfcApp\Web.config"
           if exist Global.asax copy /Y Global.asax "C:\RfcApp\Global.asax"
           xcopy /Y /E /I Views "C:\RfcApp\Views" >nul 2>&1
