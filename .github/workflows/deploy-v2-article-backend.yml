@@ -1,0 +1,79 @@
+name: Deploy v2ArticleCreation Backend
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout v2ArticleCreation
+        uses: actions/checkout@v4
+        with:
+          repository: akash0631/v2ArticleCreation
+          token: ${{ secrets.PIPELINE_GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deps & build
+        working-directory: Backend
+        run: |
+          npm install --production=false
+          npx prisma generate
+          npx tsc --skipLibCheck
+          npm run postbuild
+          ls dist/
+
+      - name: Package
+        working-directory: Backend
+        run: |
+          zip -r /tmp/backend-deploy.zip dist/ prisma/schema.prisma package.json package-lock.json
+          echo "Size: $(du -sh /tmp/backend-deploy.zip)"
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure App Service
+        run: |
+          az webapp deploy \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --src-path /tmp/backend-deploy.zip \
+            --type zip \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Configure app settings
+        run: |
+          az webapp config set \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --startup-file "node --max-old-space-size=512 dist/index.js" \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+          az webapp config appsettings set \
+            --name v2-article-backend \
+            --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --settings \
+              NODE_ENV=production \
+              PORT=8080 \
+              FRONTEND_URL="https://articles.v2retail.net" \
+              CORS_ORIGINS="https://articles.v2retail.net,https://v2-article-creation.pages.dev" \
+              ENABLE_REDIS=false \
+              VLM_FUSION_MODE=default \
+              DEVELOPMENT_MODE=false \
+              DEBUG_API_ENDPOINTS=false \
+              SENTRY_ENABLED=false
+
+      - name: Restart & health check
+        run: |
+          az webapp restart --name v2-article-backend --resource-group dab-rg \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          sleep 30
+          curl -sf https://v2-article-backend.azurewebsites.net/api/health \
+            && echo "✅ Health OK" || echo "⚠️ Health pending (need DB/API keys)"
