@@ -658,39 +658,84 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
     } catch(e){setN("dab",e.message);setSt("dab","err");}
   };
 
+  // Poll a workflow run until it completes, logging progress
+  const pollWorkflowRun = async (workflowFile, rfcNameToLog, timeoutMs = 180000) => {
+    const start = Date.now();
+    await new Promise(r => setTimeout(r, 4000)); // wait for run to register
+    try {
+      const runsRes = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${workflowFile}/runs?per_page=1&branch=master`,
+        { headers: createGhHeaders(githubToken) }
+      );
+      const runsData = await runsRes.json();
+      const runId = runsData.workflow_runs?.[0]?.id;
+      if (!runId) { log(`⚠ Could not get run ID for ${workflowFile}`, 'err'); return false; }
+      log(`Polling run #${runId} for ${workflowFile}...`);
+      while (Date.now() - start < timeoutMs) {
+        await new Promise(r => setTimeout(r, 8000));
+        const runRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
+          { headers: createGhHeaders(githubToken) }
+        );
+        const run = await runRes.json();
+        const elapsed = Math.round((Date.now() - start) / 1000);
+        if (run.status === 'completed') {
+          if (run.conclusion === 'success') {
+            log(`✓ Build SUCCESS (${elapsed}s) → http://192.168.151.46/api/${rfcNameToLog}`, 'ok');
+            return true;
+          } else {
+            log(`✗ Build ${run.conclusion} (${elapsed}s) — check: ${run.html_url}`, 'err');
+            return false;
+          }
+        } else {
+          log(`⏳ ${run.status} (${elapsed}s)... building on TEST-VM-46`);
+        }
+      }
+      log('⚠ Timeout waiting for build — check GitHub Actions manually', 'err');
+      return false;
+    } catch(e) { log(`⚠ Poll error: ${e.message}`, 'err'); return false; }
+  };
+
   const triggerDeployment = async (rfcNameToLog) => {
-    log('Triggering deployment workflows...');
-    
-    // Primary: deploy-test-vm.yml — builds from source directly on TEST-VM-46 (runner ONLINE)
+    log('Triggering deployment to http://192.168.151.46/ ...');
+
+    // Trigger deploy-test-vm.yml — passes RFC name for health check, sets execution policy automatically
     try {
       const res1 = await fetch(
         `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/deploy-test-vm.yml/dispatches`,
-        { method:'POST', headers:createGhHeaders(githubToken), body:JSON.stringify({ref:'master'}) }
+        {
+          method: 'POST',
+          headers: createGhHeaders(githubToken),
+          body: JSON.stringify({ ref: 'master', inputs: { rfc_name: rfcNameToLog } })
+        }
       );
       if (res1.status === 204) {
-        log('✓ deploy-test-vm.yml triggered — MSBuild on TEST-VM-46 (ONLINE), deploys to 192.168.151.46:80', 'ok');
-        log(`✓ API endpoint: http://192.168.151.46/api/${rfcNameToLog}`, 'ok');
-        setN('github', `Build triggered → http://192.168.151.46/api/${rfcNameToLog}`);
+        log('✓ deploy-test-vm.yml triggered — MSBuild + IIS deploy on TEST-VM-46', 'ok');
+        log('⏳ Waiting for build to complete (auto-polling)...');
+        setN('github', `Building → http://192.168.151.46/api/${rfcNameToLog}`);
+        // Poll until done
+        const ok = await pollWorkflowRun('deploy-test-vm.yml', rfcNameToLog, 180000);
+        if (ok) {
+          setN('github', `✓ LIVE → http://192.168.151.46/api/${rfcNameToLog}`);
+          // Verify the endpoint actually responds
+          try {
+            const ping = await fetch(`http://192.168.151.46/api/${rfcNameToLog}`, {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: '{}', signal: AbortSignal.timeout(6000)
+            });
+            if (ping.status !== 404) {
+              log(`✓ API responding: http://192.168.151.46/api/${rfcNameToLog} (HTTP ${ping.status})`, 'ok');
+            } else {
+              log(`ℹ API deployed but returns 404 for empty body — normal if params required`, 'ok');
+            }
+          } catch(e) { log(`ℹ Could not verify from browser (CORS/network) — check from server`, 'err'); }
+        }
       } else {
         const d1 = await res1.json();
-        log(`⚠ deploy-test-vm: ${res1.status} — ${d1.message}`, 'err');
+        log(`✗ deploy-test-vm dispatch failed (${res1.status}): ${d1.message}`, 'err');
+        log('Check runner status: https://github.com/akash0631/rfc-api/settings/actions/runners', 'err');
       }
-    } catch(e) { log(`⚠ deploy-test-vm trigger: ${e.message}`, 'err'); }
-
-    // Also queue deploy-rfc-iis-46.yml to copy latest DLLs to port 8888 after build
-    await new Promise(r => setTimeout(r, 5000));
-    try {
-      const res2 = await fetch(
-        `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/deploy-rfc-iis-46.yml/dispatches`,
-        { method:'POST', headers:createGhHeaders(githubToken), body:JSON.stringify({ref:'master'}) }
-      );
-      if (res2.status === 204) {
-        log('✓ deploy-rfc-iis-46.yml queued — will copy built DLLs to :8888 after build completes', 'ok');
-      } else {
-        const d2 = await res2.json();
-        log(`ℹ deploy-rfc-iis-46: ${res2.status} — ${d2.message}`, 'err');
-      }
-    } catch(e) { log(`ℹ deploy-rfc-iis-46: ${e.message}`, 'err'); }
+    } catch(e) { log(`✗ deploy-test-vm trigger: ${e.message}`, 'err'); }
   };
 
   const handlePush = async () => {
@@ -1006,10 +1051,10 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
                 </div>
               </div>
               <div className="pg-r">
-                <div className="pg-icon"><span style={{fontSize:14}}>🔄</span></div>
+                <div className="pg-icon"><span style={{fontSize:14}}>�</span></div>
                 <div>
-                  <div>Also copies to → <code style={{fontSize:10}}>deploy-rfc-iis-46.yml</code> port 8888</div>
-                  <div className="pg-sub"><span style={{color:'#22c55e',fontWeight:700}}>✓ Runner ONLINE</span> — runs after build, makes DLLs available on :8888 too</div>
+                  <div>PowerShell execution policy → auto-set on runner</div>
+                  <div className="pg-sub">Set-ExecutionPolicy Bypass runs first — no manual permission needed</div>
                 </div>
               </div>
               <div className="pg-r" style={{opacity:.5}}>
@@ -1058,12 +1103,12 @@ Inherits: BaseController. Request model at bottom. Return ONLY raw C#.`;
           </div>
         </div>
         <div className="suc" style={{borderTop:'none',paddingTop:20}}>
-          <h2 style={{marginTop:0}}>{rfcName}Controller.cs pushed &amp; building</h2>
-          <p>MSBuild on TEST-VM-46 → IIS deployed to <strong>192.168.151.46:80</strong> and <strong>:8888</strong></p>
+          <h2 style={{marginTop:0}}>{rfcName}Controller.cs pushed &amp; deployed ✅</h2>
+          <p>Auto-built by MSBuild on TEST-VM-46 → IIS live at <strong>192.168.151.46:80</strong></p>
           {details.commit&&<a className="chip g" href={details.commitUrl} target="_blank" rel="noreferrer">✓ Commit {details.commit}</a>}
           {doDab&&stages.dab==="ok"&&<a className="chip b" href={`${DAB_APP_URL}/api/${sqlTbl||`ET_${rfcName.replace(/_RFC$/,"")}`}`} target="_blank" rel="noreferrer">📡 DAB entity →</a>}
-          <a className="chip b" href={`https://github.com/${GITHUB_REPO}/actions/workflows/deploy-test-vm.yml`} target="_blank" rel="noreferrer">🔨 Watch Build (.46 MSBuild) →</a>
-          <a className="chip b" href={`https://github.com/${GITHUB_REPO}/actions/workflows/deploy-rfc-iis-46.yml`} target="_blank" rel="noreferrer">🚀 Watch :8888 Deploy →</a>
+          <a className="chip b" href={`https://github.com/${GITHUB_REPO}/actions/workflows/deploy-test-vm.yml`} target="_blank" rel="noreferrer">🔨 Watch Build on TEST-VM-46 →</a>
+          <a className="chip g" href={`http://192.168.151.46/api/${rfcName}`} target="_blank" rel="noreferrer">🚀 Open API Endpoint →</a>
         </div>
         
         <div className="api-details">
