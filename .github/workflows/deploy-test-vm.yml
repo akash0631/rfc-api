@@ -53,23 +53,25 @@ jobs:
       - name: Copy to IIS
         shell: cmd
         run: |
-          if not exist "C:\inetpub\wwwroot\Store Tracker\bin" mkdir "C:\inetpub\wwwroot\Store Tracker\bin"
-          robocopy bin\Release "C:\inetpub\wwwroot\Store Tracker\bin" *.dll *.pdb /XO /NJH /NJS
+          if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
+          robocopy bin\Release "C:\RfcApp\bin" *.dll *.pdb /XO /NJH /NJS
           if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
-          copy /Y Web.config "C:\inetpub\wwwroot\Store Tracker\Web.config"
-          if exist Global.asax copy /Y Global.asax "C:\inetpub\wwwroot\Store Tracker\Global.asax"
+          copy /Y Web.config "C:\RfcApp\Web.config"
+          if exist Global.asax copy /Y Global.asax "C:\RfcApp\Global.asax"
+          xcopy /Y /E /I Views "C:\RfcApp\Views" >nul 2>&1
+          echo Deployed to C:\RfcApp
 
       - name: Recycle IIS App Pool
         shell: powershell
         run: |
           try {
             Import-Module WebAdministration -ErrorAction Stop
-            $site = Get-Website | Where-Object { $_.physicalPath -like '*Store Tracker*' -or $_.name -like '*Store*' -or $_.name -like '*Tracker*' } | Select-Object -First 1
+            $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
               Restart-WebAppPool $site.applicationPool
-              Write-Host "Recycled app pool: $($site.applicationPool)"
+              Write-Host "Recycled: $($site.applicationPool) (site: $($site.name))"
             } else {
-              Write-Host "Site not found, recycling DefaultAppPool"
+              Write-Host "Site not found via WebAdmin, using appcmd fallback"
               & "$env:windir\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:DefaultAppPool
             }
           } catch {
@@ -81,8 +83,8 @@ jobs:
         run: |
           Start-Sleep -Seconds 5
           $rfc = '${{ inputs.rfc_name }}'
-          $urls = @('http://localhost/', 'http://localhost/swagger')
-          if ($rfc) { $urls += "http://localhost/api/$rfc" }
+          $urls = @('http://localhost:8888/', 'http://localhost:8888/swagger')
+          if ($rfc) { $urls += "http://localhost:8888/api/$rfc" }
           foreach ($url in $urls) {
             try {
               $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
