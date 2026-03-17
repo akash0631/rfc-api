@@ -5,25 +5,34 @@ jobs:
   setup:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Find all DLLs and app locations on .36
+      - name: Find compiled app on .36 in known locations
         shell: cmd
         run: |
           net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          echo NET_USE: %ERRORLEVEL%
 
-          echo === Find Vendor*.dll anywhere on .36 C drive ===
-          dir \\192.168.151.36\C$\Vendor*.dll /S /B 2>nul
-          
-          echo === Find sapnco.dll anywhere on .36 ===
-          dir \\192.168.151.36\C$\sapnco.dll /S /B 2>nul
-
-          echo === All dirs under C:\ root of .36 ===
+          echo === C:\ root dirs ===
           dir \\192.168.151.36\C$\ /B 2>nul
 
-          echo === inetpub wwwroot contents ===
-          dir \\192.168.151.36\C$\inetpub\wwwroot /B 2>nul
+          echo === inetpub wwwroot ===
+          dir \\192.168.151.36\C$\inetpub\wwwroot\ /B 2>nul
 
-          echo === Actions runner work folder ===
-          dir \\192.168.151.36\C$\actions-runner\_work 2>nul /B 2>nul
+          echo === D drive exists? ===
+          dir \\192.168.151.36\D$\ /B 2>nul
+
+          echo === E drive? ===
+          dir \\192.168.151.36\E$\ /B 2>nul
+
+          echo === actions-runner work ===
+          dir \\192.168.151.36\C$\actions-runner\_work\ /B 2>nul
+
+          echo === RfcApp sub-folders ===
+          dir \\192.168.151.36\C$\RfcApp\ /B /S 2>nul | findstr /I ".dll .config .asax"
+
+          echo === inetpub Store Tracker ===
+          dir "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\" /B /S 2>nul | findstr /I ".dll .config" | find /c "."
+
+          echo === Check physical path of Store Tracker site ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"Store Tracker"
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"RfcApiApp"
 
           net use \\192.168.151.36\C$ /delete /y 2>nul
