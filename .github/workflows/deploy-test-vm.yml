@@ -54,8 +54,8 @@ jobs:
         shell: cmd
         run: |
           if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
-          rem --- Robocopy built DLLs, EXCLUDE sapnco_utils.dll (native DLL - ASP.NET LoadAllAssemblies must never scan it in bin) ---
-          robocopy bin\Release "C:\RfcApp\bin" *.dll *.pdb /XO /NJH /NJS /XF sapnco_utils.dll
+          rem --- Copy ALL build output files + subdirs (e.g. roslyn\), exclude sapnco_utils.dll (native - ASP.NET must never load it as assembly) ---
+          robocopy bin\Release "C:\RfcApp\bin" /E /XO /NJH /NJS /XF sapnco_utils.dll
           if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
           rem --- Safety net: delete if it somehow landed in bin from a prior deployment ---
           if exist "C:\RfcApp\bin\sapnco_utils.dll" del /F /Q "C:\RfcApp\bin\sapnco_utils.dll"
