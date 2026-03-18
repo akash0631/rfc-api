@@ -12,6 +12,7 @@ namespace Vendor_SRM_Routing_Application
         public static void RegisterRoutes(RouteCollection routes)
         {
             routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
+            routes.IgnoreRoute("swagger/{*pathInfo}");  // Let Swashbuckle handle all /swagger/* routes
 
             routes.MapRoute(
                 name: "Default",
