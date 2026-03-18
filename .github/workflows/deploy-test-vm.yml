@@ -85,9 +85,9 @@ jobs:
           # Stop IIS W3SVC service entirely to release all file handles
           Write-Host "Stopping W3SVC service..."
           & net stop W3SVC /y 2>&1 | Write-Host
-          Start-Sleep -Seconds 3
+          Start-Sleep -Seconds 8
           Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
+          Start-Sleep -Seconds 4
           Write-Host "IIS stopped"
           exit 0
 
@@ -100,14 +100,31 @@ jobs:
           $destDll = "$binDir\Vendor_SRM_Routing_Application.dll"
           $srcDll  = "bin\Release\Vendor_SRM_Routing_Application.dll"
 
-          # --- STEP 1: Delete ALL stale .old* / *.old* files from bin (they cause 0x80131040 assembly load error) ---
+          # --- STEP 1: Delete ALL stale .old* files from bin (they cause 0x80131040 assembly load error) ---
+          # Use robocopy /MOV /B (backup-operator mode) which bypasses kernel-level locks that Remove-Item cannot
           if (-not (Test-Path $binDir)) { New-Item -ItemType Directory $binDir -Force | Out-Null }
-          Get-ChildItem $binDir -Filter "*.old*" -ErrorAction SilentlyContinue | ForEach-Object {
-            & takeown /F $_.FullName /A 2>&1 | Out-Null
-            & icacls $_.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
-            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-            if (-not (Test-Path $_.FullName)) { Write-Host "Deleted stale: $($_.Name)" }
-            else { Write-Host "Could not delete: $($_.Name) (will be handled by robocopy)" }
+          $stale = Get-ChildItem $binDir -Filter "*.old*" -ErrorAction SilentlyContinue
+          if ($stale) {
+            $tmpDir = "C:\rfcapp_cleanup_$([System.IO.Path]::GetRandomFileName())"
+            New-Item -ItemType Directory $tmpDir -Force | Out-Null
+            foreach ($f in $stale) {
+              Write-Host "Removing stale: $($f.Name)"
+              & takeown /F $f.FullName /A 2>&1 | Out-Null
+              & icacls $f.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
+              # Try standard delete first
+              Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+              if (Test-Path $f.FullName) {
+                # Fall back to robocopy /MOV /B (backup mode moves + deletes source, bypasses OS locks)
+                robocopy $binDir $tmpDir $f.Name /MOV /B /NFL /NDL /NJH /NJS /R:2 /W:2 2>&1 | Out-Null
+                if (-not (Test-Path $f.FullName)) { Write-Host "  -> Moved via robocopy /B" }
+                else { Write-Host "  -> WARN: still present (will not be loaded - not a .dll)" }
+              } else {
+                Write-Host "  -> Deleted"
+              }
+            }
+            Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "No stale .old* files found in bin"
           }
 
           # --- STEP 2: Fix permissions on bin folder ---
