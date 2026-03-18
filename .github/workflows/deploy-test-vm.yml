@@ -91,6 +91,41 @@ jobs:
           Write-Host "IIS stopped"
           exit 0
 
+      - name: Remove stale .old.dll
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $binDir = "C:\RfcApp\bin"
+          $stale  = Get-ChildItem $binDir -Filter "*.old*" -ErrorAction SilentlyContinue
+          if (-not $stale) { Write-Host "No stale .old* files - nothing to clean"; exit 0 }
+          foreach ($f in $stale) {
+            Write-Host "=== Stale: $($f.FullName) ==="
+            & icacls $f.FullName 2>&1 | Write-Host   # Print ACL for diagnosis
+            # Reset ACL (removes all DENY entries, inherits from parent)
+            & takeown /F $f.FullName /A 2>&1 | Write-Host
+            & icacls $f.FullName /reset /C /Q 2>&1 | Write-Host
+            & icacls $f.FullName /grant:r "BUILTIN\Administrators:(F)" /C /Q 2>&1 | Write-Host
+            # Method 1: PowerShell
+            Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method1 (Remove-Item) SUCCESS"; continue }
+            # Method 2: cmd del
+            & cmd /c ('del /F /Q "' + $f.FullName + '"') 2>&1 | Write-Host
+            if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method2 (cmd del) SUCCESS"; continue }
+            # Method 3: .NET Delete
+            try { [System.IO.File]::Delete($f.FullName); if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method3 (.NET Delete) SUCCESS"; continue } } catch { Write-Host "  Method3 error: $_" }
+            # Method 4: SYSTEM scheduled task (runs with SYSTEM account - highest privilege)
+            Write-Host "  Trying SYSTEM scheduled task..."
+            $tid = "CleanDll_$(Get-Random)"; $ttime = (Get-Date).AddSeconds(5).ToString('HH:mm')
+            & schtasks /create /tn $tid /tr ('cmd.exe /c del /F /Q /A-R "' + $f.FullName + '"') /sc once /st $ttime /ru SYSTEM /f 2>&1 | Write-Host
+            Start-Sleep -Seconds 12
+            & schtasks /delete /tn $tid /f 2>&1 | Out-Null
+            if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method4 (SYSTEM task) SUCCESS"; continue }
+            # Method 5: Rename to .bak (prevents ASP.NET auto-loading it)
+            Rename-Item $f.FullName "$($f.FullName).bak" -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method5 (renamed to .bak) SUCCESS"; continue }
+            Write-Host "  -> ALL METHODS FAILED for $($f.Name)"
+          }
+
       - name: Copy to IIS
         timeout-minutes: 10
         shell: powershell
@@ -100,37 +135,11 @@ jobs:
           $destDll = "$binDir\Vendor_SRM_Routing_Application.dll"
           $srcDll  = "bin\Release\Vendor_SRM_Routing_Application.dll"
 
-          # --- STEP 1: Delete ALL stale .old* files from bin (they cause 0x80131040 assembly load error) ---
-          # Use robocopy /MOV /B (backup-operator mode) which bypasses kernel-level locks that Remove-Item cannot
+          # --- STEP 1: Fix permissions on bin folder ---
           if (-not (Test-Path $binDir)) { New-Item -ItemType Directory $binDir -Force | Out-Null }
-          $stale = Get-ChildItem $binDir -Filter "*.old*" -ErrorAction SilentlyContinue
-          if ($stale) {
-            $tmpDir = "C:\rfcapp_cleanup_$([System.IO.Path]::GetRandomFileName())"
-            New-Item -ItemType Directory $tmpDir -Force | Out-Null
-            foreach ($f in $stale) {
-              Write-Host "Removing stale: $($f.Name)"
-              & takeown /F $f.FullName /A 2>&1 | Out-Null
-              & icacls $f.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
-              # Try standard delete first
-              Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
-              if (Test-Path $f.FullName) {
-                # Fall back to robocopy /MOV /B (backup mode moves + deletes source, bypasses OS locks)
-                robocopy $binDir $tmpDir $f.Name /MOV /B /NFL /NDL /NJH /NJS /R:2 /W:2 2>&1 | Out-Null
-                if (-not (Test-Path $f.FullName)) { Write-Host "  -> Moved via robocopy /B" }
-                else { Write-Host "  -> WARN: still present (will not be loaded - not a .dll)" }
-              } else {
-                Write-Host "  -> Deleted"
-              }
-            }
-            Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
-          } else {
-            Write-Host "No stale .old* files found in bin"
-          }
-
-          # --- STEP 2: Fix permissions on bin folder ---
           & icacls $binDir /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
 
-          # --- STEP 3: Copy DLL via robocopy /B (backup mode - bypasses share violations & Defender locks) ---
+          # --- STEP 2: Copy DLL via robocopy /B (backup mode - bypasses share violations & Defender locks) ---
           Write-Host "Copying DLL via robocopy /B..."
           robocopy "bin\Release" $binDir "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:5 /W:5 2>&1 | Write-Host
           $rc = $LASTEXITCODE
@@ -142,7 +151,7 @@ jobs:
           Write-Host "DLL deployed: $destDll"
           Copy-Item "bin\Release\Vendor_SRM_Routing_Application.pdb" $binDir -Force -ErrorAction SilentlyContinue
 
-          # --- STEP 4: First-time setup (only when NuGet deps are missing) ---
+          # --- STEP 3: First-time setup (only when NuGet deps are missing) ---
           if (-not (Test-Path "$binDir\System.Web.Http.dll")) {
             Write-Host "First-time deploy - copying all dependencies..."
             robocopy "bin\Release" $binDir /E /NJH /NJS /NFL /NDL /NP /XF sapnco_utils.dll | Out-Null
@@ -154,7 +163,7 @@ jobs:
           }
           Remove-Item "$binDir\sapnco_utils.dll" -Force -ErrorAction SilentlyContinue
 
-          # --- STEP 5: Config and static files ---
+          # --- STEP 4: Config and static files ---
           Copy-Item "Web.config" "C:\RfcApp\Web.config" -Force
           if (Test-Path "Global.asax") { Copy-Item "Global.asax" "C:\RfcApp\Global.asax" -Force }
           robocopy "Views"   "C:\RfcApp\Views"   /E /NJH /NJS /NFL /NDL /NP | Out-Null
