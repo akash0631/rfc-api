@@ -113,79 +113,64 @@ jobs:
         timeout-minutes: 10
         shell: powershell
         run: |
+          # Use Continue so native cmd exit codes don't throw exceptions
+          $ErrorActionPreference = 'Continue'
           $srcDll = "bin\Release\Vendor_SRM_Routing_Application.dll"
           $destDll = "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
+          $oldDll  = "C:\RfcApp\bin\Vendor_SRM_Routing_Application.old.dll"
           $tempDll = "C:\temp\Vendor_SRM_Routing_Application.dll"
 
           # --- Step 1: Wait for source DLL to be readable ---
-          $maxWait = 120
-          $waited = 0
+          $maxWait = 120; $waited = 0
           Write-Host "Waiting for source DLL to become accessible..."
           while ($waited -lt $maxWait) {
             try {
               $fs = [System.IO.File]::Open($srcDll, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-              $fs.Close()
-              Write-Host "Source DLL is accessible after ${waited}s"
-              break
-            } catch {
-              Start-Sleep -Seconds 2
-              $waited += 2
-            }
+              $fs.Close(); Write-Host "Source DLL accessible after ${waited}s"; break
+            } catch { Start-Sleep -Seconds 2; $waited += 2 }
           }
           if ($waited -ge $maxWait) { Write-Host "WARNING: Source DLL wait timed out" }
 
-          # --- Step 2: Immediately copy source to temp location (before Defender rescans) ---
+          # --- Step 2: Copy source to temp before Defender rescans ---
           if (-not (Test-Path C:\temp)) { New-Item -ItemType Directory C:\temp -Force | Out-Null }
-          Write-Host "Copying source DLL to temp location..."
-          cmd /c "copy /Y `"$((Resolve-Path $srcDll).Path)`" `"$tempDll`"" 2>&1 | Write-Host
+          Write-Host "Copying source DLL to temp..."
+          cmd /c "copy /Y `"$((Resolve-Path $srcDll).Path)`" `"$tempDll`""
           if (-not (Test-Path $tempDll)) {
-            Write-Host "cmd copy failed, trying robocopy to temp..."
-            robocopy "bin\Release" "C:\temp" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2
+            robocopy "bin\Release" "C:\temp" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2 | Out-Null
           }
-          if (Test-Path $tempDll) {
-            Write-Host "Source DLL captured to temp: $tempDll"
-          } else {
-            Write-Host "ERROR: Could not capture source DLL to temp. Aborting."
-            exit 1
-          }
+          if (-not (Test-Path $tempDll)) { Write-Host "ERROR: Could not capture source DLL to temp."; exit 1 }
+          Write-Host "Source DLL captured to temp: $tempDll"
 
-          # --- Step 3: Set up destination folder ---
+          # --- Step 3: Prep destination folder, clean up stale .old.dll ---
           if (-not (Test-Path "C:\RfcApp\bin")) { New-Item -ItemType Directory "C:\RfcApp\bin" -Force | Out-Null }
           & icacls "C:\RfcApp\bin" /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
-
-          # --- Step 4: Wait for destination DLL to be releasable, then delete/rename it ---
-          if (Test-Path $destDll) {
-            Write-Host "Taking ownership and fixing permissions on destination DLL..."
-            & takeown /F $destDll /A 2>&1 | Out-Null
-            & icacls $destDll /grant "Administrators:F" /C /Q 2>&1 | Out-Null
-            & attrib -R -S $destDll 2>&1 | Out-Null
-            # Wait a moment for Defender to release (it was disabled in Stop step)
-            Start-Sleep -Seconds 5
-            
-            # Try to move/rename the old DLL out of the way (rename works even on locked files)
-            $oldDll = "C:\RfcApp\bin\Vendor_SRM_Routing_Application.old.dll"
-            if (Test-Path $oldDll) { Remove-Item $oldDll -Force -ErrorAction SilentlyContinue }
-            try {
-              [System.IO.File]::Move($destDll, $oldDll)
-              Write-Host "Renamed existing DLL to .old"
-            } catch {
-              Write-Host "Could not rename existing DLL: $_"
-              # Try cmd ren as alternative
-              cmd /c "ren `"$destDll`" Vendor_SRM_Routing_Application.old.dll" 2>&1 | Write-Host
+          # Force-own and delete both stale files (ignore failures - robocopy /B covers the rest)
+          foreach ($f in @($oldDll, $destDll)) {
+            if (Test-Path $f) {
+              & takeown /F $f /A 2>&1 | Out-Null
+              & icacls $f /grant "Administrators:F" /C /Q 2>&1 | Out-Null
+              & attrib -R -S $f 2>&1 | Out-Null
+              cmd /c "del /F /Q `"$f`"" 2>&1 | Out-Null
+              if (Test-Path $f) { Write-Host "Note: $f still present after del (will overwrite)" }
+              else { Write-Host "Deleted: $f" }
             }
           }
+          Start-Sleep -Seconds 2
 
-          # --- Step 5: Copy temp DLL to destination ---
-          Write-Host "Copying temp DLL to C:\RfcApp\bin..."
-          cmd /c "copy /Y `"$tempDll`" `"$destDll`"" 2>&1 | Write-Host
-          if (-not (Test-Path $destDll)) {
-            Write-Host "cmd copy from temp failed, trying Copy-Item..."
-            Copy-Item $tempDll $destDll -Force -ErrorAction Stop
+          # --- Step 4: Copy via robocopy /B (backup mode bypasses share violations) ---
+          Write-Host "Deploying DLL via robocopy /B..."
+          robocopy "C:\temp" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:5 /W:5 2>&1 | Write-Host
+          $rc = $LASTEXITCODE
+          if ($rc -gt 3) {
+            Write-Host "robocopy /B exit $rc - falling back to cmd copy..."
+            cmd /c "copy /Y `"$tempDll`" `"$destDll`"" 2>&1 | Write-Host
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $destDll)) {
+              Write-Host "ERROR: All copy methods failed. Aborting."; exit 1
+            }
           }
+          if (-not (Test-Path $destDll)) { Write-Host "ERROR: DLL not found at destination after copy."; exit 1 }
           Write-Host "DLL deployed to C:\RfcApp\bin successfully"
           Remove-Item $tempDll -Force -ErrorAction SilentlyContinue
-          # Clean up leftover .old file (may still be locked, so ignore errors)
-          Remove-Item "C:\RfcApp\bin\Vendor_SRM_Routing_Application.old.dll" -Force -ErrorAction SilentlyContinue
           Copy-Item "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\" -Force -ErrorAction SilentlyContinue
           
           # First-time setup: copy all dependencies if not already present
