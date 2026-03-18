@@ -5,39 +5,11 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Update Web.config to SAP Dev + test
-        shell: powershell
+      - name: Get exact 500 error from event log
+        shell: cmd
         run: |
-          # Read current Web.config
-          $cfg = Get-Content "C:\V2RfcApi\Web.config" -Raw
+          echo === Last 3 Application Errors ===
+          powershell -NoProfile -Command "Get-EventLog -LogName Application -EntryType Error -Newest 3 | ForEach-Object { Write-Host '---'; Write-Host $_.TimeGenerated; Write-Host $_.Source; Write-Host $_.Message }"
 
-          # Switch to SAP Dev (192.168.144.174 / client 210 / POWERBI / India@123456)
-          # Replace Production host with Dev host
-          $cfg = $cfg -replace '<add key="AppServerHost" value="192.168.144.170"', '<add key="AppServerHost" value="192.168.144.174"'
-          $cfg = $cfg -replace '<add key="Client" value="600"', '<add key="Client" value="210"'
-
-          [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $cfg, [System.Text.Encoding]::UTF8)
-          Write-Host "Web.config updated to SAP Dev (192.168.144.174 / client 210)"
-
-          # Verify
-          Get-Content "C:\V2RfcApi\Web.config" | Select-String "AppServerHost|Client|User|SystemNumber"
-
-          # Recycle pool
-          Import-Module WebAdministration -EA SilentlyContinue
-          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
-          Start-Sleep 12
-
-          # Test
-          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-
-          try {
-            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
-          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
-
-          try {
-            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "=== EXECUTE SUCCESS ==="
-            Write-Host "HTTP: $($r2.StatusCode)"
-            Write-Host $r2.Content
-          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
+          echo === Try hitting root to get ASP.NET error detail ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/' -UseBasicParsing -TimeoutSec 10;Write-Host $r.Content}catch{$body=$_.Exception.Response;if($body){$s=New-Object System.IO.StreamReader($body.GetResponseStream());Write-Host $s.ReadToEnd()}else{Write-Host $_.Exception.Message}}"
