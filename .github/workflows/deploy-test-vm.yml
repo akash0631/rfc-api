@@ -203,6 +203,15 @@ jobs:
         shell: powershell
         run: |
           try {
+            # --- Clean up stale .old.dll FIRST while Defender is still disabled ---
+            # ASP.NET loads ALL dlls from bin; mismatched .old.dll causes HTTP 500 on startup
+            Get-ChildItem "C:\RfcApp\bin" -Filter "*.old.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+              & takeown /F $_.FullName /A 2>&1 | Out-Null
+              & icacls $_.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
+              cmd /c "del /F /Q `"$($_.FullName)`"" 2>&1 | Out-Null
+              if (-not (Test-Path $_.FullName)) { Write-Host "Deleted stale: $($_.Name)" }
+              else { Write-Host "WARN: $($_.Name) still present" }
+            }
             # Re-enable Defender real-time monitoring
             try {
               Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
@@ -212,11 +221,6 @@ jobs:
             if (Test-Path "C:\RfcApp\App_Offline.htm") {
               Remove-Item "C:\RfcApp\App_Offline.htm" -Force
               Write-Host "Removed App_Offline.htm"
-            }
-            # Remove any leftover .old.dll files from bin (ASP.NET loads ALL dlls; mismatched versions = 500)
-            Get-ChildItem "C:\RfcApp\bin" -Filter "*.old.dll" -ErrorAction SilentlyContinue | ForEach-Object {
-              Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-              Write-Host "Removed stale: $($_.Name)"
             }
             # Start W3SVC service (we stopped it fully in the Stop step)
             Write-Host "Starting W3SVC service..."
