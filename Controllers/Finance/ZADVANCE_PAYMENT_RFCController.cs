@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZADVANCE_PAYMENT_RFC")]
-        public IHttpActionResult ZADVANCE_PAYMENT_RFC(ZADVANCE_PAYMENT_RFC_Request request)
+        public async Task<IHttpActionResult> GetAdvancePayment([FromBody] ZADVANCE_PAYMENT_RFCRequest request)
         {
             try
             {
@@ -33,33 +33,30 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-
+                
                 if (EX_RETURN.GetString("TYPE") == "E")
                 {
                     return Ok(new
                     {
                         Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE"),
-                        Data = new
-                        {
-                            ET_ADVANCE_PAYMENT = new List<dynamic>()
-                        }
+                        Message = EX_RETURN.GetString("MESSAGE")
                     });
                 }
 
                 IRfcTable tbl = myfun.GetTable("ET_ADVANCE_PAYMENT");
+                
                 var advancePaymentData = tbl.AsEnumerable().Select(row =>
                 {
-                    var dynamicRow = new Dictionary<string, object>();
-                    for (int i = 0; i < row.Metadata.FieldCount; i++)
+                    var rowData = new Dictionary<string, object>();
+                    for (int i = 0; i < row.FieldCount; i++)
                     {
-                        var field = row.Metadata.GetField(i);
+                        var field = row.GetElementMetadata(i);
                         if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            dynamicRow[field.Name] = row.GetValue(field.Name);
+                            rowData[field.Name] = row.GetValue(field.Name)?.ToString();
                         }
                     }
-                    return dynamicRow;
+                    return rowData;
                 }).ToList();
 
                 return Ok(new
@@ -80,7 +77,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     Message = ex.Message
                 });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
                 return Ok(new
                 {
@@ -99,7 +96,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
         }
     }
 
-    public class ZADVANCE_PAYMENT_RFC_Request
+    public class ZADVANCE_PAYMENT_RFCRequest
     {
         public string I_COMPANY_CODE { get; set; }
         public string I_POSTING_DATE_LOW { get; set; }
