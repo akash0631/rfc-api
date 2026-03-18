@@ -5,36 +5,77 @@ jobs:
   test:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Check published DLLs + fix Web.config + test
+      - name: Read Web.config and fix SAP + check controllers
         shell: powershell
         run: |
-          Write-Host "=== DLLs in C:\V2RfcApi\bin ==="
-          $dlls = Get-ChildItem "C:\V2RfcApi\bin" -Filter "*.dll" -EA SilentlyContinue
-          Write-Host "Total DLLs: $($dlls.Count)"
-          $dlls | Where-Object {$_.Name -like "Vendor*"} | Select Name
+          Write-Host "=== Current Web.config SAP settings ==="
+          Get-Content "C:\V2RfcApi\Web.config" | Select-String "AppServerHost|Client|SystemNumber|User|Password" | Select -First 10
 
-          Write-Host "=== Fix Web.config - SAP Dev ==="
-          $c = Get-Content "C:\V2RfcApi\Web.config" -Raw
-          $c = $c -replace '192.168.144.170','192.168.144.174'
-          [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $c, [System.Text.Encoding]::UTF8)
-          Get-Content "C:\V2RfcApi\Web.config" | Select-String "AppServerHost|Client|SystemNumber" | Select -First 5
+          Write-Host "=== Check if ZAdvancePaymentRfc exists ==="
+          $dll = "C:\V2RfcApi\bin\Vendor_SRM_Routing_Application.dll"
+          if (Test-Path $dll) {
+            Add-Type -Path $dll -EA SilentlyContinue
+            $types = [System.Reflection.Assembly]::LoadFrom($dll).GetTypes() | Where-Object {$_.Name -like "*Advance*" -or $_.Name -like "*RFC*"} | Select Name
+            $types | Format-Table
+            Write-Host "Total controllers:"
+            [System.Reflection.Assembly]::LoadFrom($dll).GetTypes() | Where-Object {$_.BaseType -ne $null -and $_.BaseType.Name -eq "ApiController"} | Measure-Object | Select Count
+          }
 
-          Write-Host "=== Recycle V2RfcApiPool ONLY ==="
+          Write-Host "=== Fix Web.config SAP host ==="
+          $raw = Get-Content "C:\V2RfcApi\Web.config" -Raw
+          Write-Host "Contains 144.170: $($raw -match '192.168.144.170')"
+          Write-Host "Contains 144.174: $($raw -match '192.168.144.174')"
+          # If 170 not found, SAP host might already be correct or blank
+          # Show exact appSettings block
+          if ($raw -match '(?s)<appSettings>(.*?)</appSettings>') {
+            Write-Host "AppSettings block:"
+            Write-Host $Matches[1]
+          }
+
+      - name: Write correct Web.config SAP block
+        shell: powershell
+        run: |
+          # Read current Web.config
+          [xml]$xml = Get-Content "C:\V2RfcApi\Web.config"
+          $ns = "urn:schemas-microsoft-com:asm.v1"
+
+          # Check if appSettings exists
+          $appSettings = $xml.configuration.appSettings
+          Write-Host "AppSettings exists: $($appSettings -ne $null)"
+
+          if ($appSettings -ne $null) {
+            $keys = $appSettings.add | Select key, value
+            $keys | Format-Table
+          }
+
+          # Force set via direct file write if XML parse fails
+          $content = Get-Content "C:\V2RfcApi\Web.config" -Raw
+          # Replace any production SAP host with dev
+          $content = $content -replace '192\.168\.144\.170','192.168.144.174'
+          $content = $content -replace 'value="600"','value="210"'
+          [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $content, [System.Text.Encoding]::UTF8)
+          Write-Host "Updated"
+          Get-Content "C:\V2RfcApi\Web.config" | Select-String "AppServerHost|>Client<|key.*Client" | Select -First 5
+
           Import-Module WebAdministration -EA SilentlyContinue
           Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
           Start-Sleep 15
 
-          Write-Host "=== TEST localhost:9191 ==="
+          Write-Host "=== Test ==="
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-
           try {
-            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 15
             Write-Host "HEALTH: $($r.StatusCode) $($r.Content)"
           } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
 
           try {
             $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "=== EXECUTE SUCCESS ==="
-            Write-Host "HTTP: $($r2.StatusCode)"
-            Write-Host $r2.Content
+            Write-Host "EXECUTE: $($r2.StatusCode)"; Write-Host $r2.Content
           } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
+
+          # Also test the Routemaster site to confirm old controllers still work
+          Write-Host "=== Existing Routemaster site still working? ==="
+          try {
+            $r3 = Invoke-WebRequest "https://Routemaster.v2retail.com/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 8 -EA SilentlyContinue
+            Write-Host "Routemaster: $($r3.StatusCode)"
+          } catch { Write-Host "Routemaster test: $($_.Exception.Message.Substring(0,80))" }
