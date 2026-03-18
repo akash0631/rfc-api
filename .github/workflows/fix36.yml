@@ -5,47 +5,39 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Diagnose 500 error and fix Web.config
-        shell: cmd
+      - name: Update Web.config to SAP Dev + test
+        shell: powershell
         run: |
-          echo === Web.config content ===
-          type C:\V2RfcApi\Web.config
+          # Read current Web.config
+          $cfg = Get-Content "C:\V2RfcApi\Web.config" -Raw
 
-          echo === Windows Event Log errors ===
-          powershell -NoProfile -Command "Get-EventLog -LogName Application -EntryType Error -Newest 3 -EA SilentlyContinue | ForEach-Object { Write-Host $_.TimeGenerated $_.Source; Write-Host $_.Message.Substring(0,[Math]::Min(400,$_.Message.Length)) }"
+          # Switch to SAP Dev (192.168.144.174 / client 210 / POWERBI / India@123456)
+          # Replace Production host with Dev host
+          $cfg = $cfg -replace '<add key="AppServerHost" value="192.168.144.170"', '<add key="AppServerHost" value="192.168.144.174"'
+          $cfg = $cfg -replace '<add key="Client" value="600"', '<add key="Client" value="210"'
 
-          echo === NCo in System32 ===
-          dir C:\Windows\System32\sapnco.dll 2>nul && echo NCo PRESENT || echo NCo MISSING
+          [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $cfg, [System.Text.Encoding]::UTF8)
+          Write-Host "Web.config updated to SAP Dev (192.168.144.174 / client 210)"
 
-          echo === Find LIVE site Web.config ===
-          C:\Windows\System32\inetsrv\appcmd.exe list site /site.name:"LIVE Vendor SRM"
-          C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"LIVE Vendor SRM"
+          # Verify
+          Get-Content "C:\V2RfcApi\Web.config" | Select-String "AppServerHost|Client|User|SystemNumber"
 
-      - name: Copy live Web.config and test
-        shell: cmd
-        run: |
-          echo === Get LIVE Vendor SRM physical path ===
-          for /f "tokens=3 delims=:" %%a in ('C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"LIVE Vendor SRM" ^| findstr "physicalPath"') do set LIVEPATH=%%a
-          echo Live path: %LIVEPATH%
+          # Recycle pool
+          Import-Module WebAdministration -EA SilentlyContinue
+          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
+          Start-Sleep 12
 
-          echo === Try VendorSRM site instead ===
-          C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"VendorSRM"
+          # Test
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
 
-          echo === Copy from Routemaster RFC site (most likely same app) ===
-          C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"Routemaster_RFC_V2SRM"
+          try {
+            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
+          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
 
-          echo === Copy Web.config from Routemaster_RFC_V2SRM ===
-          for /f "tokens=*" %%a in ('C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"Routemaster_RFC_V2SRM" /text:physicalPath') do set RFCPATH=%%a
-          echo RFC path: %RFCPATH%
-          if exist "%RFCPATH%\Web.config" (
-            copy /Y "%RFCPATH%\Web.config" C:\V2RfcApi\Web.config
-            echo Copied from Routemaster RFC
-          )
-
-          echo === Recycle pool ===
-          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
-          timeout /t 10 /nobreak
-
-          echo === Test localhost:9191 ===
-          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{Write-Host 'HEALTH_ERR:' $_.Exception.Message}"
-          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode $r.Content}catch{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}"
+          try {
+            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "=== EXECUTE SUCCESS ==="
+            Write-Host "HTTP: $($r2.StatusCode)"
+            Write-Host $r2.Content
+          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
