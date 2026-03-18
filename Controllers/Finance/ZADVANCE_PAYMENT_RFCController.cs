@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZADVANCE_PAYMENT_RFC")]
-        public async Task<IHttpActionResult> GetAdvancePayment([FromBody] ZADVANCE_PAYMENT_RFCRequest request)
+        public IHttpActionResult GetAdvancePaymentData(ZADVANCE_PAYMENT_RFC_Request request)
         {
             try
             {
@@ -39,34 +39,31 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     return Ok(new
                     {
                         Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE")
+                        Message = EX_RETURN.GetString("MESSAGE"),
+                        Data = new { ET_ADVANCE_PAYMENT = new List<object>() }
                     });
                 }
 
                 IRfcTable tbl = myfun.GetTable("ET_ADVANCE_PAYMENT");
-                
                 var advancePaymentData = tbl.AsEnumerable().Select(row =>
                 {
-                    var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < row.FieldCount; i++)
+                    var record = new Dictionary<string, object>();
+                    for (int i = 0; i < row.Metadata.FieldCount; i++)
                     {
-                        var field = row.GetElementMetadata(i);
-                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                        var fieldMetadata = row.Metadata[i];
+                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
                         {
-                            rowData[field.Name] = row.GetValue(field.Name)?.ToString();
+                            record[fieldMetadata.Name] = row.GetString(fieldMetadata.Name);
                         }
                     }
-                    return rowData;
+                    return record;
                 }).ToList();
 
                 return Ok(new
                 {
                     Status = "S",
                     Message = "Success",
-                    Data = new
-                    {
-                        ET_ADVANCE_PAYMENT = advancePaymentData
-                    }
+                    Data = new { ET_ADVANCE_PAYMENT = advancePaymentData }
                 });
             }
             catch (RfcAbapException ex)
@@ -74,7 +71,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new List<object>() }
                 });
             }
             catch (RfcCommunicationException ex)
@@ -82,7 +80,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new List<object>() }
                 });
             }
             catch (Exception ex)
@@ -90,13 +89,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new List<object>() }
                 });
             }
         }
     }
 
-    public class ZADVANCE_PAYMENT_RFCRequest
+    public class ZADVANCE_PAYMENT_RFC_Request
     {
         public string I_COMPANY_CODE { get; set; }
         public string I_POSTING_DATE_LOW { get; set; }
