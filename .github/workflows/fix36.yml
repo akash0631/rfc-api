@@ -5,42 +5,19 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Find VS tools and build on .36
+      - name: Check all existing live sites are still running
         shell: cmd
         run: |
-          echo === Find VS MSBuild ===
-          for /f "tokens=*" %%a in ('dir "C:\Program Files*\Microsoft Visual Studio\*\*\MSBuild\*\Bin\MSBuild.exe" /s /b 2^>nul ^| head -1') do set VSMSBUILD=%%a
-          echo VS MSBuild: %VSMSBUILD%
+          echo === ALL SITES STATUS ===
+          C:\Windows\System32\inetsrv\appcmd.exe list sites
 
-          echo === Find NuGet.exe in VS ===
-          for /f "tokens=*" %%a in ('dir "C:\Program Files*\Microsoft Visual Studio\*\NuGet.exe" /s /b 2^>nul ^| head -1') do set NUGET=%%a
-          for /f "tokens=*" %%a in ('dir "C:\ProgramData\chocolatey\bin\nuget.exe" /b 2^>nul') do set NUGET=%%a
-          for /f "tokens=*" %%a in ('dir "C:\nuget.exe" /b 2^>nul') do set NUGET=C:\nuget.exe
-          echo NuGet: %NUGET%
+          echo === Test live sites ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:6060/' -UseBasicParsing -TimeoutSec 8;Write-Host 'VendorSRM 6060: OK' $r.StatusCode}catch{Write-Host 'VendorSRM 6060: ERR' $_.Exception.Message}"
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:8002/' -UseBasicParsing -TimeoutSec 8;Write-Host 'LIVE VendorSRM 8002: OK' $r.StatusCode}catch{Write-Host 'LIVE VendorSRM 8002: ERR' $_.Exception.Message}"
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:8181/' -UseBasicParsing -TimeoutSec 8;Write-Host 'VendorHUNewAPI 8181: OK' $r.StatusCode}catch{Write-Host 'VendorHUNewAPI 8181: ERR' $_.Exception.Message}"
 
-          echo === Check packages already in runner cache ===
-          dir packages /B 2>nul | head -5
-          dir C:\Users\Administrator\.nuget\packages /B 2>nul | find /c "" 2>nul
+          echo === V2RfcApi our new site ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/' -UseBasicParsing -TimeoutSec 8;Write-Host '9191: OK' $r.StatusCode}catch{Write-Host '9191: ERR' $_.Exception.Message}"
 
-          echo === Try restore with VS NuGet ===
-          if defined NUGET (
-            "%NUGET%" restore Vendor_SRM_Routing_Application.sln 2>&1
-            echo NuGet exit: %ERRORLEVEL%
-          ) else (
-            echo Downloading NuGet...
-            powershell -NoProfile -Command "Invoke-WebRequest 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile 'C:\nuget.exe' -UseBasicParsing"
-            C:\nuget.exe restore Vendor_SRM_Routing_Application.sln
-            echo NuGet exit: %ERRORLEVEL%
-          )
-
-          echo === Build with best available MSBuild ===
-          if defined VSMSBUILD (
-            "%VSMSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal
-          ) else (
-            C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal
-          )
-          echo BUILD: %ERRORLEVEL%
-          dir bin\Release\Vendor*.dll /B 2>nul
-          dir bin\Release\*.dll /B 2>nul | find /c ".dll"
+          echo === Check D drive live source is untouched ===
+          dir "D:\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC\bin\Vendor*.dll" /B 2>nul
