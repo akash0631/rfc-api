@@ -5,42 +5,33 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Get Routemaster RFC path correctly and copy
+      - name: Copy from LIVE Vendor SRM + switch to SAP Dev + test
         shell: cmd
         run: |
-          echo === List all sites with physical paths ===
-          C:\Windows\System32\inetsrv\appcmd.exe list vdir
+          set LIVEPATH=D:\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC
+
+          echo === Live site DLL count ===
+          dir "%LIVEPATH%\bin\Vendor*.dll" /B 2>nul
+          dir "%LIVEPATH%\bin\*.dll" /B 2>nul | find /c ".dll"
+
+          echo === Copy entire live app to C:\V2RfcApi ===
+          robocopy "%LIVEPATH%" C:\V2RfcApi /E /IS /IT /NFL /NDL /XD .git
+          echo ROBOCOPY: %ERRORLEVEL%
+
+          echo === DLLs in V2RfcApi after copy ===
+          dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
+          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+
+          echo === Switch Web.config to SAP Dev ===
+          powershell -NoProfile -Command "$c=Get-Content 'C:\V2RfcApi\Web.config' -Raw; $c=$c -replace '192.168.144.170','192.168.144.174'; $c=$c -replace '<add key=""Client"" value=""600""','<add key=""Client"" value=""210""'; $c=$c -replace 'customErrors mode=""On""','customErrors mode=""Off""'; $c=$c -replace 'customErrors mode=""RemoteOnly""','customErrors mode=""Off""'; [System.IO.File]::WriteAllText('C:\V2RfcApi\Web.config',$c,[System.Text.Encoding]::UTF8); Write-Host Done"
           
-      - name: Enable custom errors off and get real error
-        shell: powershell
-        run: |
-          # Enable custom errors off to see real error
-          $cfg = Get-Content "C:\V2RfcApi\Web.config" -Raw
-          $cfg = $cfg -replace 'customErrors mode="On"', 'customErrors mode="Off"'
-          $cfg = $cfg -replace 'customErrors mode="RemoteOnly"', 'customErrors mode="Off"'
-          if ($cfg -notmatch 'customErrors') {
-            $cfg = $cfg -replace '</system.web>', '  <customErrors mode="Off"/></system.web>'
-          }
-          [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $cfg, [System.Text.Encoding]::UTF8)
-          Write-Host "customErrors set to Off"
+          powershell -NoProfile -Command "Get-Content 'C:\V2RfcApi\Web.config' | Select-String 'AppServerHost|Client|SystemNumber|User|customErrors' | Select -First 8"
 
-          Import-Module WebAdministration -EA SilentlyContinue
-          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
-          Start-Sleep 12
+          echo === Recycle pool ===
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          timeout /t 15 /nobreak
 
-          # Now get the full error
-          try {
-            $r = Invoke-WebRequest "http://localhost:9191/" -UseBasicParsing -TimeoutSec 15
-            Write-Host "ROOT OK: $($r.StatusCode)"
-            Write-Host $r.Content.Substring(0,[Math]::Min(1000,$r.Content.Length))
-          } catch {
-            if ($_.Exception.Response) {
-              $stream = $_.Exception.Response.GetResponseStream()
-              $reader = New-Object System.IO.StreamReader($stream)
-              $body = $reader.ReadToEnd()
-              Write-Host "ERROR BODY (first 2000 chars):"
-              Write-Host $body.Substring(0,[Math]::Min(2000,$body.Length))
-            } else {
-              Write-Host "ERR: $($_.Exception.Message)"
-            }
-          }
+          echo === Test ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{if($_.Exception.Response){$s=New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream());$b=$s.ReadToEnd();Write-Host 'HEALTH_ERR_BODY:' $b.Substring(0,[Math]::Min(500,$b.Length))}else{Write-Host 'HEALTH_ERR:' $_.Exception.Message}}"
+
+          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode; Write-Host $r.Content}catch{if($_.Exception.Response){$s=New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream());$bd=$s.ReadToEnd();Write-Host 'EXECUTE_ERR_BODY:' $bd.Substring(0,[Math]::Min(500,$bd.Length))}else{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}}"
