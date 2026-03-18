@@ -7,56 +7,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build on .36 using VS MSBuild + deploy to V2RfcApi
+      - name: Find VS tools and build on .36
         shell: cmd
         run: |
-          echo === Find MSBuild on .36 ===
-          for /f "tokens=*" %%a in ('dir "C:\Program Files*\MSBuild\*\Bin\MSBuild.exe" /s /b 2^>nul') do set MSBUILD=%%a
-          if not defined MSBUILD set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          echo MSBuild: %MSBUILD%
+          echo === Find VS MSBuild ===
+          for /f "tokens=*" %%a in ('dir "C:\Program Files*\Microsoft Visual Studio\*\*\MSBuild\*\Bin\MSBuild.exe" /s /b 2^>nul ^| head -1') do set VSMSBUILD=%%a
+          echo VS MSBuild: %VSMSBUILD%
 
-          echo === Find NuGet ===
-          where nuget 2>nul || echo nuget not in PATH
+          echo === Find NuGet.exe in VS ===
+          for /f "tokens=*" %%a in ('dir "C:\Program Files*\Microsoft Visual Studio\*\NuGet.exe" /s /b 2^>nul ^| head -1') do set NUGET=%%a
+          for /f "tokens=*" %%a in ('dir "C:\ProgramData\chocolatey\bin\nuget.exe" /b 2^>nul') do set NUGET=%%a
+          for /f "tokens=*" %%a in ('dir "C:\nuget.exe" /b 2^>nul') do set NUGET=C:\nuget.exe
+          echo NuGet: %NUGET%
 
-          echo === Restore packages ===
-          nuget restore Vendor_SRM_Routing_Application.sln 2>&1 | tail -5
-          echo NuGet: %ERRORLEVEL%
+          echo === Check packages already in runner cache ===
+          dir packages /B 2>nul | head -5
+          dir C:\Users\Administrator\.nuget\packages /B 2>nul | find /c "" 2>nul
 
-          echo === Stub VS17 targets if needed ===
-          if not exist "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications" mkdir "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
-          powershell -NoProfile -Command "if(-not(Test-Path 'C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets')){[System.IO.File]::WriteAllText('C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets','<?xml version=""1.0"" encoding=""utf-8""?><Project xmlns=""http://schemas.microsoft.com/developer/msbuild/2003""><Target Name=""WebPublish""/><Target Name=""Package""/></Project>',[System.Text.Encoding]::UTF8);Write-Host 'Targets stubbed'}else{Write-Host 'Targets exist'}"
-
-          echo === Build ===
-          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal
-          echo BUILD: %ERRORLEVEL%
-
-          echo === DLL count ===
-          dir bin\Release\Vendor*.dll /B 2>nul
-          dir bin\Release\*.dll /B 2>nul | find /c ".dll"
-
-      - name: Deploy built app to V2RfcApi and test
-        shell: cmd
-        run: |
-          if not exist bin\Release\Vendor_Application_MVC.dll (
-            echo BUILD FAILED - no DLL found
-            exit /b 1
+          echo === Try restore with VS NuGet ===
+          if defined NUGET (
+            "%NUGET%" restore Vendor_SRM_Routing_Application.sln 2>&1
+            echo NuGet exit: %ERRORLEVEL%
+          ) else (
+            echo Downloading NuGet...
+            powershell -NoProfile -Command "Invoke-WebRequest 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile 'C:\nuget.exe' -UseBasicParsing"
+            C:\nuget.exe restore Vendor_SRM_Routing_Application.sln
+            echo NuGet exit: %ERRORLEVEL%
           )
 
-          echo === Deploy to C:\V2RfcApi ===
-          robocopy bin\Release C:\V2RfcApi\bin /E /IS /IT /NFL /NDL
-          copy /Y Web.config C:\V2RfcApi\ 2>nul
-          copy /Y Global.asax C:\V2RfcApi\ 2>nul
-          echo ROBOCOPY: %ERRORLEVEL%
-
-          echo === Switch to SAP Dev in Web.config ===
-          powershell -NoProfile -Command "$c=Get-Content 'C:\V2RfcApi\Web.config' -Raw; $c=$c -replace '192.168.144.170','192.168.144.174'; $c=$c -replace '<add key=""Client"" value=""600""','<add key=""Client"" value=""210""'; $c=$c -replace 'customErrors mode=""On""','customErrors mode=""Off""'; $c=$c -replace 'customErrors mode=""RemoteOnly""','customErrors mode=""Off""'; [System.IO.File]::WriteAllText('C:\V2RfcApi\Web.config',$c,[System.Text.Encoding]::UTF8); Write-Host Web.config updated"
-
-          powershell -NoProfile -Command "Get-Content 'C:\V2RfcApi\Web.config' | Select-String 'AppServerHost|Client|SystemNumber' | Select -First 4"
-
-          echo === Recycle V2RfcApiPool ===
-          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
-          timeout /t 15 /nobreak
-
-          echo === FINAL TEST ===
-          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{if($_.Exception.Response){$s=New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream());Write-Host 'HEALTH_BODY:' $s.ReadToEnd().Substring(0,500)}else{Write-Host 'HEALTH_ERR:' $_.Exception.Message}}"
-          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode; Write-Host $r.Content}catch{if($_.Exception.Response){$s=New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream());Write-Host 'EXECUTE_BODY:' $s.ReadToEnd().Substring(0,1000)}else{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}}"
+          echo === Build with best available MSBuild ===
+          if defined VSMSBUILD (
+            "%VSMSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal
+          ) else (
+            C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal
+          )
+          echo BUILD: %ERRORLEVEL%
+          dir bin\Release\Vendor*.dll /B 2>nul
+          dir bin\Release\*.dll /B 2>nul | find /c ".dll"
