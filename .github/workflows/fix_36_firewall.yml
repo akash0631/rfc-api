@@ -5,46 +5,73 @@ jobs:
   fix:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Open firewall on .36 via schtasks
-        shell: cmd
+      - name: Open firewall + install runner on .36 via schtasks with proper wait
+        shell: powershell
+        env:
+          V2_PAT: ${{ secrets.V2_GH_PAT }}
         run: |
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          echo @echo off > \\192.168.151.36\C$\fw_open.bat
-          echo netsh advfirewall firewall delete rule name="V2RfcApi-9191" >> \\192.168.151.36\C$\fw_open.bat
-          echo netsh advfirewall firewall add rule name="V2RfcApi-9191" dir=in action=allow protocol=TCP localport=9191 profile=any >> \\192.168.151.36\C$\fw_open.bat
-          echo netsh advfirewall firewall add rule name="RfcApiApp-8888" dir=in action=allow protocol=TCP localport=8888 profile=any >> \\192.168.151.36\C$\fw_open.bat
-          echo echo done > C:\fw_done.txt >> \\192.168.151.36\C$\fw_open.bat
-          net use \\192.168.151.36\C$ /delete /y 2>nul
-          schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "OpenFW" /tr "C:\fw_open.bat" /sc once /st 00:00 /ru SYSTEM /f
-          schtasks /run /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "OpenFW"
-          echo %ERRORLEVEL%
-          timeout /t 20 /nobreak
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
-          type \\192.168.151.36\C$\fw_done.txt 2>nul || echo NOT_DONE
-          net use \\192.168.151.36\C$ /delete /y 2>nul
+          # Get runner token
+          $tok = (Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners/registration-token" `
+            -Method POST -Headers @{Authorization="token $env:V2_PAT";"User-Agent"="v2"}).token
 
-      - name: Test all ports and run full pipeline
+          net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no 2>$null
+
+          # Write a combined script: firewall + runner config
+          $script = @"
+@echo off
+REM Open firewall
+netsh advfirewall firewall delete rule name="V2RfcApi-9191" >nul 2>&1
+netsh advfirewall firewall add rule name="V2RfcApi-9191" dir=in action=allow protocol=TCP localport=9191 profile=any
+netsh advfirewall firewall delete rule name="RfcApiApp-8888" >nul 2>&1  
+netsh advfirewall firewall add rule name="RfcApiApp-8888" dir=in action=allow protocol=TCP localport=8888 profile=any
+echo Firewall done
+
+REM Install runner if not configured
+if not exist C:ctions-runner\config.cmd goto norunner
+goto configrunner
+:norunner
+echo Runner files not found
+goto end
+:configrunner
+cd /d C:ctions-runner
+call config.cmd --url https://github.com/akash0631/rfc-api --token $tok --name V2DC-ADDVERB --labels self-hosted,Windows,X64,iis --runasservice --windowslogonaccount "NT AUTHORITY\SYSTEM" --unattended
+:end
+echo ALL_DONE > C:\setup_done.txt
+"@
+
+          [System.IO.File]::WriteAllText("\\192.168.151.36\C$\run_setup.bat", $script, [System.Text.Encoding]::ASCII)
+          Write-Host "Script written to .36"
+
+          # Run via schtasks with a future time (+2 min from now)
+          $runTime = (Get-Date).AddMinutes(2).ToString("HH:mm")
+          schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2Setup" /tr "C:un_setup.bat" /sc once /st $runTime /ru SYSTEM /f
+          Write-Host "Task scheduled for $runTime"
+
+          # Wait 3 minutes for task to run
+          Write-Host "Waiting 3 minutes..."
+          Start-Sleep 180
+
+          # Check result
+          if (Test-Path "\\192.168.151.36\C$\setup_done.txt") {
+            Write-Host "SETUP COMPLETE ✅"
+            Get-Content "\\192.168.151.36\C$\setup_done.txt"
+          } else {
+            Write-Host "setup_done.txt not found — checking..."
+            # Try to read any log
+            Get-ChildItem "\\192.168.151.36\C$\*.txt" | ForEach-Object { Write-Host $_.Name; Get-Content $_.FullName }
+          }
+          net use "\\192.168.151.36\C$" /delete /y 2>$null
+
+      - name: Test after firewall fix
         shell: powershell
         run: |
-          Start-Sleep 12
+          Start-Sleep 10
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          foreach ($t in @("http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health","http://192.168.151.36:8888/api/ZAdvancePaymentRfc/Health")) {
-            try { $r=Invoke-WebRequest $t -UseBasicParsing -TimeoutSec 10; Write-Host "OK $t $($r.StatusCode) $($r.Content)" }
-            catch { Write-Host "ERR $t $($_.Exception.Message)" }
+          foreach ($url in @("http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health","http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute")) {
+            try {
+              $m = if ($url -like "*Execute*") {"POST"} else {"GET"}
+              $b = if ($m -eq "POST") {$body} else {$null}
+              $r = Invoke-WebRequest $url -Method $m -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
+              Write-Host "OK $url → $($r.StatusCode) $($r.Content.Substring(0,[Math]::Min(300,$r.Content.Length)))"
+            } catch { Write-Host "ERR $url → $($_.Exception.Message)" }
           }
-          try {
-            $r2=Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
-            Write-Host "EXECUTE: $($r2.StatusCode) $($r2.Content)"
-          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
-
-          $cfg = Get-Content "C:\RfcCollector\appsettings.json" | ConvertFrom-Json
-          $cfg.IIS_HOST="192.168.151.36"; $cfg.IIS_PORT="9191"
-          $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
-          Restart-Service RfcCollector -Force; Start-Sleep 12
-          Write-Host "Collector: $((Invoke-WebRequest 'http://localhost:9090/' -UseBasicParsing).Content)"
-
-          $b='{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
-          try {
-            $r3=Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
-            Write-Host "=== PIPELINE: HTTP $($r3.StatusCode) ==="; Write-Host $r3.Content
-          } catch { Write-Host "PIPELINE ERR: $($_.Exception.Message)" }
