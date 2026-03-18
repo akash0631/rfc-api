@@ -1,0 +1,53 @@
+name: Fix36
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Schedule firewall script on .36 and wait
+        shell: powershell
+        env:
+          V2_PAT: ${{ secrets.V2_GH_PAT }}
+        run: |
+          $tok = (Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners/registration-token" -Method POST -Headers @{Authorization="token $env:V2_PAT";"User-Agent"="v2"}).token
+          Write-Host "Token: $($tok.Substring(0,8))..."
+          net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no 2>$null
+          $lines = @(
+            "@echo off",
+            "netsh advfirewall firewall delete rule name=V2RfcApi-9191 >nul 2>&1",
+            "netsh advfirewall firewall add rule name=V2RfcApi-9191 dir=in action=allow protocol=TCP localport=9191 profile=any",
+            "netsh advfirewall firewall delete rule name=RfcApiApp-8888 >nul 2>&1",
+            "netsh advfirewall firewall add rule name=RfcApiApp-8888 dir=in action=allow protocol=TCP localport=8888 profile=any",
+            "echo firewall_done > C:\\setup_done.txt",
+            "if not exist C:\\actions-runner\\config.cmd goto end",
+            "cd /d C:\\actions-runner",
+            "call config.cmd --url https://github.com/akash0631/rfc-api --token RTOKEN --name V2DC-ADDVERB --labels self-hosted,Windows,X64,iis --runasservice --windowslogonaccount ""NT AUTHORITY\\SYSTEM"" --unattended",
+            "echo runner_done >> C:\\setup_done.txt",
+            ":end"
+          )
+          $script = ($lines -join "`r`n").Replace("RTOKEN", $tok)
+          [System.IO.File]::WriteAllText("\\192.168.151.36\C$\run_setup.bat", $script, [System.Text.Encoding]::ASCII)
+          Write-Host "Script written to .36"
+          $runAt = (Get-Date).AddMinutes(2).ToString("HH:mm")
+          schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2Setup" /tr "C:\run_setup.bat" /sc once /st $runAt /ru SYSTEM /f
+          Write-Host "Task scheduled for $runAt"
+          Start-Sleep 210
+          $done = Test-Path "\\192.168.151.36\C$\setup_done.txt"
+          Write-Host "Done: $done"
+          if ($done) { Get-Content "\\192.168.151.36\C$\setup_done.txt" }
+          net use "\\192.168.151.36\C$" /delete /y 2>$null
+
+      - name: Test .36 ports after fix
+        shell: powershell
+        run: |
+          Start-Sleep 10
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          foreach ($url in @("http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health","http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute")) {
+            try {
+              $m = if ($url -like "*Execute*") {"POST"} else {"GET"}
+              $b = if ($m -eq "POST") {$body} else {$null}
+              $r = Invoke-WebRequest $url -Method $m -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
+              Write-Host "OK $url HTTP $($r.StatusCode) $($r.Content)"
+            } catch { Write-Host "ERR $url $($_.Exception.Message)" }
+          }
