@@ -5,57 +5,56 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Create V2RfcApi site on .36 port 9191
-        shell: cmd
-        run: |
-          echo === Create app pool ===
-          C:\Windows\System32\inetsrv\appcmd.exe add apppool /name:V2RfcApiPool /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated
-          echo Pool created: %ERRORLEVEL%
-
-          echo === Create physical directory with compiled app ===
-          if not exist C:\V2RfcApi\bin mkdir C:\V2RfcApi\bin
-
-          echo === Copy compiled app from LIVE Vendor SRM site (same codebase) ===
-          C:\Windows\System32\inetsrv\appcmd.exe list site /site.name:"LIVE Vendor SRM"
-
-          echo === Deploy our built app to C:\V2RfcApi ===
-          robocopy bin\Release C:\V2RfcApi\bin /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
-          copy /Y Web.config C:\V2RfcApi\ 2>nul
-          copy /Y Global.asax C:\V2RfcApi\ 2>nul
-          dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
-          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
-
-          echo === Create IIS site on port 9191 ===
-          C:\Windows\System32\inetsrv\appcmd.exe delete site /site.name:V2RfcApi 2>nul
-          C:\Windows\System32\inetsrv\appcmd.exe add site /name:V2RfcApi /bindings:"http/*:9191:" /physicalPath:C:\V2RfcApi
-          C:\Windows\System32\inetsrv\appcmd.exe set site /site.name:V2RfcApi "/[path='/'].applicationPool:V2RfcApiPool"
-          C:\Windows\System32\inetsrv\appcmd.exe start site /site.name:V2RfcApi
-          echo Site created: %ERRORLEVEL%
-
-          echo === Port 9191 listening? ===
-          netstat -ano | findstr ":9191"
-
-      - name: Test V2RfcApi on .36:9191
+      - name: Read Web.config and check event log for 500 error
         shell: powershell
         run: |
+          Write-Host "=== C:\V2RfcApi\Web.config ==="
+          Get-Content "C:\V2RfcApi\Web.config"
+
+          Write-Host "=== Windows Event Log — last app errors ==="
+          Get-EventLog -LogName Application -EntryType Error -Newest 5 -EA SilentlyContinue | 
+            Select TimeGenerated, Source, @{n='Msg';e={$_.Message.Substring(0,[Math]::Min(300,$_.Message.Length))}} | 
+            Format-List
+
+          Write-Host "=== Check bin DLLs ==="
+          Get-ChildItem "C:\V2RfcApi\bin" -Filter "*.dll" | Select Name | Format-Table
+
+          Write-Host "=== sapnco in System32 ==="
+          Test-Path "C:\Windows\System32\sapnco.dll"
+          Test-Path "C:\Windows\System32\sapnco_utils.dll"
+
+      - name: Copy Web.config from LIVE Vendor SRM and test
+        shell: powershell
+        run: |
+          Write-Host "=== LIVE Vendor SRM Web.config location ==="
+          $livesite = (Get-Website "LIVE Vendor SRM" -EA SilentlyContinue)
+          if ($livesite) {
+            Write-Host "Live site path: $($livesite.PhysicalPath)"
+            $liveWebConfig = "$($livesite.PhysicalPath)\Web.config"
+            if (Test-Path $liveWebConfig) {
+              Write-Host "=== Live Web.config SAP settings ==="
+              Get-Content $liveWebConfig | Select-String -Pattern "SAP|sap|rfcDestination|RfcDestination|appSettings|connectionString" | Select -First 20
+              Write-Host "=== Copying live Web.config to V2RfcApi ==="
+              Copy-Item $liveWebConfig "C:\V2RfcApi\Web.config" -Force
+              Write-Host "Copied"
+            }
+          } else {
+            Write-Host "LIVE Vendor SRM not found — checking VendorSRM"
+            $vs = Get-Website "VendorSRM" -EA SilentlyContinue
+            if ($vs) {
+              Write-Host "VendorSRM path: $($vs.PhysicalPath)"
+              Copy-Item "$($vs.PhysicalPath)\Web.config" "C:\V2RfcApi\Web.config" -Force
+              Write-Host "Copied from VendorSRM"
+            }
+          }
+          
+          Import-Module WebAdministration
+          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
           Start-Sleep 10
+
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-
           try {
-            $r = Invoke-WebRequest "http://localhost:9191/" -UseBasicParsing -TimeoutSec 8
-            Write-Host "ROOT: HTTP $($r.StatusCode)"
-          } catch { Write-Host "ROOT ERR: $($_.Exception.Message)" }
-
-          try {
-            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HEALTH: HTTP $($r2.StatusCode) $($r2.Content)"
-          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
-
-          try {
-            $r3 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "EXECUTE: HTTP $($r3.StatusCode)"
-            Write-Host $r3.Content
+            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "EXECUTE: HTTP $($r.StatusCode)"
+            Write-Host $r.Content
           } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
