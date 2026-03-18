@@ -5,45 +5,57 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Open firewall ports on .36
-        shell: cmd
-        run: |
-          netsh advfirewall firewall delete rule name="V2RfcApi-9191" >nul 2>&1
-          netsh advfirewall firewall add rule name="V2RfcApi-9191" dir=in action=allow protocol=TCP localport=9191 profile=any
-          netsh advfirewall firewall delete rule name="RfcApiApp-8888" >nul 2>&1
-          netsh advfirewall firewall add rule name="RfcApiApp-8888" dir=in action=allow protocol=TCP localport=8888 profile=any
-          echo Firewall done
-          netsh advfirewall firewall show rule name="V2RfcApi-9191"
+      - uses: actions/checkout@v4
 
-      - name: Check IIS and recycle V2RfcApiPool
+      - name: Create V2RfcApi site on .36 port 9191
         shell: cmd
         run: |
-          echo === IIS Sites ===
-          C:\Windows\System32\inetsrv\appcmd.exe list sites
-          echo === App Pools ===
-          C:\Windows\System32\inetsrv\appcmd.exe list apppools
-          echo === Recycle V2RfcApiPool ===
-          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
-          echo Recycle: %ERRORLEVEL%
+          echo === Create app pool ===
+          C:\Windows\System32\inetsrv\appcmd.exe add apppool /name:V2RfcApiPool /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated
+          echo Pool created: %ERRORLEVEL%
+
+          echo === Create physical directory with compiled app ===
+          if not exist C:\V2RfcApi\bin mkdir C:\V2RfcApi\bin
+
+          echo === Copy compiled app from LIVE Vendor SRM site (same codebase) ===
+          C:\Windows\System32\inetsrv\appcmd.exe list site /site.name:"LIVE Vendor SRM"
+
+          echo === Deploy our built app to C:\V2RfcApi ===
+          robocopy bin\Release C:\V2RfcApi\bin /E /IS /IT /NFL /NDL
+          echo ROBOCOPY: %ERRORLEVEL%
+          copy /Y Web.config C:\V2RfcApi\ 2>nul
+          copy /Y Global.asax C:\V2RfcApi\ 2>nul
+          dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
+          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+
+          echo === Create IIS site on port 9191 ===
+          C:\Windows\System32\inetsrv\appcmd.exe delete site /site.name:V2RfcApi 2>nul
+          C:\Windows\System32\inetsrv\appcmd.exe add site /name:V2RfcApi /bindings:"http/*:9191:" /physicalPath:C:\V2RfcApi
+          C:\Windows\System32\inetsrv\appcmd.exe set site /site.name:V2RfcApi "/[path='/'].applicationPool:V2RfcApiPool"
+          C:\Windows\System32\inetsrv\appcmd.exe start site /site.name:V2RfcApi
+          echo Site created: %ERRORLEVEL%
+
           echo === Port 9191 listening? ===
           netstat -ano | findstr ":9191"
-          echo === V2RfcApi bin DLLs ===
-          dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
-          dir C:\V2RfcApi\bin\sapnco.dll 2>nul
 
-      - name: Test V2RfcApi locally on .36
+      - name: Test V2RfcApi on .36:9191
         shell: powershell
         run: |
-          Start-Sleep 8
+          Start-Sleep 10
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          
+
           try {
-            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
+            $r = Invoke-WebRequest "http://localhost:9191/" -UseBasicParsing -TimeoutSec 8
+            Write-Host "ROOT: HTTP $($r.StatusCode)"
+          } catch { Write-Host "ROOT ERR: $($_.Exception.Message)" }
+
+          try {
+            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "HEALTH: HTTP $($r2.StatusCode) $($r2.Content)"
           } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
 
           try {
-            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "EXECUTE: HTTP $($r2.StatusCode)"
-            Write-Host $r2.Content
+            $r3 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "EXECUTE: HTTP $($r3.StatusCode)"
+            Write-Host $r3.Content
           } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
