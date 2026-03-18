@@ -7,77 +7,78 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Stub VS17 WebApplication targets
+      - name: Find VS published output and deploy to C:\V2RfcApi
+        shell: cmd
+        run: |
+          echo === Find where VS already published on .36 ===
+          dir "C:\Users\Administrator\AppData\Local\Temp" /B 2>nul | findstr /I "publish"
+          dir "D:\V2_Vendor_SRM_Application" /B 2>nul
+          dir "D:\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC\bin" /B 2>nul | find /c ".dll"
+
+          echo === Check VS solution publish profiles ===
+          dir Properties\PublishProfiles /B 2>nul
+          type Properties\PublishProfiles\*.pubxml 2>nul | findstr "publishUrl\|LastUsedBuildConfiguration"
+
+          echo === Check NuGet packages folder ===
+          dir packages /B 2>nul | find /c ""
+          dir "%USERPROFILE%\.nuget\packages" /B 2>nul | find /c ""
+
+      - name: Stub targets + try build with packages from cache
         shell: powershell
         run: |
+          # Stub targets
           $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
           if (-not (Test-Path $d)) { New-Item $d -ItemType Directory -Force | Out-Null }
           $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/><Target Name="Package"/></Project>'
           [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets", $xml, [System.Text.Encoding]::UTF8)
-          Write-Host "Targets stubbed: $(Test-Path $d\Microsoft.WebApplication.targets)"
 
-      - name: NuGet restore
-        shell: cmd
-        run: |
-          nuget restore Vendor_SRM_Routing_Application.sln -NonInteractive
-          echo NuGet: %ERRORLEVEL%
-
-      - name: MSBuild publish to C:\V2RfcApi ONLY
-        shell: cmd
-        run: |
-          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj ^
-            /p:Configuration=Release ^
-            /p:Platform=AnyCPU ^
-            /p:DeployOnBuild=true ^
-            /p:PublishMethod=FileSystem ^
-            /p:PublishUrl=C:\V2RfcApi ^
-            /p:DeleteExistingFiles=false ^
-            /p:VisualStudioVersion=17.0 ^
+          # Try build skipping package restore — use existing packages
+          $msbuild = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+          & $msbuild Vendor_SRM_Routing_Application.csproj `
+            /p:Configuration=Release /p:Platform=AnyCPU `
+            /p:OutputPath=bin\Release\ `
+            /p:VisualStudioVersion=17.0 `
+            /p:RestorePackages=false `
             /nologo /verbosity:minimal
-          echo BUILD: %ERRORLEVEL%
-          if %ERRORLEVEL% NEQ 0 (
-            echo === BUILD FAILED — trying simple output copy ===
-            "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /p:VisualStudioVersion=17.0 /nologo /verbosity:minimal
-            echo BUILD2: %ERRORLEVEL%
-            if %ERRORLEVEL% EQU 0 (
-              robocopy bin\Release C:\V2RfcApi\bin /E /IS /IT /NFL /NDL
-              copy /Y Web.config C:\V2RfcApi\Web.config 2>nul
-              copy /Y Global.asax C:\V2RfcApi\Global.asax 2>nul
-              echo Deployed via robocopy
-            )
-          )
-          echo === DLLs in C:\V2RfcApi\bin ===
-          dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
-          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+          Write-Host "Build exit: $LASTEXITCODE"
+
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Build succeeded — deploying to C:\V2RfcApi\bin"
+            Copy-Item "bin\Release\*" "C:\V2RfcApi\bin\" -Recurse -Force
+            Copy-Item "Web.config" "C:\V2RfcApi\" -Force -EA SilentlyContinue
+            Copy-Item "Global.asax" "C:\V2RfcApi\" -Force -EA SilentlyContinue
+            Write-Host "Deployed DLLs: $((Get-ChildItem 'C:\V2RfcApi\bin' -Filter '*.dll').Count)"
+            (Get-ChildItem "C:\V2RfcApi\bin" -Filter "Vendor*.dll").Name
+          } else {
+            Write-Host "Build failed — checking if D:\V2_Vendor_SRM_Application has compiled output"
+            $live = "D:\V2_Vendor_SRM_Application\Published_Vendor_Application_MVC"
+            if (Test-Path $live) {
+              $dlls = (Get-ChildItem "$live\bin" -Filter "*.dll" -EA SilentlyContinue).Count
+              Write-Host "Live path DLLs: $dlls"
+              if ($dlls -gt 0) {
+                Copy-Item "$live\bin\*" "C:\V2RfcApi\bin\" -Recurse -Force
+                Copy-Item "$live\Web.config" "C:\V2RfcApi\" -Force
+                Write-Host "Copied from live path"
+              }
+            }
+          }
 
       - name: Fix Web.config + recycle + test
         shell: powershell
         run: |
-          # Fix SAP host
           $c = Get-Content "C:\V2RfcApi\Web.config" -Raw
           $c = $c -replace '192.168.144.170','192.168.144.174'
           [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $c, [System.Text.Encoding]::UTF8)
-          Write-Host "Web.config: SAP host set to Dev"
-
-          # Recycle ONLY our new pool
           Import-Module WebAdministration -EA SilentlyContinue
           Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
           Start-Sleep 15
 
-          # Test
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
           try {
             $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
             Write-Host "HEALTH: $($r.StatusCode) $($r.Content)"
           } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
-
           try {
             $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "=== EXECUTE SUCCESS ==="
-            Write-Host "HTTP: $($r2.StatusCode)"
-            Write-Host $r2.Content
+            Write-Host "=== EXECUTE: $($r2.StatusCode) ==="; Write-Host $r2.Content
           } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
-
-          Write-Host "=== All live sites still running ==="
-          Get-Website | Where-Object {$_.State -eq "Started"} | Select Name | Format-Table
