@@ -5,49 +5,47 @@ jobs:
   fix:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Schedule firewall script on .36 and wait
-        shell: powershell
-        env:
-          V2_PAT: ${{ secrets.V2_GH_PAT }}
+      - name: Check app pool state on .36 and recycle
+        shell: cmd
         run: |
-          $tok = (Invoke-RestMethod "https://api.github.com/repos/akash0631/rfc-api/actions/runners/registration-token" -Method POST -Headers @{Authorization="token $env:V2_PAT";"User-Agent"="v2"}).token
-          Write-Host "Token: $($tok.Substring(0,8))..."
-          net use "\\192.168.151.36\C$" "vrl@55555" /user:Administrator /persistent:no 2>$null
-          $lines = @(
-            "@echo off",
-            "netsh advfirewall firewall delete rule name=V2RfcApi-9191 >nul 2>&1",
-            "netsh advfirewall firewall add rule name=V2RfcApi-9191 dir=in action=allow protocol=TCP localport=9191 profile=any",
-            "netsh advfirewall firewall delete rule name=RfcApiApp-8888 >nul 2>&1",
-            "netsh advfirewall firewall add rule name=RfcApiApp-8888 dir=in action=allow protocol=TCP localport=8888 profile=any",
-            "echo firewall_done > C:\\setup_done.txt",
-            "if not exist C:\\actions-runner\\config.cmd goto end",
-            "cd /d C:\\actions-runner",
-            "call config.cmd --url https://github.com/akash0631/rfc-api --token RTOKEN --name V2DC-ADDVERB --labels self-hosted,Windows,X64,iis --runasservice --windowslogonaccount ""NT AUTHORITY\\SYSTEM"" --unattended",
-            "echo runner_done >> C:\\setup_done.txt",
-            ":end"
-          )
-          $script = ($lines -join "`r`n").Replace("RTOKEN", $tok)
-          [System.IO.File]::WriteAllText("\\192.168.151.36\C$\run_setup.bat", $script, [System.Text.Encoding]::ASCII)
-          Write-Host "Script written to .36"
-          $runAt = (Get-Date).AddMinutes(2).ToString("HH:mm")
-          schtasks /create /s 192.168.151.36 /u Administrator /p "vrl@55555" /tn "V2Setup" /tr "C:\run_setup.bat" /sc once /st $runAt /ru SYSTEM /f
-          Write-Host "Task scheduled for $runAt"
-          Start-Sleep 210
-          $done = Test-Path "\\192.168.151.36\C$\setup_done.txt"
-          Write-Host "Done: $done"
-          if ($done) { Get-Content "\\192.168.151.36\C$\setup_done.txt" }
-          net use "\\192.168.151.36\C$" /delete /y 2>$null
+          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
 
-      - name: Test .36 ports after fix
+          echo === App pool state ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list apppools /processModel.state:*
+
+          echo === Recycle V2RfcApiPool ===
+          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          echo Recycle: %ERRORLEVEL%
+
+          echo === Check if port 9191 is listening ===
+          powershell -NoProfile -Command "netstat -ano | Select-String ':9191'"
+
+          echo === Get Windows event errors from .36 last 10 min ===
+          powershell -NoProfile -Command "try{$s=(New-Object System.Diagnostics.EventLog('Application','192.168.151.36')); $s.Entries | Where-Object {$_.EntryType -eq 'Error' -and $_.TimeGenerated -gt (Get-Date).AddMinutes(-10)} | Select-Object -Last 5 | ForEach-Object { Write-Host $_.TimeGenerated $_.Source $_.Message.Substring(0,[Math]::Min(200,$_.Message.Length)) }}catch{Write-Host 'EventLog ERR:' $_.Exception.Message}"
+
+          net use \\192.168.151.36\C$ /delete /y 2>nul
+
+      - name: Deeper test - try from .46 with telnet and HTTP
         shell: powershell
         run: |
-          Start-Sleep 10
+          # Test TCP connectivity first
+          Write-Host "=== TCP port test ==="
+          $t = New-Object System.Net.Sockets.TcpClient
+          try { $t.Connect("192.168.151.36", 9191); Write-Host "TCP 9191: OPEN"; $t.Close() }
+          catch { Write-Host "TCP 9191: CLOSED - $($_.Exception.Message)" }
+
+          $t2 = New-Object System.Net.Sockets.TcpClient
+          try { $t2.Connect("192.168.151.36", 8888); Write-Host "TCP 8888: OPEN (existing site)"; $t2.Close() }
+          catch { Write-Host "TCP 8888: CLOSED - $($_.Exception.Message)" }
+
+          $t3 = New-Object System.Net.Sockets.TcpClient
+          try { $t3.Connect("192.168.151.36", 80); Write-Host "TCP 80: OPEN (Store Tracker)"; $t3.Close() }
+          catch { Write-Host "TCP 80: CLOSED - $($_.Exception.Message)" }
+
+          # HTTP test
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          foreach ($url in @("http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health","http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Execute")) {
-            try {
-              $m = if ($url -like "*Execute*") {"POST"} else {"GET"}
-              $b = if ($m -eq "POST") {$body} else {$null}
-              $r = Invoke-WebRequest $url -Method $m -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
-              Write-Host "OK $url HTTP $($r.StatusCode) $($r.Content)"
-            } catch { Write-Host "ERR $url $($_.Exception.Message)" }
-          }
+          Start-Sleep 5
+          try {
+            $r = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "HTTP 9191: OK $($r.StatusCode) $($r.Content)"
+          } catch { Write-Host "HTTP 9191 ERR: $($_.Exception.Message)" }
