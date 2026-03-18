@@ -65,179 +65,112 @@ jobs:
       - name: Stop IIS App Pool (before copy)
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Continue'
+          # Disable Defender real-time scanning so it releases DLL file handles
+          try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue; Write-Host "Defender RT disabled" } catch { }
+          # Create App_Offline.htm to force ASP.NET to release file handles
+          Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>" -ErrorAction SilentlyContinue
+          Write-Host "App_Offline.htm placed"
+          Start-Sleep -Seconds 2
+          # Stop the IIS site and app pool
           try {
-            # Create App_Offline.htm to force ASP.NET to release file handles
-            if (Test-Path "C:\RfcApp") {
-              Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>" -ErrorAction SilentlyContinue
-              Write-Host "App_Offline.htm placed"
+            Import-Module WebAdministration -ErrorAction Stop
+            $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
+            if ($site) {
+              Stop-Website $site.name -ErrorAction SilentlyContinue
+              Stop-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
+              Write-Host "Stopped site + pool: $($site.name) / $($site.applicationPool)"
             }
-            Start-Sleep -Seconds 2
-            
-            # Stop the IIS site and app pool
-            try {
-              Import-Module WebAdministration -ErrorAction Stop
-              $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
-              if ($site) {
-                Stop-Website $site.name -ErrorAction SilentlyContinue
-                Stop-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
-                Write-Host "Stopped site + pool: $($site.name) / $($site.applicationPool)"
-              }
-            } catch {
-              Write-Host "WebAdmin stop warning (non-fatal): $_"
-            }
-            
-            # Stop IIS W3SVC service entirely to release all file handles
-            Write-Host "Stopping W3SVC service..."
-            & net stop W3SVC /y 2>&1 | ForEach-Object { Write-Host $_ }
-            Start-Sleep -Seconds 3
-            
-            # Kill any remaining w3wp
-            Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 2
-            Write-Host "IIS stopped"
-            
-            # Disable Defender real-time monitoring temporarily so it releases DLL handles
-            try {
-              Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-              Write-Host "Defender real-time monitoring disabled"
-            } catch {
-              Write-Host "Could not disable Defender (non-fatal): $_"
-            }
-          } catch {
-            Write-Host "Stop step warning (non-fatal): $_"
-          }
-          # Always exit 0 - failure to stop IIS should not abort deploy
+          } catch { Write-Host "WebAdmin stop warning: $_" }
+          # Stop IIS W3SVC service entirely to release all file handles
+          Write-Host "Stopping W3SVC service..."
+          & net stop W3SVC /y 2>&1 | Write-Host
+          Start-Sleep -Seconds 3
+          Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          Write-Host "IIS stopped"
           exit 0
 
       - name: Copy to IIS
         timeout-minutes: 10
         shell: powershell
         run: |
-          # Use Continue so native cmd exit codes don't throw exceptions
           $ErrorActionPreference = 'Continue'
-          $srcDll = "bin\Release\Vendor_SRM_Routing_Application.dll"
-          $destDll = "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-          $oldDll  = "C:\RfcApp\bin\Vendor_SRM_Routing_Application.old.dll"
-          $tempDll = "C:\temp\Vendor_SRM_Routing_Application.dll"
+          $binDir  = "C:\RfcApp\bin"
+          $destDll = "$binDir\Vendor_SRM_Routing_Application.dll"
+          $srcDll  = "bin\Release\Vendor_SRM_Routing_Application.dll"
 
-          # --- Step 1: Wait for source DLL to be readable ---
-          $maxWait = 120; $waited = 0
-          Write-Host "Waiting for source DLL to become accessible..."
-          while ($waited -lt $maxWait) {
-            try {
-              $fs = [System.IO.File]::Open($srcDll, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-              $fs.Close(); Write-Host "Source DLL accessible after ${waited}s"; break
-            } catch { Start-Sleep -Seconds 2; $waited += 2 }
+          # --- STEP 1: Delete ALL stale .old* / *.old* files from bin (they cause 0x80131040 assembly load error) ---
+          if (-not (Test-Path $binDir)) { New-Item -ItemType Directory $binDir -Force | Out-Null }
+          Get-ChildItem $binDir -Filter "*.old*" -ErrorAction SilentlyContinue | ForEach-Object {
+            & takeown /F $_.FullName /A 2>&1 | Out-Null
+            & icacls $_.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
+            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path $_.FullName)) { Write-Host "Deleted stale: $($_.Name)" }
+            else { Write-Host "Could not delete: $($_.Name) (will be handled by robocopy)" }
           }
-          if ($waited -ge $maxWait) { Write-Host "WARNING: Source DLL wait timed out" }
 
-          # --- Step 2: Copy source to temp before Defender rescans ---
-          if (-not (Test-Path C:\temp)) { New-Item -ItemType Directory C:\temp -Force | Out-Null }
-          Write-Host "Copying source DLL to temp..."
-          cmd /c "copy /Y `"$((Resolve-Path $srcDll).Path)`" `"$tempDll`""
-          if (-not (Test-Path $tempDll)) {
-            robocopy "bin\Release" "C:\temp" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:3 /W:2 | Out-Null
-          }
-          if (-not (Test-Path $tempDll)) { Write-Host "ERROR: Could not capture source DLL to temp."; exit 1 }
-          Write-Host "Source DLL captured to temp: $tempDll"
+          # --- STEP 2: Fix permissions on bin folder ---
+          & icacls $binDir /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
 
-          # --- Step 3: Prep destination folder, clean up stale .old.dll ---
-          if (-not (Test-Path "C:\RfcApp\bin")) { New-Item -ItemType Directory "C:\RfcApp\bin" -Force | Out-Null }
-          & icacls "C:\RfcApp\bin" /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
-          # Force-own and delete both stale files (ignore failures - robocopy /B covers the rest)
-          foreach ($f in @($oldDll, $destDll)) {
-            if (Test-Path $f) {
-              & takeown /F $f /A 2>&1 | Out-Null
-              & icacls $f /grant "Administrators:F" /C /Q 2>&1 | Out-Null
-              & attrib -R -S $f 2>&1 | Out-Null
-              cmd /c "del /F /Q `"$f`"" 2>&1 | Out-Null
-              if (Test-Path $f) { Write-Host "Note: $f still present after del (will overwrite)" }
-              else { Write-Host "Deleted: $f" }
-            }
-          }
-          Start-Sleep -Seconds 2
-
-          # --- Step 4: Copy via robocopy /B (backup mode bypasses share violations) ---
-          Write-Host "Deploying DLL via robocopy /B..."
-          robocopy "C:\temp" "C:\RfcApp\bin" "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:5 /W:5 2>&1 | Write-Host
+          # --- STEP 3: Copy DLL via robocopy /B (backup mode - bypasses share violations & Defender locks) ---
+          Write-Host "Copying DLL via robocopy /B..."
+          robocopy "bin\Release" $binDir "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:5 /W:5 2>&1 | Write-Host
           $rc = $LASTEXITCODE
           if ($rc -gt 3) {
-            Write-Host "robocopy /B exit $rc - falling back to cmd copy..."
-            cmd /c "copy /Y `"$tempDll`" `"$destDll`"" 2>&1 | Write-Host
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $destDll)) {
-              Write-Host "ERROR: All copy methods failed. Aborting."; exit 1
-            }
+            Write-Host "robocopy exit $rc - trying plain copy fallback..."
+            Copy-Item $srcDll $destDll -Force -ErrorAction Stop
           }
-          if (-not (Test-Path $destDll)) { Write-Host "ERROR: DLL not found at destination after copy."; exit 1 }
-          Write-Host "DLL deployed to C:\RfcApp\bin successfully"
-          Remove-Item $tempDll -Force -ErrorAction SilentlyContinue
-          Copy-Item "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\" -Force -ErrorAction SilentlyContinue
-          
-          # First-time setup: copy all dependencies if not already present
-          if (-not (Test-Path "C:\RfcApp\bin\System.Web.Http.dll")) {
-            Write-Host "First-time deploy detected - copying all dependencies..."
-            robocopy "bin\Release" "C:\RfcApp\bin" /E /NJH /NJS /NFL /NDL /NP /XF sapnco_utils.dll | Out-Null
-            # Copy native SAP NCo DLLs to System32
+          if (-not (Test-Path $destDll)) { Write-Host "ERROR: DLL not found at destination"; exit 1 }
+          Write-Host "DLL deployed: $destDll"
+          Copy-Item "bin\Release\Vendor_SRM_Routing_Application.pdb" $binDir -Force -ErrorAction SilentlyContinue
+
+          # --- STEP 4: First-time setup (only when NuGet deps are missing) ---
+          if (-not (Test-Path "$binDir\System.Web.Http.dll")) {
+            Write-Host "First-time deploy - copying all dependencies..."
+            robocopy "bin\Release" $binDir /E /NJH /NJS /NFL /NDL /NP /XF sapnco_utils.dll | Out-Null
             Copy-Item "packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll" "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
             Get-ChildItem "packages\sapnco_x64.3.0.18\lib" -Filter "lib*.dll" | Copy-Item -Destination "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
             Get-ChildItem "packages\sapnco_x64.3.0.18\lib" -Filter "*icu*.dll" | Copy-Item -Destination "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
           } else {
             Write-Host "Incremental deploy - NuGet deps already in place"
           }
-          
-          # Safety: remove sapnco_utils.dll from bin if it got there
-          Remove-Item "C:\RfcApp\bin\sapnco_utils.dll" -Force -ErrorAction SilentlyContinue
-          
-          # Update config and static files
+          Remove-Item "$binDir\sapnco_utils.dll" -Force -ErrorAction SilentlyContinue
+
+          # --- STEP 5: Config and static files ---
           Copy-Item "Web.config" "C:\RfcApp\Web.config" -Force
           if (Test-Path "Global.asax") { Copy-Item "Global.asax" "C:\RfcApp\Global.asax" -Force }
-          robocopy "Views" "C:\RfcApp\Views" /E /NJH /NJS /NFL /NDL /NP | Out-Null
+          robocopy "Views"   "C:\RfcApp\Views"   /E /NJH /NJS /NFL /NDL /NP | Out-Null
           robocopy "Scripts" "C:\RfcApp\Scripts" /E /NJH /NJS /NFL /NDL /NP | Out-Null
           robocopy "Content" "C:\RfcApp\Content" /E /NJH /NJS /NFL /NDL /NP | Out-Null
           Write-Host "Deployed to C:\RfcApp"
-          # Robocopy returns 1 (files copied) as success - reset to 0 so step passes
           exit 0
 
       - name: Recycle IIS App Pool
         if: always()
         shell: powershell
         run: |
-          # Ensure native command errors don't abort this step
           $ErrorActionPreference = 'Continue'
-
-          # --- 1. Delete stale .old.dll files while Defender is still disabled ---
-          # ASP.NET loads ALL dlls from bin; mismatched .old.dll causes HTTP 500
-          Get-ChildItem "C:\RfcApp\bin" -Filter "*.old.dll" -ErrorAction SilentlyContinue | ForEach-Object {
-            & takeown /F $_.FullName /A 2>&1 | Out-Null
-            & icacls $_.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
-            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-            if (-not (Test-Path $_.FullName)) { Write-Host "Deleted stale: $($_.Name)" }
-            else { Write-Host "WARN: $($_.Name) still present (will be ignored)" }
-          }
-
-          # --- 2. Re-enable Defender ---
-          try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue; Write-Host "Defender re-enabled" } catch { }
-
-          # --- 3. Remove App_Offline.htm ---
-          if (Test-Path "C:\RfcApp\App_Offline.htm") { Remove-Item "C:\RfcApp\App_Offline.htm" -Force; Write-Host "Removed App_Offline.htm" }
-
-          # --- 4. Start W3SVC ---
+          # Re-enable Defender
+          try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue } catch { }
+          # Remove App_Offline.htm
+          if (Test-Path "C:\RfcApp\App_Offline.htm") { Remove-Item "C:\RfcApp\App_Offline.htm" -Force -ErrorAction SilentlyContinue; Write-Host "Removed App_Offline.htm" }
+          # Start W3SVC
           Write-Host "Starting W3SVC..."
           & net start W3SVC 2>&1 | Write-Host
           Start-Sleep -Seconds 4
-
-          # --- 5. Start site & app pool (no Restart - pool is freshly started, Restart causes Access Denied) ---
+          # Start site + pool (no Restart - causes Access Denied on fresh start)
           try {
             Import-Module WebAdministration -ErrorAction Stop
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
               Start-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
               Start-Website $site.name -ErrorAction SilentlyContinue
-              Write-Host "Started pool + site: $($site.applicationPool) / $($site.name)"
+              Write-Host "Started pool+site: $($site.applicationPool) / $($site.name)"
             } else {
-              Write-Host "Site not found via WebAdmin - using appcmd"
               & "$env:windir\System32\inetsrv\appcmd.exe" start apppool /apppool.name:RfcApiPool 2>&1 | Write-Host
               & "$env:windir\System32\inetsrv\appcmd.exe" start site /site.name:RfcApiApp 2>&1 | Write-Host
+              Write-Host "Started via appcmd fallback"
             }
           } catch {
             Write-Host "IIS start warning (non-fatal): $_"
@@ -247,21 +180,18 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 8
           $rfc = '${{ inputs.rfc_name }}'
-          # Main app must respond
           try {
-            $r = Invoke-WebRequest -Uri 'http://localhost:8888/' -UseBasicParsing -TimeoutSec 15
+            $r = Invoke-WebRequest -Uri 'http://localhost:8888/' -UseBasicParsing -TimeoutSec 20
             Write-Host "OK  HTTP $($r.StatusCode)  http://localhost:8888/"
           } catch {
             Write-Host "WARN http://localhost:8888/ not reachable: $_"
           }
-          # Informational: RFC endpoint (may vary per deployment)
           if ($rfc) {
-            try { $a = Invoke-WebRequest "http://localhost:8888/api/$rfc" -UseBasicParsing -TimeoutSec 5; Write-Host "INFO api/$rfc => $($a.StatusCode)" } catch { Write-Host "INFO api/$rfc not reachable (non-fatal - check rfc_name input)" }
+            try { $a = Invoke-WebRequest "http://localhost:8888/api/$rfc" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  api/$rfc => $($a.StatusCode)" } catch { Write-Host "INFO api/$rfc: $($_.Exception.Message.Split([char]10)[0])" }
           }
-          # Informational: swagger UI
-          try { $s = Invoke-WebRequest "http://localhost:8888/swagger/ui/index" -UseBasicParsing -TimeoutSec 5; Write-Host "INFO swagger => $($s.StatusCode)" } catch { Write-Host "INFO swagger not reachable (non-fatal)" }
+          try { $s = Invoke-WebRequest "http://localhost:8888/swagger/ui/index" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  swagger => $($s.StatusCode)" } catch { Write-Host "INFO swagger: $($_.Exception.Message.Split([char]10)[0])" }
 
       - name: Summary
         if: always()
