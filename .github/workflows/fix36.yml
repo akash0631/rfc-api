@@ -3,49 +3,47 @@ on:
   workflow_dispatch:
 jobs:
   fix:
-    runs-on: [self-hosted, test-vm]
+    runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Check app pool state on .36 and recycle
+      - name: Open firewall ports on .36
         shell: cmd
         run: |
-          net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+          netsh advfirewall firewall delete rule name="V2RfcApi-9191" >nul 2>&1
+          netsh advfirewall firewall add rule name="V2RfcApi-9191" dir=in action=allow protocol=TCP localport=9191 profile=any
+          netsh advfirewall firewall delete rule name="RfcApiApp-8888" >nul 2>&1
+          netsh advfirewall firewall add rule name="RfcApiApp-8888" dir=in action=allow protocol=TCP localport=8888 profile=any
+          echo Firewall done
+          netsh advfirewall firewall show rule name="V2RfcApi-9191"
 
-          echo === App pool state ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe list apppools /processModel.state:*
-
+      - name: Check IIS and recycle V2RfcApiPool
+        shell: cmd
+        run: |
+          echo === IIS Sites ===
+          C:\Windows\System32\inetsrv\appcmd.exe list sites
+          echo === App Pools ===
+          C:\Windows\System32\inetsrv\appcmd.exe list apppools
           echo === Recycle V2RfcApiPool ===
-          \\192.168.151.36\C$\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
           echo Recycle: %ERRORLEVEL%
+          echo === Port 9191 listening? ===
+          netstat -ano | findstr ":9191"
+          echo === V2RfcApi bin DLLs ===
+          dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
+          dir C:\V2RfcApi\bin\sapnco.dll 2>nul
 
-          echo === Check if port 9191 is listening ===
-          powershell -NoProfile -Command "netstat -ano | Select-String ':9191'"
-
-          echo === Get Windows event errors from .36 last 10 min ===
-          powershell -NoProfile -Command "try{$s=(New-Object System.Diagnostics.EventLog('Application','192.168.151.36')); $s.Entries | Where-Object {$_.EntryType -eq 'Error' -and $_.TimeGenerated -gt (Get-Date).AddMinutes(-10)} | Select-Object -Last 5 | ForEach-Object { Write-Host $_.TimeGenerated $_.Source $_.Message.Substring(0,[Math]::Min(200,$_.Message.Length)) }}catch{Write-Host 'EventLog ERR:' $_.Exception.Message}"
-
-          net use \\192.168.151.36\C$ /delete /y 2>nul
-
-      - name: Deeper test - try from .46 with telnet and HTTP
+      - name: Test V2RfcApi locally on .36
         shell: powershell
         run: |
-          # Test TCP connectivity first
-          Write-Host "=== TCP port test ==="
-          $t = New-Object System.Net.Sockets.TcpClient
-          try { $t.Connect("192.168.151.36", 9191); Write-Host "TCP 9191: OPEN"; $t.Close() }
-          catch { Write-Host "TCP 9191: CLOSED - $($_.Exception.Message)" }
-
-          $t2 = New-Object System.Net.Sockets.TcpClient
-          try { $t2.Connect("192.168.151.36", 8888); Write-Host "TCP 8888: OPEN (existing site)"; $t2.Close() }
-          catch { Write-Host "TCP 8888: CLOSED - $($_.Exception.Message)" }
-
-          $t3 = New-Object System.Net.Sockets.TcpClient
-          try { $t3.Connect("192.168.151.36", 80); Write-Host "TCP 80: OPEN (Store Tracker)"; $t3.Close() }
-          catch { Write-Host "TCP 80: CLOSED - $($_.Exception.Message)" }
-
-          # HTTP test
+          Start-Sleep 8
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          Start-Sleep 5
+          
           try {
-            $r = Invoke-WebRequest "http://192.168.151.36:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HTTP 9191: OK $($r.StatusCode) $($r.Content)"
-          } catch { Write-Host "HTTP 9191 ERR: $($_.Exception.Message)" }
+            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "HEALTH: HTTP $($r.StatusCode) $($r.Content)"
+          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+
+          try {
+            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "EXECUTE: HTTP $($r2.StatusCode)"
+            Write-Host $r2.Content
+          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
