@@ -195,6 +195,8 @@ jobs:
           robocopy "Scripts" "C:\RfcApp\Scripts" /E /NJH /NJS /NFL /NDL /NP | Out-Null
           robocopy "Content" "C:\RfcApp\Content" /E /NJH /NJS /NFL /NDL /NP | Out-Null
           Write-Host "Deployed to C:\RfcApp"
+          # Robocopy returns 1 (files copied) as success - reset to 0 so step passes
+          exit 0
 
       - name: Recycle IIS App Pool
         if: always()
@@ -220,12 +222,14 @@ jobs:
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
               Start-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
+              Start-Website $site.name -ErrorAction SilentlyContinue
               Start-Sleep -Seconds 2
               Restart-WebAppPool $site.applicationPool
               Write-Host "Recycled: $($site.applicationPool) (site: $($site.name))"
             } else {
               Write-Host "Site not found via WebAdmin, using appcmd fallback"
               & "$env:windir\System32\inetsrv\appcmd.exe" start apppool /apppool.name:RfcApiPool
+              & "$env:windir\System32\inetsrv\appcmd.exe" start site /site.name:RfcApiApp
               & "$env:windir\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:RfcApiPool
             }
           } catch {
