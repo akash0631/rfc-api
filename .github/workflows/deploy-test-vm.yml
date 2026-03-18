@@ -189,7 +189,7 @@ jobs:
             Write-Host "WARN http://localhost:8888/ not reachable: $_"
           }
           if ($rfc) {
-            try { $a = Invoke-WebRequest "http://localhost:8888/api/$rfc" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  api/$rfc => $($a.StatusCode)" } catch { Write-Host "INFO api/$rfc: $($_.Exception.Message.Split([char]10)[0])" }
+            try { $a = Invoke-WebRequest "http://localhost:8888/api/$rfc" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  api/$rfc => $($a.StatusCode)" } catch { Write-Host "INFO api/${rfc}: $($_.Exception.Message.Split([char]10)[0])" }
           }
           try { $s = Invoke-WebRequest "http://localhost:8888/swagger/ui/index" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  swagger => $($s.StatusCode)" } catch { Write-Host "INFO swagger: $($_.Exception.Message.Split([char]10)[0])" }
 
