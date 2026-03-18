@@ -170,6 +170,13 @@ jobs:
           robocopy "Scripts" "C:\RfcApp\Scripts" /E /NJH /NJS /NFL /NDL /NP | Out-Null
           robocopy "Content" "C:\RfcApp\Content" /E /NJH /NJS /NFL /NDL /NP | Out-Null
           Write-Host "Deployed to C:\RfcApp"
+
+          # --- STEP 5: Deploy portal static files ---
+          if (Test-Path "portal") {
+            if (-not (Test-Path "C:\Portal")) { New-Item -ItemType Directory "C:\Portal" -Force | Out-Null }
+            robocopy "portal" "C:\Portal" /E /NJH /NJS /NFL /NDL /NP | Out-Null
+            Write-Host "Portal files deployed to C:\Portal"
+          }
           exit 0
 
       - name: Recycle IIS App Pool
@@ -202,6 +209,32 @@ jobs:
             Write-Host "IIS start warning (non-fatal): $_"
           }
 
+          # --- Ensure portal IIS site exists on port 8080 ---
+          try {
+            Import-Module WebAdministration -ErrorAction Stop
+            if (-not (Test-Path "C:\Portal")) { New-Item -ItemType Directory "C:\Portal" -Force | Out-Null }
+            $portalSite = Get-Website | Where-Object { $_.Bindings.Collection.bindingInformation -like '*:8080:*' } | Select-Object -First 1
+            if (-not $portalSite) {
+              # Create a new IIS site for the portal
+              New-Website -Name "PortalApp" -PhysicalPath "C:\Portal" -Port 8080 -Force -ErrorAction SilentlyContinue
+              Write-Host "Created IIS site PortalApp on port 8080"
+              # Allow DefaultAppPool to serve it
+              Set-ItemProperty "IIS:\Sites\PortalApp" -Name applicationPool -Value "DefaultAppPool" -ErrorAction SilentlyContinue
+            } else {
+              # Update physical path in case it changed
+              Set-ItemProperty "IIS:\Sites\$($portalSite.name)" -Name physicalPath -Value "C:\Portal" -ErrorAction SilentlyContinue
+              Write-Host "Portal site already exists: $($portalSite.name)"
+            }
+            $portalSite = Get-Website | Where-Object { $_.Bindings.Collection.bindingInformation -like '*:8080:*' } | Select-Object -First 1
+            if ($portalSite) {
+              Start-WebAppPool $portalSite.applicationPool -ErrorAction SilentlyContinue
+              Start-Website $portalSite.name -ErrorAction SilentlyContinue
+              Write-Host "Portal site started: $($portalSite.name) -> http://192.168.151.46:8080/"
+            }
+          } catch {
+            Write-Host "Portal site warning (non-fatal): $_"
+          }
+
       - name: Health check
         if: always()
         shell: powershell
@@ -218,6 +251,7 @@ jobs:
             try { $a = Invoke-WebRequest "http://localhost:8888/api/$rfc" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  api/$rfc => $($a.StatusCode)" } catch { Write-Host "INFO api/${rfc}: $($_.Exception.Message.Split([char]10)[0])" }
           }
           try { $s = Invoke-WebRequest "http://localhost:8888/swagger/ui/index" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  swagger => $($s.StatusCode)" } catch { Write-Host "INFO swagger: $($_.Exception.Message.Split([char]10)[0])" }
+          try { $p = Invoke-WebRequest "http://localhost:8080/" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  portal  => $($p.StatusCode)" } catch { Write-Host "INFO portal: $($_.Exception.Message.Split([char]10)[0])" }
 
       - name: Summary
         if: always()
@@ -225,7 +259,8 @@ jobs:
         run: |
           echo.
           echo ===== DEPLOY COMPLETE =====
-          echo Server:  http://192.168.151.46
-          echo Swagger: http://192.168.151.46/swagger
-          echo RFC API: http://192.168.151.46/api/${{ inputs.rfc_name }}
+          echo Server:  http://192.168.151.46:8888
+          echo Portal:  http://192.168.151.46:8080
+          echo Swagger: http://192.168.151.46:8888/swagger/ui/index
+          echo RFC API: http://192.168.151.46:8888/api/${{ inputs.rfc_name }}
           echo ===========================
