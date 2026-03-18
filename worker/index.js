@@ -3,9 +3,12 @@
  * Upload RFC .docx → Parse → Generate → Push GitHub → Live API
  */
 
-const GITHUB_REPO   = 'akash0631/rfc-api';
-const GITHUB_BRANCH = 'master';
-const DAB_APP_URL   = 'https://my-dab-app.azurewebsites.net';
+const GITHUB_REPO      = 'akash0631/rfc-api';
+const GITHUB_BRANCH    = 'master';
+const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
+const IIS_HOST         = 'http://192.168.151.46:8888';
+const GH_WORKFLOW_ID   = '245608998';  // deploy-test-vm.yml
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
   quality:    { fn: 'rfcConfigparametersquality',    host: '192.168.144.179', client: '600' },
@@ -305,14 +308,76 @@ async function runPipeline(text, sapEnv, jobId, env, filename='') {
     catch(e) { await log('github','error',e.message); return; }
     await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha})`);
 
-    // Step 4: Register DAB
+    // Step 4: Trigger IIS deploy via GitHub Actions
+    await log('deploy','running','Triggering build + deploy on VM-CRM (.46)...');
+    try {
+      // Dispatch workflow
+      const dispatchRes = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${GH_WORKFLOW_ID}/dispatches`,
+        { method:'POST',
+          headers:{ Authorization:`token ${ghToken}`, Accept:'application/vnd.github+json',
+            'Content-Type':'application/json', 'User-Agent':'V2-RFC-Pipeline' },
+          body: JSON.stringify({ref: GITHUB_BRANCH}) }
+      );
+      if (!dispatchRes.ok && dispatchRes.status !== 204)
+        throw new Error(`Workflow dispatch HTTP ${dispatchRes.status}`);
+
+      // Wait briefly then find the new running run
+      await sleep(8000);
+      let runId = null;
+      for (let i = 0; i < 15 && !runId; i++) {
+        await sleep(4000);
+        const runsRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=5&event=workflow_dispatch&branch=${GITHUB_BRANCH}`,
+          { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+        );
+        const runs = await runsRes.json();
+        const fresh = runs.workflow_runs?.find(r => r.status !== 'completed');
+        if (fresh) runId = fresh.id;
+      }
+      if (!runId) throw new Error('Could not find workflow run after dispatch');
+      await log('deploy','running',`Build started · run #${runId}`);
+
+      // Poll until completed (max ~8 min = 96 × 5s)
+      let deployed = false;
+      for (let i = 0; i < 96; i++) {
+        await sleep(5000);
+        const runRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
+          { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+        );
+        const run = await runRes.json();
+        if (run.status === 'completed') {
+          if (run.conclusion === 'success') {
+            await log('deploy','done',`Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
+            deployed = true;
+          } else {
+            throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
+          }
+          break;
+        }
+        // Show current step name while waiting
+        try {
+          const jobsRes = await fetch(
+            `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}/jobs`,
+            { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+          );
+          const jobs = await jobsRes.json();
+          const cur = jobs.jobs?.[0]?.steps?.find(s => s.status === 'in_progress')?.name;
+          if (cur) await log('deploy','running',`${cur} (run #${runId})`);
+        } catch(_) {}
+      }
+      if (!deployed) throw new Error('Deployment timed out');
+    } catch(e) { await log('deploy','error',e.message); return; }
+
+    // Step 5: Register DAB
     await log('dab','running','Registering entity in DAB config...');
     let dabResult;
     try { dabResult = await registerDab(spec, ghToken); }
     catch(e) { await log('dab','error',e.message); return; }
     await log('dab','done',`${dabResult.endpoint}`);
 
-    // Step 5: Update Swagger
+    // Step 6: Update Swagger
     await log('swagger','running','Updating Swagger documentation...');
     try { await updateSwagger(spec, sapEnv, ghToken); }
     catch(e) { await log('swagger','error',e.message); }
@@ -320,11 +385,11 @@ async function runPipeline(text, sapEnv, jobId, env, filename='') {
 
     // Final: write summary
     const job = JSON.parse(await kv.get(jobId)||'{}');
-    job.status = 'complete';
-    job.rfcName = spec.rfcName;
-    job.rfcApi  = `POST /api/${spec.rfcName}`;
+    job.status  = 'complete';
+    job.rfcName  = spec.rfcName;
+    job.rfcApi   = `${IIS_HOST}/api/${spec.rfcName}`;
     job.dataLake = dabResult.endpoint;
-    job.swagger  = 'https://v2-rfc-portal.pages.dev/swagger';
+    job.swagger  = `${IIS_HOST}/swagger/ui/index`;
     job.commit   = ctrlResult.commitUrl;
     await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
 
@@ -931,6 +996,7 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
         <div class="step" id="s-parse"><div class="step-icon">○</div><div><div>Parse RFC document</div></div></div>
         <div class="step" id="s-controller"><div class="step-icon">○</div><div><div>Generate ASP.NET controller</div></div></div>
         <div class="step" id="s-github"><div class="step-icon">○</div><div><div>Push to GitHub</div></div></div>
+        <div class="step" id="s-deploy"><div class="step-icon">○</div><div><div>Build &amp; Deploy to IIS (.46)</div></div></div>
         <div class="step" id="s-dab"><div class="step-icon">○</div><div><div>Register in Azure DAB</div></div></div>
         <div class="step" id="s-swagger"><div class="step-icon">○</div><div><div>Update Swagger docs</div></div></div>
       </div>
@@ -1187,7 +1253,7 @@ function showResult(job) {
   document.getElementById('resultTitle').textContent = (job.rfcName||'RFC') + ' Deployed!';
   document.getElementById('resultSub').textContent = 'Your RFC is now a live REST API with data lake access';
   document.getElementById('epBox').innerHTML =
-    '<span>RFC API (live via IIS after CI deploy)</span>' + (job.rfcApi||'') +
+    '<span>RFC API (live on IIS)</span>' + (job.rfcApi||'') +
     '<span style="margin-top:8px">Data Lake REST API (Azure DAB)</span>' + (job.dataLake||'') +
     '?$filter=FIELD eq \'value\'&$top=100';
   const chips = document.getElementById('chips');
@@ -1204,7 +1270,7 @@ function reset() {
   document.getElementById('fileSel').style.display='none';
   document.getElementById('deployBtn').disabled=true;
   selEnv('dev');
-  ['parse','controller','github','dab','swagger'].forEach(s=>{
+  ['parse','controller','github','deploy','dab','swagger'].forEach(s=>{
     const el=document.getElementById('s-'+s);
     if(el){el.className='step';el.querySelector('.step-icon').innerHTML='○';const d=el.querySelector('.step-detail');if(d)d.remove();}
   });

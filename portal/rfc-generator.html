@@ -3,246 +3,346 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>V2 Retail — RFC Generator</title>
+  <title>V2 Retail - RFC Auto-Deploy Generator</title>
   <style>
-    :root{--blue:#1A3C6E;--accent:#E8401C;--green:#22c55e;--light:#F4F7FB;--border:#dde3ee;}
+    :root{--blue:#1A3C6E;--accent:#E8401C;--green:#22c55e;--light:#F4F7FB;--border:#dde3ee;--muted:#94a3b8;--text:#0f172a;--sub:#475569;}
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Segoe UI',sans-serif;background:var(--light);color:#222;}
-    #topbar{background:var(--blue);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.25);}
-    .logo-text{color:#fff;font-size:20px;font-weight:700;}
-    .logo-sub{color:#a8c4e8;font-size:12px;}
-    .badge{background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600;}
-    .nav{padding:8px 28px;background:#f0f4fa;border-bottom:1px solid var(--border);display:flex;gap:10px;font-size:13px;}
-    .nav a{color:var(--blue);text-decoration:none;padding:4px 12px;border-radius:4px;border:1px solid #c5d2e8;font-weight:500;}
-    .nav a:hover,.nav a.active{background:var(--blue);color:#fff;}
-    .main{max-width:860px;margin:32px auto;padding:0 24px;}
-    h1{font-size:24px;color:var(--blue);margin-bottom:6px;}
-    .subtitle{color:#666;font-size:14px;margin-bottom:28px;}
-    .card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:28px;margin-bottom:24px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
-    .card h2{font-size:16px;color:var(--blue);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
-    .drop-zone{border:2px dashed var(--border);border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:.2s;background:#fafbfd;}
-    .drop-zone:hover,.drop-zone.drag{border-color:var(--blue);background:#f0f4fa;}
-    .drop-zone.has-file{border-color:var(--green);background:#f0fdf4;}
-    .drop-icon{font-size:40px;margin-bottom:12px;}
-    .drop-text{color:#555;font-size:15px;}
-    .drop-hint{color:#999;font-size:12px;margin-top:6px;}
-    .file-name{color:var(--blue);font-weight:600;font-size:15px;}
-    input[type=file]{display:none;}
-    .btn{background:var(--blue);color:#fff;border:none;padding:12px 28px;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer;width:100%;transition:.2s;}
-    .btn:hover{background:#14305a;}
-    .btn:disabled{background:#aaa;cursor:not-allowed;}
-    .btn-accent{background:var(--accent);}
-    .btn-accent:hover{background:#c0341a;}
-
-    /* Progress tracker */
-    .progress-tracker{display:none;}
-    .step{display:flex;align-items:flex-start;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);}
-    .step:last-child{border-bottom:none;}
-    .step-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:#f0f4fa;color:#aaa;font-weight:700;}
-    .step-icon.done{background:#dcfce7;color:var(--green);}
-    .step-icon.active{background:#dbeafe;color:var(--blue);animation:pulse 1.4s infinite;}
-    .step-icon.error{background:#fee2e2;color:var(--accent);}
-    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
-    .step-body{flex:1;}
-    .step-title{font-weight:600;font-size:14px;color:#222;}
-    .step-detail{font-size:12px;color:#666;margin-top:3px;font-family:monospace;}
-    .step-time{font-size:11px;color:#aaa;margin-left:auto;flex-shrink:0;}
-
-    /* Result card */
-    .result-card{display:none;border-left:4px solid var(--green);padding:16px 20px;}
-    .result-card.error{border-color:var(--accent);}
-    .result-title{font-size:18px;font-weight:700;color:var(--blue);margin-bottom:8px;}
-    .links{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
-    .link-btn{background:var(--blue);color:#fff;padding:8px 16px;border-radius:6px;font-size:13px;text-decoration:none;font-weight:500;}
-    .link-btn.green{background:var(--green);color:#000;}
-    .link-btn.orange{background:var(--accent);}
-    pre.code-preview{background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;max-height:300px;margin-top:12px;line-height:1.5;}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--light);color:var(--text);min-height:100vh;}
+    #topbar{background:var(--blue);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.3);position:sticky;top:0;z-index:50;}
+    .logo-wrap{display:flex;align-items:center;gap:12px;}
+    .logo-icon{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;color:#fff;}
+    .logo-text{color:#fff;font-size:18px;font-weight:700;}
+    .logo-sub{color:#a8c4e8;font-size:11px;margin-top:1px;}
+    .badge{background:var(--accent);color:#fff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;}
+    .nav{display:flex;gap:6px;flex-wrap:wrap;}
+    .nav a{color:#a8c4e8;text-decoration:none;font-size:12px;font-weight:600;padding:5px 11px;border-radius:6px;transition:.15s;}
+    .nav a:hover{color:#fff;background:rgba(255,255,255,.1);}
+    .nav a.active{color:#fff;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);}
+    .main{max-width:680px;margin:0 auto;padding:32px 18px 80px;}
+    .hero{text-align:center;margin-bottom:28px;}
+    .hero-pill{display:inline-flex;align-items:center;gap:6px;background:#eef1fd;border:1px solid #c7d2fe;border-radius:999px;padding:3px 14px 3px 8px;font-size:10px;font-family:monospace;color:var(--blue);margin-bottom:12px;}
+    .hero-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    .hero h1{font-size:26px;font-weight:800;color:var(--blue);margin-bottom:6px;}
+    .hero h1 em{font-style:normal;color:var(--accent);}
+    .hero p{font-size:12.5px;color:var(--muted);font-family:monospace;}
+    .flow{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;margin-bottom:28px;}
+    .fl{background:#fff;border:1px solid var(--border);border-radius:7px;padding:5px 11px;font-size:11px;font-weight:600;color:var(--sub);font-family:monospace;}
+    .arr{color:var(--muted);font-size:13px;}
+    .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:14px;}
+    .card-title{font-size:9px;font-family:monospace;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+    .card-title::after{content:'';flex:1;height:1px;background:var(--border);}
+    .drop{border:2px dashed var(--border);border-radius:10px;padding:36px 20px;text-align:center;cursor:pointer;transition:.2s;background:#fafbfd;position:relative;}
+    .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+    .drop:hover,.drop.over{border-color:var(--blue);background:#eef1fd;}
+    .drop.has-file{border-color:var(--green);background:#f0fdf4;border-style:solid;}
+    .drop-icon{font-size:36px;margin-bottom:10px;}
+    .drop-title{font-size:14px;font-weight:700;margin-bottom:4px;}
+    .drop-hint{font-size:11px;color:var(--muted);font-family:monospace;}
+    .file-info{display:none;align-items:center;gap:10px;margin-top:12px;background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;color:#15803d;}
+    .env-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+    .env-card{border:1.5px solid var(--border);border-radius:9px;padding:9px 11px;cursor:pointer;background:#fafbfd;transition:.15s;}
+    .env-card:hover{border-color:#bfdbfe;}
+    .env-card.sel{border-color:transparent;box-shadow:0 0 0 2px var(--blue);background:#eef1fd;}
+    .env-card.sel .env-name{color:var(--blue);}
+    .env-name{font-size:13px;font-weight:700;margin-bottom:2px;}
+    .env-sub{font-size:9.5px;font-family:monospace;color:var(--muted);}
+    .btn-deploy{width:100%;padding:14px;border:none;border-radius:10px;background:var(--blue);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 3px 12px rgba(26,60,110,.3);transition:.15s;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px;}
+    .btn-deploy:hover:not(:disabled){background:#14305a;}
+    .btn-deploy:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
+    .steps{display:flex;flex-direction:column;gap:8px;}
+    .step{display:flex;align-items:flex-start;gap:13px;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;transition:.3s;}
+    .step.pending{color:var(--muted);}
+    .step.running{border-color:#bfdbfe;background:#eff6ff;color:var(--blue);}
+    .step.done{border-color:#86efac;background:#f0fdf4;color:#15803d;}
+    .step.error{border-color:#fca5a5;background:#fef2f2;color:#dc2626;}
+    .step-num{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid currentColor;transition:.3s;}
+    .step.done .step-num{background:#22c55e;border-color:#22c55e;color:#fff;font-size:15px;}
+    .step.error .step-num{background:#ef4444;border-color:#ef4444;color:#fff;font-size:15px;}
+    .step.running .step-num{background:var(--blue);border-color:var(--blue);color:#fff;}
+    .step-body{flex:1;min-width:0;}
+    .step-label{font-size:13.5px;font-weight:600;}
+    .step-detail{font-size:11px;font-family:monospace;margin-top:3px;opacity:.8;word-break:break-all;}
+    .spin{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:rot .6s linear infinite;flex-shrink:0;}
+    @keyframes rot{to{transform:rotate(360deg);}}
+    .result-box{text-align:center;padding:24px 16px;}
+    .result-icon{font-size:52px;margin-bottom:14px;}
+    .result-title{font-size:22px;font-weight:800;color:var(--blue);margin-bottom:6px;}
+    .result-sub{font-size:12px;color:var(--muted);font-family:monospace;margin-bottom:20px;}
+    .ep-box{background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:monospace;font-size:12.5px;text-align:left;line-height:2;margin-bottom:18px;}
+    .ep-lbl{display:block;font-size:9.5px;color:var(--muted);font-weight:700;letter-spacing:.5px;text-transform:uppercase;}
+    .ep-link{color:var(--blue);text-decoration:none;font-weight:600;}
+    .ep-link:hover{text-decoration:underline;}
+    .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:20px;}
+    .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:7px 16px;font-size:12px;font-weight:700;text-decoration:none;transition:.15s;}
+    .chip:hover{transform:translateY(-1px);}
+    .chip-green{background:#dcfce7;border:1px solid #86efac;color:#15803d;}
+    .chip-blue{background:#dbeafe;border:1px solid #93c5fd;color:#1d4ed8;}
+    .chip-orange{background:#ffedd5;border:1px solid #fdba74;color:#c2410c;}
+    .btn-reset{background:none;border:1.5px solid var(--border);border-radius:9px;padding:10px 22px;font-family:inherit;font-size:13px;font-weight:600;color:var(--sub);cursor:pointer;transition:.15s;}
+    .btn-reset:hover{border-color:var(--blue);color:var(--blue);}
+    .err-box{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;color:#dc2626;font-size:12px;font-family:monospace;margin-top:10px;display:none;}
+    footer{text-align:center;padding:20px;color:var(--muted);font-size:11px;border-top:1px solid var(--border);}
+    footer a{color:#888;text-decoration:none;}
   </style>
 </head>
 <body>
+
 <div id="topbar">
-  <div><div class="logo-text">V2 Retail · RFC Generator</div><div class="logo-sub">Upload spec → Live API in 90 seconds</div></div>
+  <div class="logo-wrap">
+    <div class="logo-icon">V2</div>
+    <div><div class="logo-text">V2 Retail &middot; RFC Generator</div><div class="logo-sub">Upload doc &rarr; Live API in ~2 min</div></div>
+  </div>
+  <div class="nav">
+    <a href="index.html">Hub</a>
+    <a href="rfc_explorer.html">RFC Explorer</a>
+    <a href="rfc-generator.html" class="active">&#9889; Generator</a>
+    <a href="http://192.168.151.46:8888/swagger/ui/index" target="_blank">Swagger</a>
+  </div>
   <span class="badge">AUTO CI/CD</span>
 </div>
-<div class="nav">
-  <a href="https://v2-rfc-pipeline.akash-bab.workers.dev/explore">RFC Explorer</a>
-  <a href="https://v2-rfc-pipeline.akash-bab.workers.dev/sap-fetch">SAP Fetch</a>
-  <a href="https://v2-rfc-pipeline.akash-bab.workers.dev/data-lake">Data Lake</a>
-  <a href="#" class="active">RFC Generator</a>
-</div>
+
 <div class="main">
-  <h1>RFC Auto-Deploy Generator</h1>
-  <p class="subtitle">Upload a SAP RFC specification (.docx) — Claude parses it, generates the C# controller, pushes to GitHub, deploys to IIS on .46, and registers the Data Lake endpoint. All automatically.</p>
+  <div class="hero">
+    <div class="hero-pill"><div class="hero-dot"></div>UPLOAD &middot; PARSE &middot; GENERATE &middot; DEPLOY &middot; DONE</div>
+    <h1>SAP RFC <em>&rarr; Live API</em></h1>
+    <p>upload rfc .docx &rarr; working REST API deployed on IIS in under 2 minutes</p>
+  </div>
+  <div class="flow">
+    <div class="fl">&#128196; Upload</div><div class="arr">&rarr;</div>
+    <div class="fl">&#129302; AI Parse</div><div class="arr">&rarr;</div>
+    <div class="fl">&#9881; C# Gen</div><div class="arr">&rarr;</div>
+    <div class="fl">&#128230; GitHub</div><div class="arr">&rarr;</div>
+    <div class="fl">&#128640; IIS Deploy</div><div class="arr">&rarr;</div>
+    <div class="fl">&#127760; Live API</div>
+  </div>
 
-  <div class="card">
-    <h2>📄 Upload RFC Specification</h2>
-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-      <div class="drop-icon">📎</div>
-      <div class="drop-text" id="dropText">Drop your RFC .docx file here, or click to browse</div>
-      <div class="drop-hint">Supports: .docx files · Max 10MB</div>
+  <!-- UPLOAD SECTION -->
+  <div id="upload-section">
+    <div class="card">
+      <div class="card-title">RFC Document</div>
+      <div class="drop" id="dropZone"
+           ondragover="event.preventDefault();this.classList.add('over')"
+           ondragleave="this.classList.remove('over')"
+           ondrop="handleDrop(event)">
+        <input type="file" id="fileInput" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])">
+        <div class="drop-icon" id="dropIcon">&#128196;</div>
+        <div class="drop-title" id="dropTitle">Drop your RFC document here</div>
+        <div class="drop-hint">.docx &middot; .txt &middot; .md &mdash; or <strong style="color:var(--blue);cursor:pointer" onclick="document.getElementById('fileInput').click()">browse files</strong></div>
+      </div>
+      <div class="file-info" id="fileInfo">
+        <span>&#128206;</span><span id="fileName"></span>
+        <span id="fileSize" style="color:var(--muted);font-size:11px;font-weight:400"></span>
+      </div>
+      <div class="err-box" id="errBox"></div>
     </div>
-    <input type="file" id="fileInput" accept=".docx"/>
-    <div style="margin-top:16px;">
-      <button class="btn" id="deployBtn" onclick="startDeploy()" disabled>🚀 Generate &amp; Deploy RFC</button>
+
+    <div class="card">
+      <div class="card-title">SAP Environment</div>
+      <div class="env-grid">
+        <div class="env-card sel" id="env-dev" onclick="selEnv('dev')">
+          <div class="env-name">Dev</div><div class="env-sub">192.168.144.174 &middot; 210</div>
+        </div>
+        <div class="env-card" id="env-quality" onclick="selEnv('quality')">
+          <div class="env-name">Quality</div><div class="env-sub">192.168.144.179 &middot; 600</div>
+        </div>
+        <div class="env-card" id="env-production" onclick="selEnv('production')">
+          <div class="env-name" style="color:#dc2626">Production</div><div class="env-sub">192.168.144.170 &middot; 600</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-deploy" id="deployBtn" onclick="startDeploy()" disabled>
+      &#9889; Generate &amp; Deploy RFC &rarr; IIS
+    </button>
+  </div>
+
+  <!-- PROGRESS SECTION -->
+  <div id="progress-section" style="display:none">
+    <div class="card">
+      <div class="card-title">Pipeline Progress</div>
+      <div class="steps">
+        <div class="step pending" id="s-parse">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-label">Parse RFC specification</div>
+            <div class="step-detail">Claude AI extracts RFC name, parameters &amp; table structure</div>
+          </div>
+        </div>
+        <div class="step pending" id="s-controller">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-label">Generate ASP.NET controller</div>
+            <div class="step-detail">Production-ready C# Web API code</div>
+          </div>
+        </div>
+        <div class="step pending" id="s-github">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-label">Push to GitHub</div>
+            <div class="step-detail">Controllers/{Module}/{RFC}Controller.cs</div>
+          </div>
+        </div>
+        <div class="step pending" id="s-deploy">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-label">Build &amp; Deploy to IIS (192.168.151.46)</div>
+            <div class="step-detail">NuGet restore &rarr; MSBuild &rarr; robocopy &rarr; IIS recycle</div>
+          </div>
+        </div>
+        <div class="step pending" id="s-dab">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-label">Register Data Lake endpoint</div>
+            <div class="step-detail">Update dab-config.json in GitHub</div>
+          </div>
+        </div>
+        <div class="step pending" id="s-swagger">
+          <div class="step-num">6</div>
+          <div class="step-body">
+            <div class="step-label">Update RFC Swagger docs</div>
+            <div class="step-detail">New endpoint card added to API explorer</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="card progress-tracker" id="progressCard">
-    <h2>⚙️ Deployment Progress</h2>
-    <div id="steps"></div>
-  </div>
-
-  <div class="card result-card" id="resultCard">
-    <div class="result-title" id="resultTitle"></div>
-    <div id="resultBody"></div>
-    <div class="links" id="resultLinks"></div>
-    <pre class="code-preview" id="codePreview" style="display:none"></pre>
+  <!-- RESULT SECTION -->
+  <div id="result-section" style="display:none">
+    <div class="card">
+      <div class="result-box">
+        <div class="result-icon">&#128640;</div>
+        <div class="result-title" id="resultTitle">RFC Deployed!</div>
+        <div class="result-sub" id="resultSub">Your RFC is now a live REST API</div>
+        <div class="ep-box" id="epBox"></div>
+        <div class="chips" id="chips"></div>
+        <button class="btn-reset" onclick="resetForm()">+ Deploy Another RFC</button>
+      </div>
+    </div>
   </div>
 </div>
+
+<footer>
+  V2 Retail &middot; RFC Pipeline &nbsp;|&nbsp;
+  <a href="http://192.168.151.46:8888/" target="_blank">API Server</a> &nbsp;&middot;&nbsp;
+  <a href="http://192.168.151.46:8888/swagger/ui/index" target="_blank">Swagger</a> &nbsp;&middot;&nbsp;
+  <a href="https://github.com/akash0631/rfc-api" target="_blank">GitHub</a>
+</footer>
 
 <script>
-const WORKER = 'https://v2-rfc-deploy.akash-bab.workers.dev';
+const WORKER='https://v2-rfc-deploy.akash-bab.workers.dev';
+let selectedFile=null,selectedEnv='dev',pollTimer=null;
 
-const STEP_DEFS = [
-  {id:'parse',   label:'Parse RFC specification',     detail:'Claude extracts RFC name, parameters, table structure'},
-  {id:'generate',label:'Generate C# controller',      detail:'Production-ready ASP.NET Web API code'},
-  {id:'push',    label:'Push to GitHub',               detail:'Controllers/{Module}/{RFC}Controller.cs'},
-  {id:'build',   label:'Build on VM-CRM (.46)',        detail:'NuGet restore → MSBuild Release → robocopy to IIS'},
-  {id:'dab',     label:'Register Data Lake endpoint',  detail:'Update dab-config.json + restart Azure DAB'},
-  {id:'explorer',label:'Update RFC Explorer',          detail:'New card added to v2_sap_api_explorer.html'},
-];
-
-let selectedFile = null;
-let jobId = null;
-let pollInterval = null;
-
-// Drag and drop
-const dz = document.getElementById('dropZone');
-dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
-dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
-dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
-document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
-
-function handleFile(file) {
-  if (!file || !file.name.endsWith('.docx')) { alert('Please upload a .docx file'); return; }
-  selectedFile = file;
-  dz.classList.add('has-file');
-  document.getElementById('dropText').innerHTML = '<div class="file-name">📄 ' + file.name + '</div><div style="color:#666;font-size:12px;margin-top:4px;">' + (file.size/1024).toFixed(0) + ' KB · Ready to deploy</div>';
-  document.getElementById('deployBtn').disabled = false;
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('over');
+  handleFile(e.dataTransfer.files[0]);
 }
-
-function renderSteps(statusMap) {
-  const html = STEP_DEFS.map(s => {
-    const st = statusMap[s.id] || 'pending';
-    const icon = st === 'done' ? '✓' : st === 'active' ? '⟳' : st === 'error' ? '✗' : '·';
-    const cls = st === 'pending' ? '' : st;
-    const detail = statusMap[s.id + '_detail'] || s.detail;
-    return `<div class="step">
-      <div class="step-icon ${cls}">${icon}</div>
-      <div class="step-body">
-        <div class="step-title">${s.label}</div>
-        <div class="step-detail">${detail}</div>
-      </div>
-    </div>`;
-  }).join('');
-  document.getElementById('steps').innerHTML = html;
+function handleFile(file){
+  if(!file)return;
+  if(!/\.(docx|txt|md)$/i.test(file.name)){showErr('Use .docx, .txt or .md');return;}
+  if(file.size>10*1024*1024){showErr('Max 10 MB');return;}
+  selectedFile=file;
+  document.getElementById('dropZone').classList.add('has-file');
+  document.getElementById('dropIcon').textContent='✅';
+  document.getElementById('dropTitle').textContent=file.name;
+  document.getElementById('fileInfo').style.display='flex';
+  document.getElementById('fileName').textContent=file.name;
+  document.getElementById('fileSize').textContent=(file.size/1024).toFixed(0)+' KB';
+  document.getElementById('deployBtn').disabled=false;
+  document.getElementById('errBox').style.display='none';
 }
-
-async function startDeploy() {
-  if (!selectedFile) return;
-  document.getElementById('deployBtn').disabled = true;
-  document.getElementById('progressCard').style.display = 'block';
-  document.getElementById('resultCard').style.display = 'none';
-
-  // Show initial steps
-  const init = {};
-  STEP_DEFS.forEach(s => init[s.id] = 'pending');
-  init['parse'] = 'active';
-  renderSteps(init);
-
-  // Read file as base64
-  const b64 = await new Promise(res => {
-    const fr = new FileReader();
-    fr.onload = () => res(fr.result.split(',')[1]);
-    fr.readAsDataURL(selectedFile);
-  });
-
-  // POST to /deploy
-  let resp;
-  try {
-    resp = await fetch(WORKER + '/deploy', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({filename: selectedFile.name, content: b64})
+function selEnv(env){
+  selectedEnv=env;
+  ['dev','quality','production'].forEach(e=>document.getElementById('env-'+e).classList.toggle('sel',e===env));
+}
+function showErr(msg){
+  var el=document.getElementById('errBox');el.textContent=msg;el.style.display='block';
+}
+function setStep(id,status,detail){
+  var el=document.getElementById('s-'+id);if(!el)return;
+  el.className='step '+status;
+  var n=el.querySelector('.step-num');
+  if(status==='done')      n.innerHTML='✓';
+  else if(status==='error')n.innerHTML='✗';
+  else if(status==='running')n.innerHTML='<span class="spin"></span>';
+  if(detail){var d=el.querySelector('.step-detail');if(d)d.textContent=detail;}
+}
+async function startDeploy(){
+  if(!selectedFile)return;
+  document.getElementById('errBox').style.display='none';
+  document.getElementById('deployBtn').disabled=true;
+  document.getElementById('upload-section').style.display='none';
+  document.getElementById('progress-section').style.display='block';
+  document.getElementById('result-section').style.display='none';
+  setStep('parse','running');
+  var fd=new FormData();fd.append('file',selectedFile);fd.append('env',selectedEnv);
+  var jobId;
+  try{
+    var resp=await fetch(WORKER+'/deploy',{method:'POST',body:fd});
+    var data=await resp.json();
+    if(!resp.ok)throw new Error(data.error||'Deploy failed');
+    jobId=data.jobId;
+  }catch(e){
+    document.getElementById('progress-section').style.display='none';
+    document.getElementById('upload-section').style.display='block';
+    document.getElementById('deployBtn').disabled=false;
+    showErr('Error: '+e.message);return;
+  }
+  pollTimer=setInterval(function(){poll(jobId);},2000);
+}
+async function poll(jobId){
+  try{
+    var resp=await fetch(WORKER+'/status/'+jobId);if(!resp.ok)return;
+    var job=await resp.json();
+    (job.steps||[]).forEach(function(s){
+      var st=s.status==='running'?'running':s.status==='done'?'done':s.status==='error'?'error':'pending';
+      setStep(s.step,st,s.detail||'');
     });
-  } catch(e) {
-    showError('Network error: ' + e.message);
-    return;
-  }
-
-  if (!resp.ok) {
-    const err = await resp.text();
-    showError('Deploy failed: ' + err.substring(0, 200));
-    return;
-  }
-
-  const data = await resp.json();
-  jobId = data.jobId;
-
-  // Start polling
-  pollInterval = setInterval(pollStatus, 1500);
-}
-
-async function pollStatus() {
-  if (!jobId) return;
-  try {
-    const resp = await fetch(WORKER + '/status/' + jobId);
-    if (!resp.ok) return;
-    const data = await resp.json();
-    renderSteps(data.steps || {});
-    if (data.status === 'done') {
-      clearInterval(pollInterval);
-      showResult(data);
-    } else if (data.status === 'error') {
-      clearInterval(pollInterval);
-      showError(data.error || 'Unknown error');
+    if(job.status==='complete'){clearInterval(pollTimer);showResult(job);}
+    else if(job.status==='error'){
+      clearInterval(pollTimer);
+      document.getElementById('progress-section').style.display='none';
+      document.getElementById('upload-section').style.display='block';
+      document.getElementById('deployBtn').disabled=false;
+      showErr('Pipeline error: '+(job.error||'unknown'));
     }
-  } catch(e) { /* continue polling */ }
+  }catch(_){}
 }
-
-function showResult(data) {
-  const card = document.getElementById('resultCard');
-  card.style.display = 'block';
-  card.className = 'card result-card';
-  document.getElementById('resultTitle').textContent = '✅ ' + data.rfcName + ' deployed successfully';
-  document.getElementById('resultBody').innerHTML = `
-    <p style="color:#555;font-size:14px;margin-top:4px;">Controller live on IIS · Data Lake endpoint registered · Explorer updated</p>
-    <p style="font-size:13px;margin-top:8px;color:#888;">Deploy time: ${data.elapsed || '~90'}s</p>`;
-
-  const links = document.getElementById('resultLinks');
-  links.innerHTML = '';
-  if (data.githubUrl) links.innerHTML += `<a class="link-btn" href="${data.githubUrl}" target="_blank">GitHub Commit</a>`;
-  if (data.dataLakeUrl) links.innerHTML += `<a class="link-btn green" href="${data.dataLakeUrl}" target="_blank">Data Lake API</a>`;
-  links.innerHTML += `<a class="link-btn orange" href="https://v2-rfc-pipeline.akash-bab.workers.dev/sap-fetch" target="_blank">Test in SAP Fetch</a>`;
-  links.innerHTML += `<a class="link-btn" href="https://v2-rfc-pipeline.akash-bab.workers.dev/explore" target="_blank">RFC Explorer</a>`;
-
-  if (data.controllerCode) {
-    const cp = document.getElementById('codePreview');
-    cp.style.display = 'block';
-    cp.textContent = data.controllerCode;
-  }
-
-  // Re-enable for next upload
-  document.getElementById('deployBtn').disabled = false;
+function showResult(job){
+  document.getElementById('progress-section').style.display='none';
+  document.getElementById('result-section').style.display='block';
+  document.getElementById('resultTitle').textContent=(job.rfcName||'RFC')+' Deployed!';
+  document.getElementById('resultSub').textContent='Live on IIS · Data Lake registered · Swagger updated';
+  var ep=document.getElementById('epBox');
+  ep.innerHTML='<span class="ep-lbl">RFC REST API (live on IIS)</span>'
+    +(job.rfcApi?'<a class="ep-link" href="'+job.rfcApi+'" target="_blank">POST '+job.rfcApi+'</a>':'')
+    +'<span class="ep-lbl" style="margin-top:8px">Data Lake REST API</span>'
+    +(job.dataLake?'<a class="ep-link" href="'+job.dataLake+'" target="_blank">'+job.dataLake+'</a>':'&mdash;');
+  var chips=document.getElementById('chips');chips.innerHTML='';
+  if(job.commit)   chips.innerHTML+='<a class="chip chip-green"  href="'+job.commit+'"   target="_blank">✓ GitHub commit</a>';
+  if(job.rfcApi)   chips.innerHTML+='<a class="chip chip-blue"   href="'+job.rfcApi+'"   target="_blank">&#127760; Live API</a>';
+  if(job.swagger)  chips.innerHTML+='<a class="chip chip-blue"   href="'+job.swagger+'"  target="_blank">&#128218; Swagger</a>';
+  if(job.dataLake) chips.innerHTML+='<a class="chip chip-orange" href="'+job.dataLake+'" target="_blank">&#128225; Data Lake</a>';
 }
-
-function showError(msg) {
-  const card = document.getElementById('resultCard');
-  card.style.display = 'block';
-  card.className = 'card result-card error';
-  document.getElementById('resultTitle').textContent = '❌ Deployment failed';
-  document.getElementById('resultBody').innerHTML = `<p style="color:var(--accent);font-size:14px;margin-top:4px;">${msg}</p>`;
-  document.getElementById('deployBtn').disabled = false;
+function resetForm(){
+  selectedFile=null;selectedEnv='dev';clearInterval(pollTimer);
+  document.getElementById('result-section').style.display='none';
+  document.getElementById('progress-section').style.display='none';
+  document.getElementById('upload-section').style.display='block';
+  document.getElementById('dropZone').className='drop';
+  document.getElementById('dropIcon').textContent='📄';
+  document.getElementById('dropTitle').textContent='Drop your RFC document here';
+  document.getElementById('fileInfo').style.display='none';
+  document.getElementById('fileInput').value='';
+  document.getElementById('errBox').style.display='none';
+  document.getElementById('deployBtn').disabled=true;
+  [['parse','1'],['controller','2'],['github','3'],['deploy','4'],['dab','5'],['swagger','6']].forEach(function(x){
+    var el=document.getElementById('s-'+x[0]);if(!el)return;
+    el.className='step pending';el.querySelector('.step-num').textContent=x[1];
+  });
+  selEnv('dev');
 }
 </script>
 </body>
