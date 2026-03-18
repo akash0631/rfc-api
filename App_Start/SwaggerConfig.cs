@@ -1,4 +1,5 @@
 using Swashbuckle.Application;
+using System.Linq;
 using System.Web.Http;
 
 /// <summary>
