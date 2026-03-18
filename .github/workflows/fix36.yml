@@ -5,32 +5,42 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Copy from Routemaster_RFC_V2SRM (live RFC app) to V2RfcApi
+      - name: Get Routemaster RFC path correctly and copy
         shell: cmd
         run: |
-          echo === Get Routemaster RFC physical path ===
-          C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"Routemaster_RFC_V2SRM"
+          echo === List all sites with physical paths ===
+          C:\Windows\System32\inetsrv\appcmd.exe list vdir
+          
+      - name: Enable custom errors off and get real error
+        shell: powershell
+        run: |
+          # Enable custom errors off to see real error
+          $cfg = Get-Content "C:\V2RfcApi\Web.config" -Raw
+          $cfg = $cfg -replace 'customErrors mode="On"', 'customErrors mode="Off"'
+          $cfg = $cfg -replace 'customErrors mode="RemoteOnly"', 'customErrors mode="Off"'
+          if ($cfg -notmatch 'customErrors') {
+            $cfg = $cfg -replace '</system.web>', '  <customErrors mode="Off"/></system.web>'
+          }
+          [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $cfg, [System.Text.Encoding]::UTF8)
+          Write-Host "customErrors set to Off"
 
-          for /f "tokens=*" %%a in ('C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"Routemaster_RFC_V2SRM" /text:physicalPath') do set RFCPATH=%%a
-          echo RFC path: %RFCPATH%
+          Import-Module WebAdministration -EA SilentlyContinue
+          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
+          Start-Sleep 12
 
-          echo === DLLs in Routemaster RFC bin ===
-          dir "%RFCPATH%\bin\Vendor*.dll" /B 2>nul
-          dir "%RFCPATH%\bin\*.dll" /B 2>nul | find /c ".dll"
-
-          echo === Copy everything to V2RfcApi ===
-          robocopy "%RFCPATH%" C:\V2RfcApi /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
-
-          echo === Update Web.config to point to SAP Dev ===
-          powershell -NoProfile -Command "$c=Get-Content 'C:\V2RfcApi\Web.config' -Raw; $c=$c -replace '192.168.144.170','192.168.144.174'; $c=$c -replace '<add key=""Client"" value=""600""','<add key=""Client"" value=""210""'; [System.IO.File]::WriteAllText('C:\V2RfcApi\Web.config',$c,[System.Text.Encoding]::UTF8); Write-Host Updated"
-          powershell -NoProfile -Command "Get-Content 'C:\V2RfcApi\Web.config' | Select-String 'AppServerHost|Client|User|SystemNumber' | Select -First 10"
-
-          echo === Recycle V2RfcApiPool ===
-          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
-          timeout /t 12 /nobreak
-
-          echo === Test localhost:9191 ===
-          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{$body=$_.Exception.Response;if($body -ne $null){$s=New-Object System.IO.StreamReader($body.GetResponseStream());Write-Host 'HEALTH_BODY:' $s.ReadToEnd()}else{Write-Host 'HEALTH_ERR:' $_.Exception.Message}}"
-
-          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode; Write-Host $r.Content}catch{$body=$_.Exception.Response;if($body -ne $null){$s=New-Object System.IO.StreamReader($body.GetResponseStream());Write-Host 'EXECUTE_BODY:' $s.ReadToEnd()}else{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}}"
+          # Now get the full error
+          try {
+            $r = Invoke-WebRequest "http://localhost:9191/" -UseBasicParsing -TimeoutSec 15
+            Write-Host "ROOT OK: $($r.StatusCode)"
+            Write-Host $r.Content.Substring(0,[Math]::Min(1000,$r.Content.Length))
+          } catch {
+            if ($_.Exception.Response) {
+              $stream = $_.Exception.Response.GetResponseStream()
+              $reader = New-Object System.IO.StreamReader($stream)
+              $body = $reader.ReadToEnd()
+              Write-Host "ERROR BODY (first 2000 chars):"
+              Write-Host $body.Substring(0,[Math]::Min(2000,$body.Length))
+            } else {
+              Write-Host "ERR: $($_.Exception.Message)"
+            }
+          }
