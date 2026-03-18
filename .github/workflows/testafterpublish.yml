@@ -7,47 +7,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Stub VS17 targets
-        shell: powershell
-        run: |
-          $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
-          if (-not (Test-Path $d)) { New-Item $d -ItemType Directory -Force | Out-Null }
-          $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/><Target Name="Package"/></Project>'
-          [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets", $xml, [System.Text.Encoding]::UTF8)
-          Write-Host "Stubbed"
-
-      - name: Build using VS on .36 (MSBuild with VS2022 path)
+      - name: Copy new controllers to local VS project and build
         shell: cmd
         run: |
-          echo === Try VS2022 MSBuild (has NuGet packages available) ===
-          set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
-          if not exist "%MSBUILD%" set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe
-          if not exist "%MSBUILD%" set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe
-          echo Using: %MSBUILD%
+          set VSPROJ=D:\V2 Projects\Vendor_SRM_Routing_Application
+          set REPO=C:\actions-runner\_work\rfc-api\rfc-api
 
-          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj ^
+          echo === Copy new controllers from GitHub repo to local VS project ===
+          robocopy "%REPO%\Controllers" "%VSPROJ%\Controllers" /E /IS /IT /NFL
+          echo ROBOCOPY: %ERRORLEVEL%
+
+          echo === Build using VS2022 MSBuild from LOCAL project (has all packages) ===
+          set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
+          "%MSBUILD%" "%VSPROJ%\Vendor_SRM_Routing_Application.csproj" ^
             /p:Configuration=Release /p:Platform=AnyCPU ^
-            /p:OutputPath=bin\Release\ ^
+            /p:OutputPath=C:\V2RfcApi\bin\ ^
             /p:VisualStudioVersion=17.0 ^
-            /p:ResolveNuGetPackages=true ^
             /nologo /verbosity:minimal
           echo BUILD: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 exit /b 1
 
-          if %ERRORLEVEL% EQU 0 (
-            echo BUILD SUCCEEDED
-            dir bin\Release\Vendor*.dll /B 2>nul
-            robocopy bin\Release C:\V2RfcApi\bin /E /IS /IT /NFL /NDL
-            copy /Y Web.config C:\V2RfcApi\Web.config
-            echo DEPLOYED
-          ) else (
-            echo BUILD FAILED - check errors above
-            exit /b 1
-          )
+          echo === Copy Web.config from local project ===
+          copy /Y "%VSPROJ%\Web.config" C:\V2RfcApi\Web.config
 
-      - name: Fix Client + test
+          echo === DLLs deployed ===
+          dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
+          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+
+      - name: Fix Client 210 + recycle + test
         shell: cmd
         run: |
-          powershell -NoProfile -Command "$lines=Get-Content 'C:\V2RfcApi\Web.config';$f=$false;$out=$lines|ForEach-Object{if(-not $f -and $_ -match 'key="Client"' -and $_ -notmatch '<!--' -and $_ -notmatch 'Validation'){$_=$_ -replace 'value="600"','value="210"';$f=$true;Write-Host 'FIXED:' $_.Trim()};$_};$out|Set-Content 'C:\V2RfcApi\Web.config' -Encoding UTF8"
+          powershell -NoProfile -Command "$lines=Get-Content 'C:\V2RfcApi\Web.config';$f=$false;$out=$lines|ForEach-Object{if(-not $f -and $_ -match 'key="Client"' -and $_ -notmatch '<!--' -and $_ -notmatch 'Validation'){$_=$_ -replace 'value="600"','value="210"';$f=$true;Write-Host 'FIXED:' $_.Trim()};$_};$out|Set-Content 'C:\V2RfcApi\Web.config' -Encoding UTF8;Write-Host Saved"
+          powershell -NoProfile -Command "Get-Content 'C:\V2RfcApi\Web.config' | Select-String 'AppServerHost|key.*Client' | Select -First 4"
           C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
           timeout /t 15 /nobreak
           powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 15;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{Write-Host 'HEALTH_ERR:' $_.Exception.Message}"
