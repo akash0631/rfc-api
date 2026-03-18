@@ -202,13 +202,17 @@ jobs:
         if: always()
         shell: powershell
         run: |
+          # Ensure native command errors don't abort this step
+          $ErrorActionPreference = 'Continue'
+
           # --- 1. Delete stale .old.dll files while Defender is still disabled ---
+          # ASP.NET loads ALL dlls from bin; mismatched .old.dll causes HTTP 500
           Get-ChildItem "C:\RfcApp\bin" -Filter "*.old.dll" -ErrorAction SilentlyContinue | ForEach-Object {
             & takeown /F $_.FullName /A 2>&1 | Out-Null
             & icacls $_.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
-            cmd /c "del /F /Q `"$($_.FullName)`"" 2>&1 | Out-Null
+            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
             if (-not (Test-Path $_.FullName)) { Write-Host "Deleted stale: $($_.Name)" }
-            else { Write-Host "WARN: $($_.Name) still present" }
+            else { Write-Host "WARN: $($_.Name) still present (will be ignored)" }
           }
 
           # --- 2. Re-enable Defender ---
