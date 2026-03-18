@@ -5,71 +5,25 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Fix Web.config SAP settings and test
-        shell: powershell
+      - name: Fix Web.config Client 600 to 210 and test
+        shell: cmd
         run: |
-          # Read and show current Web.config around SAP settings
-          $lines = Get-Content "C:\V2RfcApi\Web.config"
-          Write-Host "=== Current SAP config lines ==="
-          $lines | Select-String -Pattern "AppServerHost|Client|SystemNumber|User|Password|customErrors" | Select -First 15
+          echo === Current first Client line ===
+          findstr /n "Client" C:\V2RfcApi\Web.config | findstr /v "<!--" | head
 
-          # Fix using XML parsing — most reliable approach
-          [xml]$xml = Get-Content "C:\V2RfcApi\Web.config"
-          
-          $appSettings = $xml.configuration.appSettings.add
-          
-          foreach ($s in $appSettings) {
-            if ($s.key -eq "AppServerHost") { $s.value = "192.168.144.174"; Write-Host "Set AppServerHost: $($s.value)" }
-            if ($s.key -eq "Client")        { $s.value = "210";             Write-Host "Set Client: $($s.value)" }
-            if ($s.key -eq "SystemNumber")  { $s.value = "00";              Write-Host "Set SystemNumber: $($s.value)" }
-            if ($s.key -eq "User")          { $s.value = "POWERBI";         Write-Host "Set User: $($s.value)" }
-            if ($s.key -eq "Password")      { $s.value = "India@123456";    Write-Host "Set Password: ***" }
-          }
+          echo === Replace Client 600 to 210 (first occurrence only) and fix customErrors ===
+          powershell -NoProfile -Command "$content = [System.IO.File]::ReadAllText('C:\V2RfcApi\Web.config'); $replaced = $false; $lines = $content -split '
+'; $out = foreach ($line in $lines) { if (-not $replaced -and $line -match 'key="Client"' -and $line -notmatch '<!--') { $line = $line -replace 'value="600"','value="210"'; $replaced = $true; Write-Host 'FIXED:' $line.Trim() }; $line }; $fixed = $out -join '
+'; $fixed = $fixed -replace 'customErrors mode=Off','customErrors mode="Off"'; $fixed = $fixed -replace 'customErrors mode=On','customErrors mode="Off"'; $fixed = $fixed -replace 'customErrors mode=RemoteOnly','customErrors mode="Off"'; [System.IO.File]::WriteAllText('C:\V2RfcApi\Web.config', $fixed, [System.Text.Encoding]::UTF8); Write-Host 'Saved'"
 
-          # Enable custom errors off
-          $sysWeb = $xml.configuration."system.web"
-          if ($sysWeb.customErrors) {
-            $sysWeb.customErrors.mode = "Off"
-          } else {
-            $ce = $xml.CreateElement("customErrors")
-            $ce.SetAttribute("mode", "Off")
-            $sysWeb.AppendChild($ce) | Out-Null
-          }
+          echo === Verify ===
+          findstr "AppServerHost\|Client\|SystemNumber" C:\V2RfcApi\Web.config | findstr /v "<!--" | findstr /v "185\|174.*210\|174.*00"
 
-          $xml.Save("C:\V2RfcApi\Web.config")
-          Write-Host "Web.config saved"
+          echo === Recycle V2RfcApiPool ===
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          timeout /t 15 /nobreak
 
-          # Verify
-          Write-Host "=== Updated SAP config ==="
-          [xml]$verify = Get-Content "C:\V2RfcApi\Web.config"
-          $verify.configuration.appSettings.add | Where-Object {$_.key -in @("AppServerHost","Client","SystemNumber","User")} | ForEach-Object { Write-Host "$($_.key) = $($_.value)" }
+          echo === Test localhost:9191 ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{Write-Host 'HEALTH_ERR:' $_.Exception.Message}"
 
-          # Recycle pool
-          Import-Module WebAdministration -EA SilentlyContinue
-          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
-          Start-Sleep 15
-
-          # Test
-          Write-Host "=== Testing localhost:9191 ==="
-          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-
-          try {
-            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HEALTH: $($r.StatusCode) $($r.Content)"
-          } catch {
-            if ($_.Exception.Response) {
-              $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-              $body2 = $reader.ReadToEnd()
-              Write-Host "HEALTH 500 BODY:"
-              # Extract just the error message from HTML
-              if ($body2 -match "Server Error.*?<b>(.*?)</b>") { Write-Host $Matches[1] }
-              if ($body2 -match "Exception Details.*?<b>(.*?)</b>") { Write-Host $Matches[1] }
-              if ($body2 -match "System\.\w+Exception.*?(?=<br>)") { Write-Host $Matches[0] }
-            } else { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
-          }
-
-          try {
-            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "EXECUTE: $($r2.StatusCode)"
-            Write-Host $r2.Content
-          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
+          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode;Write-Host $r.Content}catch{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}"
