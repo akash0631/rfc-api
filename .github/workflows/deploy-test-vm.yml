@@ -202,47 +202,41 @@ jobs:
         if: always()
         shell: powershell
         run: |
+          # --- 1. Delete stale .old.dll files while Defender is still disabled ---
+          Get-ChildItem "C:\RfcApp\bin" -Filter "*.old.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+            & takeown /F $_.FullName /A 2>&1 | Out-Null
+            & icacls $_.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
+            cmd /c "del /F /Q `"$($_.FullName)`"" 2>&1 | Out-Null
+            if (-not (Test-Path $_.FullName)) { Write-Host "Deleted stale: $($_.Name)" }
+            else { Write-Host "WARN: $($_.Name) still present" }
+          }
+
+          # --- 2. Re-enable Defender ---
+          try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue; Write-Host "Defender re-enabled" } catch { }
+
+          # --- 3. Remove App_Offline.htm ---
+          if (Test-Path "C:\RfcApp\App_Offline.htm") { Remove-Item "C:\RfcApp\App_Offline.htm" -Force; Write-Host "Removed App_Offline.htm" }
+
+          # --- 4. Start W3SVC ---
+          Write-Host "Starting W3SVC..."
+          & net start W3SVC 2>&1 | Write-Host
+          Start-Sleep -Seconds 4
+
+          # --- 5. Start site & app pool (no Restart - pool is freshly started, Restart causes Access Denied) ---
           try {
-            # --- Clean up stale .old.dll FIRST while Defender is still disabled ---
-            # ASP.NET loads ALL dlls from bin; mismatched .old.dll causes HTTP 500 on startup
-            Get-ChildItem "C:\RfcApp\bin" -Filter "*.old.dll" -ErrorAction SilentlyContinue | ForEach-Object {
-              & takeown /F $_.FullName /A 2>&1 | Out-Null
-              & icacls $_.FullName /grant "Administrators:F" /C /Q 2>&1 | Out-Null
-              cmd /c "del /F /Q `"$($_.FullName)`"" 2>&1 | Out-Null
-              if (-not (Test-Path $_.FullName)) { Write-Host "Deleted stale: $($_.Name)" }
-              else { Write-Host "WARN: $($_.Name) still present" }
-            }
-            # Re-enable Defender real-time monitoring
-            try {
-              Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
-              Write-Host "Defender real-time monitoring re-enabled"
-            } catch { }
-            # Remove App_Offline.htm so the site comes back online
-            if (Test-Path "C:\RfcApp\App_Offline.htm") {
-              Remove-Item "C:\RfcApp\App_Offline.htm" -Force
-              Write-Host "Removed App_Offline.htm"
-            }
-            # Start W3SVC service (we stopped it fully in the Stop step)
-            Write-Host "Starting W3SVC service..."
-            & net start W3SVC 2>&1 | Write-Host
-            Start-Sleep -Seconds 3
-            
             Import-Module WebAdministration -ErrorAction Stop
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
               Start-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
               Start-Website $site.name -ErrorAction SilentlyContinue
-              Start-Sleep -Seconds 2
-              Restart-WebAppPool $site.applicationPool
-              Write-Host "Recycled: $($site.applicationPool) (site: $($site.name))"
+              Write-Host "Started pool + site: $($site.applicationPool) / $($site.name)"
             } else {
-              Write-Host "Site not found via WebAdmin, using appcmd fallback"
-              & "$env:windir\System32\inetsrv\appcmd.exe" start apppool /apppool.name:RfcApiPool
-              & "$env:windir\System32\inetsrv\appcmd.exe" start site /site.name:RfcApiApp
-              & "$env:windir\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:RfcApiPool
+              Write-Host "Site not found via WebAdmin - using appcmd"
+              & "$env:windir\System32\inetsrv\appcmd.exe" start apppool /apppool.name:RfcApiPool 2>&1 | Write-Host
+              & "$env:windir\System32\inetsrv\appcmd.exe" start site /site.name:RfcApiApp 2>&1 | Write-Host
             }
           } catch {
-            Write-Host "IIS recycle warning (non-fatal): $_"
+            Write-Host "IIS start warning (non-fatal): $_"
           }
 
       - name: Health check
