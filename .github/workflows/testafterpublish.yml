@@ -1,0 +1,40 @@
+name: TestAfterPublish
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: [self-hosted, Windows, X64, iis]
+    steps:
+      - name: Check published DLLs + fix Web.config + test
+        shell: powershell
+        run: |
+          Write-Host "=== DLLs in C:\V2RfcApi\bin ==="
+          $dlls = Get-ChildItem "C:\V2RfcApi\bin" -Filter "*.dll" -EA SilentlyContinue
+          Write-Host "Total DLLs: $($dlls.Count)"
+          $dlls | Where-Object {$_.Name -like "Vendor*"} | Select Name
+
+          Write-Host "=== Fix Web.config - SAP Dev ==="
+          $c = Get-Content "C:\V2RfcApi\Web.config" -Raw
+          $c = $c -replace '192.168.144.170','192.168.144.174'
+          [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $c, [System.Text.Encoding]::UTF8)
+          Get-Content "C:\V2RfcApi\Web.config" | Select-String "AppServerHost|Client|SystemNumber" | Select -First 5
+
+          Write-Host "=== Recycle V2RfcApiPool ONLY ==="
+          Import-Module WebAdministration -EA SilentlyContinue
+          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
+          Start-Sleep 15
+
+          Write-Host "=== TEST localhost:9191 ==="
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+
+          try {
+            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "HEALTH: $($r.StatusCode) $($r.Content)"
+          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+
+          try {
+            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "=== EXECUTE SUCCESS ==="
+            Write-Host "HTTP: $($r2.StatusCode)"
+            Write-Host $r2.Content
+          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
