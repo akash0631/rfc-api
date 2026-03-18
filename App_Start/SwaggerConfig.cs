@@ -27,6 +27,9 @@ public class SwaggerConfig
 
                 // Sort controllers alphabetically
                 c.OrderActionGroupsBy(new SwaggerGroupNameComparer());
+
+                // Resolve duplicate route conflicts (multiple actions on same path+method)
+                c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
             })
             .EnableSwaggerUi(ui =>
             {
