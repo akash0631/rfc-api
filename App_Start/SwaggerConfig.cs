@@ -29,6 +29,9 @@ public class SwaggerConfig
                 // Sort controllers alphabetically
                 c.OrderActionGroupsBy(new SwaggerGroupNameComparer());
 
+                // Use full type names as schema IDs to avoid duplicate class-name conflicts
+                c.UseFullTypeNameInSchemaIds();
+
                 // Resolve duplicate route conflicts (multiple actions on same path+method)
                 c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
             })
