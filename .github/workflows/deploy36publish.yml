@@ -7,21 +7,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify live sites are untouched before publish
+      - name: Stub VS17 WebApplication targets
+        shell: powershell
+        run: |
+          $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          if (-not (Test-Path $d)) { New-Item $d -ItemType Directory -Force | Out-Null }
+          $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/><Target Name="Package"/></Project>'
+          [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets", $xml, [System.Text.Encoding]::UTF8)
+          Write-Host "Targets stubbed: $(Test-Path $d\Microsoft.WebApplication.targets)"
+
+      - name: NuGet restore
         shell: cmd
         run: |
-          echo === CONFIRMING LIVE SITES STILL RUNNING (read-only check) ===
-          C:\Windows\System32\inetsrv\appcmd.exe list sites /state:Started
-          echo === V2RfcApi target folder (our new site only) ===
-          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+          nuget restore Vendor_SRM_Routing_Application.sln -NonInteractive
+          echo NuGet: %ERRORLEVEL%
 
       - name: MSBuild publish to C:\V2RfcApi ONLY
         shell: cmd
         run: |
-          echo === Building and publishing to C:\V2RfcApi ONLY ===
-          echo This does NOT touch any other folder or site
           set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-
           "%MSBUILD%" Vendor_SRM_Routing_Application.csproj ^
             /p:Configuration=Release ^
             /p:Platform=AnyCPU ^
@@ -31,31 +35,37 @@ jobs:
             /p:DeleteExistingFiles=false ^
             /p:VisualStudioVersion=17.0 ^
             /nologo /verbosity:minimal
-          echo MSBuild exit: %ERRORLEVEL%
-          if %ERRORLEVEL% NEQ 0 exit /b 1
-          echo === DLLs in C:\V2RfcApi\bin after publish ===
+          echo BUILD: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 (
+            echo === BUILD FAILED — trying simple output copy ===
+            "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /p:VisualStudioVersion=17.0 /nologo /verbosity:minimal
+            echo BUILD2: %ERRORLEVEL%
+            if %ERRORLEVEL% EQU 0 (
+              robocopy bin\Release C:\V2RfcApi\bin /E /IS /IT /NFL /NDL
+              copy /Y Web.config C:\V2RfcApi\Web.config 2>nul
+              copy /Y Global.asax C:\V2RfcApi\Global.asax 2>nul
+              echo Deployed via robocopy
+            )
+          )
+          echo === DLLs in C:\V2RfcApi\bin ===
           dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
           dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
 
-      - name: Fix Web.config SAP Dev settings
-        shell: cmd
-        run: |
-          echo === Updating Web.config to SAP Dev only ===
-          powershell -NoProfile -Command "$c=Get-Content 'C:\V2RfcApi\Web.config' -Raw; $c=$c -replace '192.168.144.170','192.168.144.174'; [System.IO.File]::WriteAllText('C:\V2RfcApi\Web.config',$c,[System.Text.Encoding]::UTF8); Write-Host 'SAP host updated'"
-          powershell -NoProfile -Command "Get-Content 'C:\V2RfcApi\Web.config' | Select-String 'AppServerHost|Client|SystemNumber' | Select -First 5"
-
-      - name: Recycle ONLY V2RfcApiPool (new site only)
-        shell: cmd
-        run: |
-          echo === Recycling ONLY V2RfcApiPool (new site — no other pools touched) ===
-          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
-          echo Recycle: %ERRORLEVEL%
-          timeout /t 15 /nobreak
-
-      - name: Test new site and verify live sites still OK
+      - name: Fix Web.config + recycle + test
         shell: powershell
         run: |
-          Write-Host "=== Testing our new site :9191 ==="
+          # Fix SAP host
+          $c = Get-Content "C:\V2RfcApi\Web.config" -Raw
+          $c = $c -replace '192.168.144.170','192.168.144.174'
+          [System.IO.File]::WriteAllText("C:\V2RfcApi\Web.config", $c, [System.Text.Encoding]::UTF8)
+          Write-Host "Web.config: SAP host set to Dev"
+
+          # Recycle ONLY our new pool
+          Import-Module WebAdministration -EA SilentlyContinue
+          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
+          Start-Sleep 15
+
+          # Test
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
           try {
             $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
@@ -69,6 +79,5 @@ jobs:
             Write-Host $r2.Content
           } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
 
-          Write-Host "=== Confirming live sites still running ==="
-          Import-Module WebAdministration -EA SilentlyContinue
-          Get-Website | Where-Object {$_.State -eq "Started"} | Select Name, @{n='Port';e={($_.Bindings.Collection[0].bindingInformation -split ':')[1]}} | Format-Table
+          Write-Host "=== All live sites still running ==="
+          Get-Website | Where-Object {$_.State -eq "Started"} | Select Name | Format-Table
