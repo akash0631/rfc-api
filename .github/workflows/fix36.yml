@@ -5,11 +5,32 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Get exact 500 error from event log
+      - name: Copy from Routemaster_RFC_V2SRM (live RFC app) to V2RfcApi
         shell: cmd
         run: |
-          echo === Last 3 Application Errors ===
-          powershell -NoProfile -Command "Get-EventLog -LogName Application -EntryType Error -Newest 3 | ForEach-Object { Write-Host '---'; Write-Host $_.TimeGenerated; Write-Host $_.Source; Write-Host $_.Message }"
+          echo === Get Routemaster RFC physical path ===
+          C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"Routemaster_RFC_V2SRM"
 
-          echo === Try hitting root to get ASP.NET error detail ===
-          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/' -UseBasicParsing -TimeoutSec 10;Write-Host $r.Content}catch{$body=$_.Exception.Response;if($body){$s=New-Object System.IO.StreamReader($body.GetResponseStream());Write-Host $s.ReadToEnd()}else{Write-Host $_.Exception.Message}}"
+          for /f "tokens=*" %%a in ('C:\Windows\System32\inetsrv\appcmd.exe list vdir /site.name:"Routemaster_RFC_V2SRM" /text:physicalPath') do set RFCPATH=%%a
+          echo RFC path: %RFCPATH%
+
+          echo === DLLs in Routemaster RFC bin ===
+          dir "%RFCPATH%\bin\Vendor*.dll" /B 2>nul
+          dir "%RFCPATH%\bin\*.dll" /B 2>nul | find /c ".dll"
+
+          echo === Copy everything to V2RfcApi ===
+          robocopy "%RFCPATH%" C:\V2RfcApi /E /IS /IT /NFL /NDL
+          echo ROBOCOPY: %ERRORLEVEL%
+
+          echo === Update Web.config to point to SAP Dev ===
+          powershell -NoProfile -Command "$c=Get-Content 'C:\V2RfcApi\Web.config' -Raw; $c=$c -replace '192.168.144.170','192.168.144.174'; $c=$c -replace '<add key=""Client"" value=""600""','<add key=""Client"" value=""210""'; [System.IO.File]::WriteAllText('C:\V2RfcApi\Web.config',$c,[System.Text.Encoding]::UTF8); Write-Host Updated"
+          powershell -NoProfile -Command "Get-Content 'C:\V2RfcApi\Web.config' | Select-String 'AppServerHost|Client|User|SystemNumber' | Select -First 10"
+
+          echo === Recycle V2RfcApiPool ===
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          timeout /t 12 /nobreak
+
+          echo === Test localhost:9191 ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{$body=$_.Exception.Response;if($body -ne $null){$s=New-Object System.IO.StreamReader($body.GetResponseStream());Write-Host 'HEALTH_BODY:' $s.ReadToEnd()}else{Write-Host 'HEALTH_ERR:' $_.Exception.Message}}"
+
+          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode; Write-Host $r.Content}catch{$body=$_.Exception.Response;if($body -ne $null){$s=New-Object System.IO.StreamReader($body.GetResponseStream());Write-Host 'EXECUTE_BODY:' $s.ReadToEnd()}else{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}}"
