@@ -1,0 +1,74 @@
+name: Deploy36Publish
+on:
+  workflow_dispatch:
+jobs:
+  publish:
+    runs-on: [self-hosted, Windows, X64, iis]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify live sites are untouched before publish
+        shell: cmd
+        run: |
+          echo === CONFIRMING LIVE SITES STILL RUNNING (read-only check) ===
+          C:\Windows\System32\inetsrv\appcmd.exe list sites /state:Started
+          echo === V2RfcApi target folder (our new site only) ===
+          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+
+      - name: MSBuild publish to C:\V2RfcApi ONLY
+        shell: cmd
+        run: |
+          echo === Building and publishing to C:\V2RfcApi ONLY ===
+          echo This does NOT touch any other folder or site
+          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj ^
+            /p:Configuration=Release ^
+            /p:Platform=AnyCPU ^
+            /p:DeployOnBuild=true ^
+            /p:PublishMethod=FileSystem ^
+            /p:PublishUrl=C:\V2RfcApi ^
+            /p:DeleteExistingFiles=false ^
+            /p:VisualStudioVersion=17.0 ^
+            /nologo /verbosity:minimal
+          echo MSBuild exit: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 exit /b 1
+          echo === DLLs in C:\V2RfcApi\bin after publish ===
+          dir C:\V2RfcApi\bin\Vendor*.dll /B 2>nul
+          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
+
+      - name: Fix Web.config SAP Dev settings
+        shell: cmd
+        run: |
+          echo === Updating Web.config to SAP Dev only ===
+          powershell -NoProfile -Command "$c=Get-Content 'C:\V2RfcApi\Web.config' -Raw; $c=$c -replace '192.168.144.170','192.168.144.174'; [System.IO.File]::WriteAllText('C:\V2RfcApi\Web.config',$c,[System.Text.Encoding]::UTF8); Write-Host 'SAP host updated'"
+          powershell -NoProfile -Command "Get-Content 'C:\V2RfcApi\Web.config' | Select-String 'AppServerHost|Client|SystemNumber' | Select -First 5"
+
+      - name: Recycle ONLY V2RfcApiPool (new site only)
+        shell: cmd
+        run: |
+          echo === Recycling ONLY V2RfcApiPool (new site — no other pools touched) ===
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          echo Recycle: %ERRORLEVEL%
+          timeout /t 15 /nobreak
+
+      - name: Test new site and verify live sites still OK
+        shell: powershell
+        run: |
+          Write-Host "=== Testing our new site :9191 ==="
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "HEALTH: $($r.StatusCode) $($r.Content)"
+          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+
+          try {
+            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "=== EXECUTE SUCCESS ==="
+            Write-Host "HTTP: $($r2.StatusCode)"
+            Write-Host $r2.Content
+          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
+
+          Write-Host "=== Confirming live sites still running ==="
+          Import-Module WebAdministration -EA SilentlyContinue
+          Get-Website | Where-Object {$_.State -eq "Started"} | Select Name, @{n='Port';e={($_.Bindings.Collection[0].bindingInformation -split ':')[1]}} | Format-Table
