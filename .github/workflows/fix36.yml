@@ -5,97 +5,35 @@ jobs:
   fix:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Copy from FMS_PUTWAY to V2RfcApi and test
-        shell: powershell
+      - name: Robocopy FMS_PUTWAY to V2RfcApi + fix Web.config + test
+        shell: cmd
         run: |
-          $src = "D:\V2 Published\FMS_PUTWAY"
-          $dst = "C:\V2RfcApi"
+          echo === Copy from FMS_PUTWAY ===
+          robocopy "D:\V2 Published\FMS_PUTWAY" C:\V2RfcApi /E /IS /IT /NFL /NDL /XD ".git" "logs" "App_Data"
+          echo ROBOCOPY: %ERRORLEVEL%
 
-          Write-Host "=== Source DLLs ==="
-          (Get-ChildItem "$src\bin" -Filter "*.dll").Count
-          Get-ChildItem "$src\bin" -Filter "Vendor_SRM*.dll" | Select Name
+          echo === DLL count ===
+          dir C:\V2RfcApi\bin\Vendor_SRM*.dll /B 2>nul
+          dir C:\V2RfcApi\bin\*.dll /B 2>nul | find /c ".dll"
 
-          Write-Host "=== Copying app files ==="
-          $exclude = @(".git","logs","App_Data")
-          Get-ChildItem $src -Recurse | Where-Object {
-            $rel = $_.FullName.Replace($src,"")
-            -not ($exclude | Where-Object { $rel -like "*\$_*" })
-          } | ForEach-Object {
-            $target = $dst + $_.FullName.Replace($src,"")
-            if ($_.PSIsContainer) {
-              if (-not (Test-Path $target)) { New-Item $target -ItemType Directory -Force | Out-Null }
-            } else {
-              $targetDir = Split-Path $target
-              if (-not (Test-Path $targetDir)) { New-Item $targetDir -ItemType Directory -Force | Out-Null }
-              Copy-Item $_.FullName $target -Force
-            }
-          }
+          echo === Fix Web.config ===
+          powershell -NoProfile -Command "$c=Get-Content 'C:\V2RfcApi\Web.config' -Raw; $c=$c.Replace('192.168.144.170','192.168.144.174').Replace('value="600"','value="210"'); if($c -notmatch 'customErrors'){$c=$c.Replace('</system.web>','<customErrors mode="Off"/></system.web>')}else{$c=$c.Replace('customErrors mode="On"','customErrors mode="Off"').Replace('customErrors mode="RemoteOnly"','customErrors mode="Off"')}; [System.IO.File]::WriteAllText('C:\V2RfcApi\Web.config',$c,[System.Text.Encoding]::UTF8); Write-Host Updated"
 
-          Write-Host "=== DLLs in V2RfcApi after copy ==="
-          (Get-ChildItem "$dst\bin" -Filter "*.dll").Count
-          Get-ChildItem "$dst\bin" -Filter "Vendor_SRM*.dll" | Select Name
+          powershell -NoProfile -Command "Get-Content 'C:\V2RfcApi\Web.config' | Select-String 'AppServerHost|Client|SystemNumber|customErrors' | Select -First 8"
 
-          Write-Host "=== Update Web.config: SAP Dev + customErrors Off ==="
-          $cfg = Get-Content "$dst\Web.config" -Raw
-          $cfg = $cfg -replace '192\.168\.144\.170', '192.168.144.174'
-          $cfg = $cfg -replace 'value="600"', 'value="210"'
-          if ($cfg -notmatch 'customErrors') {
-            $cfg = $cfg -replace '</system.web>', "  <customErrors mode=`"Off`"/>`n  </system.web>"
-          } else {
-            $cfg = $cfg -replace 'customErrors mode="On"', 'customErrors mode="Off"'
-            $cfg = $cfg -replace 'customErrors mode="RemoteOnly"', 'customErrors mode="Off"'
-          }
-          [System.IO.File]::WriteAllText("$dst\Web.config", $cfg, [System.Text.Encoding]::UTF8)
-          Write-Host "Web.config updated"
-          Get-Content "$dst\Web.config" | Select-String "AppServerHost|Client|SystemNumber|customErrors" | Select -First 8
+          echo === Ensure site on 9191 ===
+          C:\Windows\System32\inetsrv\appcmd.exe list apppool /apppool.name:V2RfcApiPool 2>nul || C:\Windows\System32\inetsrv\appcmd.exe add apppool /name:V2RfcApiPool /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated
+          C:\Windows\System32\inetsrv\appcmd.exe list site /site.name:V2RfcApi 2>nul || C:\Windows\System32\inetsrv\appcmd.exe add site /name:V2RfcApi /bindings:http/*:9191: /physicalPath:C:\V2RfcApi
+          C:\Windows\System32\inetsrv\appcmd.exe set site /site.name:V2RfcApi /[path='/'].applicationPool:V2RfcApiPool 2>nul
+          C:\Windows\System32\inetsrv\appcmd.exe start site /site.name:V2RfcApi 2>nul
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          timeout /t 15 /nobreak
 
-          Write-Host "=== Ensure app pool and site are set up correctly ==="
-          Import-Module WebAdministration -EA SilentlyContinue
-          
-          if (-not (Test-Path "IIS:\AppPools\V2RfcApiPool")) {
-            New-WebAppPool "V2RfcApiPool"
-            Set-ItemProperty "IIS:\AppPools\V2RfcApiPool" managedRuntimeVersion "v4.0"
-            Write-Host "Pool created"
-          }
-          
-          if (-not (Get-Website "V2RfcApi" -EA SilentlyContinue)) {
-            New-Website -Name "V2RfcApi" -Port 9191 -PhysicalPath $dst -ApplicationPool "V2RfcApiPool"
-            Write-Host "Site created"
-          } else {
-            Set-ItemProperty "IIS:\Sites\V2RfcApi" physicalPath $dst
-            Write-Host "Site physical path updated"
-          }
+          echo === Port 9191 ===
+          netstat -ano | findstr ":9191"
 
-          Restart-WebAppPool "V2RfcApiPool" -EA SilentlyContinue
-          Start-Sleep 15
+          echo === Health test ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH_OK:' $r.StatusCode $r.Content}catch{if($_.Exception.Response){$s=New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream());Write-Host 'HEALTH_BODY:' $s.ReadToEnd().Substring(0,2000)}else{Write-Host 'HEALTH_ERR:' $_.Exception.Message}}"
 
-          Write-Host "=== Pool state ==="
-          (Get-ItemProperty "IIS:\AppPools\V2RfcApiPool").state
-          Write-Host "=== Port 9191 listening ==="
-          netstat -ano | Select-String ":9191"
-
-          Write-Host "=== TEST HEALTH ==="
-          try {
-            $r = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HEALTH OK: HTTP $($r.StatusCode) $($r.Content)"
-          } catch {
-            if ($_.Exception.Response) {
-              $s = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-              $body = $s.ReadToEnd()
-              Write-Host "HEALTH 500 BODY: $($body.Substring(0,[Math]::Min(2000,$body.Length)))"
-            } else { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
-          }
-
-          Write-Host "=== TEST EXECUTE ==="
-          $b = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          try {
-            $r2 = Invoke-WebRequest "http://localhost:9191/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "EXECUTE OK: HTTP $($r2.StatusCode)"
-            Write-Host $r2.Content
-          } catch {
-            if ($_.Exception.Response) {
-              $s = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-              $body = $s.ReadToEnd()
-              Write-Host "EXECUTE 500 BODY: $($body.Substring(0,[Math]::Min(2000,$body.Length)))"
-            } else { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
-          }
+          echo === Execute test ===
+          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE_OK:' $r.StatusCode;Write-Host $r.Content}catch{if($_.Exception.Response){$s=New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream());Write-Host 'EXECUTE_BODY:' $s.ReadToEnd().Substring(0,2000)}else{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}}"
