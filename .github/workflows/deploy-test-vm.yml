@@ -213,6 +213,11 @@ jobs:
               Remove-Item "C:\RfcApp\App_Offline.htm" -Force
               Write-Host "Removed App_Offline.htm"
             }
+            # Remove any leftover .old.dll files from bin (ASP.NET loads ALL dlls; mismatched versions = 500)
+            Get-ChildItem "C:\RfcApp\bin" -Filter "*.old.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+              Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+              Write-Host "Removed stale: $($_.Name)"
+            }
             # Start W3SVC service (we stopped it fully in the Stop step)
             Write-Host "Starting W3SVC service..."
             & net start W3SVC 2>&1 | Write-Host
