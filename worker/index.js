@@ -38,21 +38,30 @@ using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;`;
 // Reads ZIP entries to find word/document.xml and strips XML tags
 async function extractDocxText(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
-  const entries = await parseZip(bytes);
+  const entries = await parseZipAll(bytes);
+  let text = '';
   const docXml = entries['word/document.xml'];
-  if (!docXml) throw new Error('Not a valid .docx file (word/document.xml not found)');
-  const xml = new TextDecoder().decode(docXml);
-  // Strip XML tags, normalise whitespace
-  return xml
-    .replace(/<w:p[ >]/g, '\n<w:p ')
-    .replace(/<\/w:p>/g, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\n +/g, '\n')
-    .trim();
+  if (docXml) {
+    const xml = new TextDecoder().decode(docXml);
+    text = xml
+      .replace(/<w:p[ >]/g, '\n<w:p ')
+      .replace(/<\/w:p>/g, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\n +/g, '\n')
+      .trim();
+  }
+  const images = [];
+  for (const [name, data] of Object.entries(entries)) {
+    if (name.startsWith('word/media/') && (name.endsWith('.png')||name.endsWith('.jpg')||name.endsWith('.jpeg'))) {
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+      images.push({ b64, mime: name.endsWith('.png')?'image/png':'image/jpeg' });
+    }
+  }
+  return { text, images };
 }
 
-async function parseZip(bytes) {
+async function parseZipAll(bytes) {
   const entries = {};
   // Find End of Central Directory
   let eocd = -1;
@@ -74,8 +83,8 @@ async function parseZip(bytes) {
     const localOffset= read32(bytes, pos+42);
     const name = new TextDecoder().decode(bytes.slice(pos+46, pos+46+nameLen));
     pos += 46 + nameLen + extraLen + commentLen;
-    // Only care about document.xml
-    if (name === 'word/document.xml') {
+    // Extract document.xml AND media images
+    if (name === 'word/document.xml' || name.startsWith('word/media/')) {
       // Read local file header
       const lhExtraLen = read16(bytes, localOffset+28);
       const lhNameLen  = read16(bytes, localOffset+26);
@@ -145,9 +154,29 @@ async function claude(prompt, apiKey, maxTokens=2500) {
 }
 
 // ─── Parse RFC spec from text ─────────────────────────────────────────────────
-async function parseRfc(text, apiKey, filename='') {
+async function parseRfc(text, apiKey, filename='', images=[]) {
   const filenameHint = filename ? `\nHint: The filename is "${filename}" — use this to infer the RFC name if not explicit in the document.` : '';
-  const raw = await claude(`You are parsing a SAP RFC specification document for V2 Retail.
+  // Build message content — use images if text is short (image-based SAP docx)
+  let msgContent;
+  if (images && images.length > 0 && text.length < 200) {
+    msgContent = [
+      ...images.map(img => ({type:'image',source:{type:'base64',media_type:img.mime,data:img.b64}})),
+      {type:'text',text:`You are parsing SAP Function Builder screenshots for V2 Retail.
+Extract the RFC specification from these images and return ONLY valid JSON:
+{
+  "rfcName": "RFC function name visible in the screenshots e.g. ZPO_DD_UPD_RFC",
+  "description": "one-line description of what this RFC does",
+  "category": "one of: Finance,GateEntry,Vendor,HUCreation,FabricPutway,HRMS,NSO,PaperlessPicklist,Sampling,VehicleLoading",
+  "importParams": [{"name":"PARAM_NAME","sapType":"SAP_TYPE","description":"what it is"}],
+  "outputType": "table OR return_only",
+  "outputTableName": "TABLE param name or null",
+  "outputFields": [{"fieldName":"FIELD","sapType":"TYPE","length":"LENGTH"}],
+  "suggestedSqlTable": "ET_RFCNAME"
+}
+${filenameHint}`}
+    ];
+  } else {
+    msgContent = `You are parsing a SAP RFC specification document for V2 Retail.
 Extract the following and return ONLY valid JSON (no markdown, no explanation):
 {
   "rfcName": "RFC function name e.g. ZADVANCE_PAYMENT_RFC",
@@ -160,7 +189,18 @@ Extract the following and return ONLY valid JSON (no markdown, no explanation):
   "suggestedSqlTable": "ET_RFCNAME (ET_ prefix, no _RFC suffix)"
 }
 RFC Document:
-${text.slice(0,5000)}${filenameHint}`, apiKey, 800);
+\${text.slice(0,5000)}\${filenameHint}`;
+  }
+  
+  const r2 = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,
+      messages:[{role:'user',content:msgContent}]})
+  });
+  const d2 = await r2.json();
+  if (!r2.ok) throw new Error(d2.error?.message||'Claude API error');
+  const raw = d2.content?.find(b=>b.type==='text')?.text||'';
   return JSON.parse(raw.replace(/```json\n?/g,'').replace(/```/g,'').trim());
 }
 
@@ -269,7 +309,7 @@ async function updateSwagger(spec, sapEnv, token) {
 }
 
 // ─── Full pipeline ────────────────────────────────────────────────────────────
-async function runPipeline(text, sapEnv, jobId, env, filename='') {
+async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
   const apiKey   = env.ANTHROPIC_API_KEY;
   const ghToken  = env.GITHUB_TOKEN;
   const kv       = env.RFC_JOBS;
@@ -290,7 +330,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='') {
     // Step 1: Parse
     await log('parse','running','Extracting RFC spec with Claude AI...');
     let spec;
-    try { spec = await parseRfc(text, apiKey, filename); }
+    try { spec = await parseRfc(text, apiKey, filename, images); }
     catch(e) { await log('parse','error',e.message); return; }
     await log('parse','done',`${spec.rfcName} · ${spec.category}`);
 
@@ -1318,11 +1358,14 @@ export default {
 
       // Extract text from file
       let text = '';
+      let docxImages = [];
       try {
         const ab = await file.arrayBuffer();
         const fname = file.name.toLowerCase();
         if (fname.endsWith('.docx')) {
-          text = await extractDocxText(ab);
+          const extracted = await extractDocxText(ab);
+          text = extracted.text || '';
+          docxImages = extracted.images || [];
         } else {
           text = new TextDecoder().decode(ab);
         }
@@ -1330,10 +1373,14 @@ export default {
         return new Response(JSON.stringify({error:'Failed to read file: '+e.message}),
           {status:400, headers:{'Content-Type':'application/json'}});
       }
+      if (text.length < 50 && docxImages.length === 0) {
+        return new Response(JSON.stringify({error:'Empty docx — no text or images found'}),
+          {status:400, headers:{'Content-Type':'application/json'}});
+      }
 
       // Run pipeline in background (non-blocking)
       // Use ctx.waitUntil so the Worker stays alive for the full pipeline
-      ctx.waitUntil(runPipeline(text, sapEnv, jobId, env, file.name||''));
+      ctx.waitUntil(runPipeline(text, sapEnv, jobId, env, file.name||'', docxImages));
 
       return new Response(JSON.stringify({jobId, status:'running'}),
         {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
