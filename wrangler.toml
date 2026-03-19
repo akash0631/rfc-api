@@ -1,0 +1,22 @@
+name = "v2-rfc-pipeline"
+main = "worker/index.js"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[kv_namespaces]]
+binding = "RFC_JOBS"
+id = "f31b07a159dc4c3bbc2c06dc2c9fdafc"
+
+[vars]
+GITHUB_REPO = "akash0631/rfc-api"
+GITHUB_BRANCH = "master"
+DAB_APP_URL = "https://my-dab-app.azurewebsites.net"
+CF_PAGES_URL = "https://v2-rfc-portal.pages.dev"
+
+# Secrets (set via: wrangler secret put ANTHROPIC_API_KEY)
+# ANTHROPIC_API_KEY   ← set as secret
+# GITHUB_TOKEN        ← set as secret
+
+# Data Lake CRON — runs daily at 02:00 IST (20:30 UTC)
+[triggers]
+crons = ["30 20 * * *"]

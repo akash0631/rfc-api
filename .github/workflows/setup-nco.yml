@@ -1,0 +1,46 @@
+name: Setup .46 Parallel System
+on:
+  workflow_dispatch:
+jobs:
+  setup:
+    runs-on: [self-hosted, test-vm]
+    timeout-minutes: 15
+    steps:
+      - name: Check IIS site paths and .36 access
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          
+          Write-Host "=== .46 IIS Site physical paths ==="
+          Import-Module WebAdministration -ErrorAction SilentlyContinue
+          Get-Website | Select-Object Name, PhysicalPath, State, @{N="Bindings";E={$_.Bindings.Collection.bindingInformation}} | Format-Table -AutoSize
+          
+          Write-Host "=== Store Tracker bin folder ==="
+          $stPath = (Get-Website "Store Tracker" -ErrorAction SilentlyContinue).PhysicalPath
+          if ($stPath) {
+            Write-Host "Store Tracker path: $stPath"
+            Get-ChildItem "$stPath\bin" -ErrorAction SilentlyContinue | Select-Object Name, Length | Format-Table
+          } else {
+            Write-Host "Site not found via WebAdmin module, trying appcmd..."
+            C:\Windows\System32\inetsrv\appcmd.exe list app /site.name:"Store Tracker"
+            C:\Windows\System32\inetsrv\appcmd.exe list vdir /app.name:"Store Tracker/"
+          }
+          
+          Write-Host "=== Try .36 file share ==="
+          $pass = ConvertTo-SecureString "vrl@55555" -AsPlainText -Force
+          $cred = New-Object PSCredential("V2DC-ADDVERB\Administrator", $pass)
+          try {
+            net use "\\192.168.151.36\C$" "vrl@55555" /user:"V2DC-ADDVERB\Administrator" 2>$null
+            Write-Host "NET USE result: $LASTEXITCODE"
+            
+            Write-Host "=== .36 NCo DLLs ==="
+            Get-ChildItem "\\192.168.151.36\C$\Windows\System32\sapnco*.dll" -ErrorAction SilentlyContinue | Select Name, Length
+            Get-ChildItem "\\192.168.151.36\C$\Windows\assembly\GAC_64\sapnco*" -ErrorAction SilentlyContinue | Select Name
+            
+            Write-Host "=== .36 Store Tracker bin (first 20 files) ==="
+            Get-ChildItem "\\192.168.151.36\C$\inetpub\wwwroot\Store Tracker\bin" -ErrorAction SilentlyContinue | Select-Object Name, Length | Select-Object -First 20 | Format-Table
+            
+            net use "\\192.168.151.36\C$" /delete /y 2>$null
+          } catch {
+            Write-Host "Cannot access .36: $_"
+          }

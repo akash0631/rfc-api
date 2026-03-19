@@ -1,0 +1,53 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/download/v0.10.23/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "Server=192.168.151.46,1433;Database=claudetestv2;User Id=sa;Password=vrl@55555;TrustServerCertificate=true;Encrypt=false;Connection Timeout=30;"
+  },
+  "runtime": {
+    "rest": {
+      "enabled": true,
+      "path": "/api",
+      "request-body-strict": true
+    },
+    "graphql": {
+      "enabled": false
+    },
+    "host": {
+      "mode": "development",
+      "cors": {
+        "origins": [
+          "*"
+        ],
+        "allow-credentials": false
+      }
+    }
+  },
+  "entities": {
+    "ET_ZADVANCE_PAYMENT": {
+      "source": {
+        "object": "dbo.ET_ZADVANCE_PAYMENT",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true
+      },
+      "graphql": {
+        "enabled": false
+      }
+    }
+  }
+}

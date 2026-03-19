@@ -1,0 +1,43 @@
+name: Deploy RFC Worker to Cloudflare
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    name: Deploy v2-rfc-pipeline Worker
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Deploy Worker
+        run: wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
+
+      - name: Set ANTHROPIC_API_KEY secret
+        run: echo "$ANTHROPIC_SECRET" | wrangler secret put ANTHROPIC_API_KEY
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
+          ANTHROPIC_SECRET: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Set GITHUB_TOKEN secret
+        run: echo "$GH_SECRET" | wrangler secret put GITHUB_TOKEN
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
+          GH_SECRET: ${{ secrets.PIPELINE_GITHUB_TOKEN }}

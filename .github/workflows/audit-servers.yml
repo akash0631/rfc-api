@@ -1,0 +1,62 @@
+name: Audit both servers for parallel setup
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Audit .46 (this machine)
+        shell: cmd
+        run: |
+          echo === .46 IIS SITES ===
+          C:\Windows\System32\inetsrv\appcmd.exe list site
+          echo === .46 IIS APP POOLS ===
+          C:\Windows\System32\inetsrv\appcmd.exe list apppool
+          echo === .46 .NET Frameworks ===
+          dir "C:\Windows\Microsoft.NET\Framework64" /B
+          echo === .46 SAP NCo check ===
+          dir "C:\Windows\assembly\GAC_64\sapnco" 2>nul || echo NO_NCo_GAC
+          dir "C:\Program Files\SAP\SAP_DotNetConnector*" 2>nul || echo NO_NCo_ProgramFiles
+          dir "C:\Windows\System32\sapnco*.dll" 2>nul || echo NO_NCo_System32
+          echo === .46 inetpub wwwroot ===
+          dir "C:\inetpub\wwwroot" /B
+          echo === .46 RFC Collector service ===
+          sc query RfcCollector
+          echo === AUDIT COMPLETE ===
+
+      - name: Check .36 IIS remotely (read-only)
+        shell: powershell
+        run: |
+          Write-Host "=== Checking .36 IIS remotely ==="
+          # Try to list .36 IIS sites via WMI/WinRM
+          try {
+            $session = New-PSSession -ComputerName "192.168.151.36" -Credential (New-Object PSCredential("V2DC-ADDVERB\Administrator", (ConvertTo-SecureString "vrl@55555" -AsPlainText -Force))) -ErrorAction Stop
+            $sites = Invoke-Command -Session $session -ScriptBlock {
+              C:\Windows\System32\inetsrv\appcmd.exe list site
+              echo "---"
+              dir "C:\Windows\assembly\GAC_64\sapnco" 2>$null
+              echo "---"
+              dir "C:\inetpub\wwwroot\Store Tracker\bin\sapnco*.dll" 2>$null
+              dir "C:\inetpub\wwwroot\Store Tracker\bin" 2>$null | Select-Object -First 20
+            }
+            Write-Host $sites
+            Remove-PSSession $session
+          } catch {
+            Write-Host ".36 WinRM not available: $_"
+            # Try HTTP probe instead
+            try {
+              $r = Invoke-WebRequest -Uri "http://192.168.151.36/swagger" -UseBasicParsing -TimeoutSec 8
+              Write-Host ".36 swagger HTTP $($r.StatusCode) len=$($r.Content.Length)"
+            } catch {
+              Write-Host ".36 swagger: $_"
+            }
+            try {
+              $body = "{`"I_COMPANY_CODE`":`"1000`",`"I_POSTING_DATE_LOW`":`"20260301`",`"I_POSTING_DATE_HIGH`":`"20260315`"}"
+              $r = Invoke-WebRequest -Uri "http://192.168.151.36/api/ZADVANCE_PAYMENT_RFC" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+              Write-Host ".36 RFC response: HTTP $($r.StatusCode)"
+              Write-Host $r.Content.Substring(0, [Math]::Min(300, $r.Content.Length))
+            } catch {
+              Write-Host ".36 RFC: $_"
+            }
+          }

@@ -1,0 +1,95 @@
+name: Build on GH Windows + Deploy to .46
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Controllers/**'
+      - 'Models/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v1
+
+      - name: NuGet restore
+        run: nuget restore Vendor_SRM_Routing_Application.sln
+
+      - name: MSBuild Release
+        run: |
+          $msbuild = &"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
+          if (-not $msbuild) { $msbuild = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe" }
+          Write-Host "MSBuild: $msbuild"
+          & $msbuild Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal
+          Write-Host "Build exit: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $dlls = (Get-ChildItem bin\Release -Filter "*.dll").Count
+          Write-Host "DLLs built: $dlls"
+          Get-ChildItem bin\Release -Filter "Vendor*.dll" | Select Name
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfc-app-release
+          path: |
+            bin/Release/
+            Web.config
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rfc-app-release
+          path: C:\deploy-staging
+
+      - name: Deploy to Store Tracker IIS
+        shell: powershell
+        run: |
+          Write-Host "=== Staged files ==="
+          (Get-ChildItem "C:\deploy-staging" -Recurse -Filter "*.dll").Count
+          Get-ChildItem "C:\deploy-staging" -Filter "Vendor*.dll" | Select Name
+
+          # Deploy to Store Tracker
+          $dst = "C:\inetpub\wwwroot\Store Tracker"
+          if (-not (Test-Path $dst)) { New-Item -ItemType Directory $dst -Force }
+          Copy-Item "C:\deploy-staging\*" $dst -Recurse -Force
+          Write-Host "Deployed DLLs: $((Get-ChildItem "$dst\bin" -Filter '*.dll' -EA SilentlyContinue).Count)"
+          Write-Host "Web.config: $(Test-Path "$dst\Web.config")"
+
+          # Recycle app pool and restart RFC Collector
+          Import-Module WebAdministration
+          Restart-WebAppPool "StoreTracker" -ErrorAction SilentlyContinue
+          Restart-WebAppPool "DefaultAppPool" -ErrorAction SilentlyContinue
+          Start-Sleep 8
+          Get-Website | Select Name, State | Format-Table
+
+          # Ensure RFC Collector points to :80
+          $cfg = Get-Content "C:\RfcCollector\appsettings.json" | ConvertFrom-Json
+          $cfg.IIS_HOST = "127.0.0.1"; $cfg.IIS_PORT = "80"
+          $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
+          Restart-Service RfcCollector -Force
+          Start-Sleep 12
+          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
+
+      - name: Smoke test
+        shell: powershell
+        run: |
+          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            Write-Host "IIS :80 → HTTP $($r.StatusCode) | $($r.Content.Substring(0,[Math]::Min(300,$r.Content.Length)))"
+          } catch { Write-Host "IIS :80 → $($_.Exception.Message)" }
+
+          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":3}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "FETCH → HTTP $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(600,$r.Content.Length)))
+          } catch { Write-Host "FETCH → $($_.Exception.Message)" }

@@ -1,0 +1,48 @@
+name: IIS Route Probe
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Probe all known IIS routes on :80 and :8888
+        shell: powershell
+        run: |
+          $body80  = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          $routes = @(
+            @{port=80;  path="/api/ZAdvancePaymentRfc/Execute"},
+            @{port=80;  path="/api/ZADVANCE_PAYMENT_RFC"},
+            @{port=80;  path="/swagger"},
+            @{port=80;  path="/"},
+            @{port=8888;path="/api/ZAdvancePaymentRfc/Execute"},
+            @{port=8888;path="/api/ZAdvancePaymentRfc/Health"},
+            @{port=8888;path="/swagger"},
+            @{port=8888;path="/"}
+          )
+          foreach ($route in $routes) {
+            $url = "http://localhost:$($route.port)$($route.path)"
+            try {
+              if ($route.path -like "*Execute*") {
+                $r = Invoke-WebRequest $url -Method POST -Body $body80 -ContentType "application/json" -UseBasicParsing -TimeoutSec 8
+              } else {
+                $r = Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 8
+              }
+              Write-Host "✅ $url → HTTP $($r.StatusCode) | $($r.Content.Substring(0,[Math]::Min(100,$r.Content.Length)))"
+            } catch {
+              $code = $_.Exception.Response.StatusCode.value__
+              Write-Host "❌ $url → $code | $($_.Exception.Message.Substring(0,[Math]::Min(80,$_.Exception.Message.Length)))"
+            }
+          }
+
+      - name: Check RFC Collector source code route mapping
+        shell: powershell
+        run: |
+          # Show what URL the RFC Collector actually builds for ZADVANCE_PAYMENT_RFC
+          $appSettings = Get-Content "C:\RfcCollector\appsettings.json" | ConvertFrom-Json
+          Write-Host "IIS_HOST: $($appSettings.IIS_HOST)"
+          Write-Host "IIS_PORT: $($appSettings.IIS_PORT)"
+          Write-Host "RFC Collector will call: http://$($appSettings.IIS_HOST):$($appSettings.IIS_PORT)/api/ZadvancepaymentRfc/Execute"
+          Write-Host "(ZADVANCE_PAYMENT_RFC → parts=[Z,ADVANCE,PAYMENT,RFC] → pascal=ZadvancepaymentRfc → route=/api/ZadvancepaymentRfc/Execute)"
+          Write-Host ""
+          Write-Host "But the actual controller route is: /api/ZAdvancePaymentRfc/Execute"
+          Write-Host "These don't match — the Pascal conversion is wrong"

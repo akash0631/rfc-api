@@ -1,0 +1,42 @@
+name: Deploy Swagger + Update DAB Config
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'v2_sap_api_explorer.html'
+      - 'dab-config.json'
+  workflow_dispatch:
+
+jobs:
+  deploy-swagger:
+    runs-on: ubuntu-latest
+    name: Deploy Swagger UI to Azure Static Web Apps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: "/"
+          output_location: ""
+          skip_app_build: true
+
+  restart-dab:
+    runs-on: ubuntu-latest
+    name: Restart DAB App Service
+    # Runs independently - does NOT wait for swagger deploy
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Restart my-dab-app to reload dab-config.json
+        run: |
+          az webapp restart \
+            --name my-dab-app \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}
+          echo "DAB restarted - new entities will be live in ~30s"

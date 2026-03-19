@@ -1,0 +1,21 @@
+name: Deploy36
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: [self-hosted, Windows, X64, iis]
+    steps:
+      - name: Fix Web.config and test V2RfcApi
+        shell: cmd
+        run: |
+          echo === Fix Client 600 to 210 in Web.config ===
+          powershell -NoProfile -Command "$c=[System.IO.File]::ReadAllText('C:\\V2RfcApi\\Web.config'); $done=$false; $out=($c -split '\n' | ForEach-Object { if(-not $done -and $_ -match 'key=.Client.' -and $_ -notmatch '<!--'){$_=$_ -replace 'value=.600.','value=""210""';$done=$true;Write-Host 'FIXED:' $_.Trim()}; $_ }) -join '\n'; [System.IO.File]::WriteAllText('C:\\V2RfcApi\\Web.config',$out,[System.Text.Encoding]::UTF8);Write-Host 'Done'"
+          echo === Verify Client value ===
+          findstr "Client" C:\V2RfcApi\Web.config
+          echo === Recycle pool ===
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcApiPool
+          timeout /t 15 /nobreak
+          echo === HEALTH TEST ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{Write-Host 'HEALTH_ERR:' $_.Exception.Message}"
+          echo === EXECUTE TEST ===
+          powershell -NoProfile -Command "$b='{""I_COMPANY_CODE"":""1100"",""I_POSTING_DATE_LOW"":""20260301"",""I_POSTING_DATE_HIGH"":""20260317""}';try{$r=Invoke-WebRequest 'http://localhost:9191/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode;Write-Host $r.Content}catch{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}"

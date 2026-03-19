@@ -1,0 +1,85 @@
+name: Deploy RFC Collector to .46
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install .NET 8 SDK
+        shell: powershell
+        run: |
+          if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+            Write-Host "Downloading .NET 8 SDK installer..."
+            Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile "$env:TEMP\dotnet-install.ps1" -UseBasicParsing
+            & "$env:TEMP\dotnet-install.ps1" -Version "8.0.404" -InstallDir "C:\dotnet8"
+            $env:PATH = "C:\dotnet8;" + $env:PATH
+            [System.Environment]::SetEnvironmentVariable("PATH", "C:\dotnet8;" + [System.Environment]::GetEnvironmentVariable("PATH","Machine"), "Machine")
+            Write-Host "Installed: $(C:\dotnet8\dotnet.exe --version)"
+          } else {
+            Write-Host "dotnet already available: $(dotnet --version)"
+          }
+
+      - name: Build and publish
+        shell: powershell
+        run: |
+          $env:PATH = "C:\dotnet8;" + $env:PATH
+          $dotnetExe = if (Get-Command dotnet -ErrorAction SilentlyContinue) { "dotnet" } else { "C:\dotnet8\dotnet.exe" }
+          if (-not (Test-Path "C:\RfcCollector")) { New-Item -ItemType Directory -Path "C:\RfcCollector" | Out-Null }
+          & $dotnetExe publish rfc-collector\RfcCollector\RfcCollector.csproj -c Release -r win-x64 --self-contained true -o C:\RfcCollector
+          Write-Host "Exit code: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "Build complete. Files: $((Get-ChildItem C:\RfcCollector).Count)"
+
+      - name: Stop old instance
+        shell: powershell
+        run: |
+          Stop-Process -Name RfcCollector -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 3
+          Write-Host "Old process stopped (or was not running)"
+
+      - name: Start RFC Collector on port 9090
+        shell: powershell
+        run: |
+          $startScript = "@echo off`nset IIS_HOST=192.168.151.36`nset IIS_PORT=80`nset SQL_SERVER=192.168.151.46`nset SQL_USER=sa`nset SQL_PASS=vrl@55555`nset SQL_DB=claudetestv2`nset ASPNETCORE_URLS=http://0.0.0.0:9090`nC:\RfcCollector\RfcCollector.exe >> C:\RfcCollector\rfc-collector.log 2>&1"
+          $startScript | Out-File "C:\RfcCollector\start.bat" -Encoding ASCII
+          Start-Process -FilePath "cmd.exe" -ArgumentList "/c C:\RfcCollector\start.bat" -WindowStyle Hidden
+          Write-Host "Process started, waiting 10s for startup..."
+          Start-Sleep -Seconds 10
+
+      - name: Health check
+        shell: powershell
+        run: |
+          $ok = $false
+          for ($i = 0; $i -lt 5; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri "http://localhost:9090/" -UseBasicParsing -TimeoutSec 5
+              Write-Host "HEALTHY - HTTP $($r.StatusCode)"
+              Write-Host $r.Content
+              $ok = $true
+              break
+            } catch {
+              Write-Host "Attempt $($i+1): not ready yet..."
+              Start-Sleep -Seconds 3
+            }
+          }
+          if (-not $ok) {
+            Write-Host "App did not start. Log tail:"
+            if (Test-Path "C:\RfcCollector\rfc.log") { Get-Content "C:\RfcCollector\rfc.log" -Tail 30 }
+            exit 1
+          }
+
+      - name: Done
+        shell: cmd
+        run: |
+          echo ============================================
+          echo RFC Collector LIVE on VM-CRM (.46)
+          echo Health:  http://192.168.151.46:9090/
+          echo Swagger: http://192.168.151.46:9090/swagger
+          echo Fetch:   POST http://192.168.151.46:9090/fetch
+          echo Tables:  GET  http://192.168.151.46:9090/tables
+          echo DB:      claudetestv2 @ 192.168.151.46
+          echo ============================================

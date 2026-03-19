@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V2 Retail · RFC API Explorer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
+  --text:#e6edf3;--muted:#8b949e;--dim:#484f58;
+  --green:#3fb950;--green-bg:rgba(63,185,80,.12);
+  --blue:#58a6ff;--blue-bg:rgba(88,166,255,.1);
+  --orange:#f0883e;--orange-bg:rgba(240,136,62,.1);
+  --purple:#bc8cff;--purple-bg:rgba(188,140,255,.1);
+  --red:#f85149;
+  --font:'DM Mono',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;}
+
+/* TOP BAR */
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.logo-text{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;letter-spacing:-.3px;}
+.logo-text span{color:var(--blue);}
+.logo-badge{font-family:var(--font);font-size:10px;background:var(--blue-bg);border:1px solid rgba(88,166,255,.3);color:var(--blue);padding:2px 8px;border-radius:4px;}
+.topbar-right{display:flex;align-items:center;gap:16px;}
+.stat-pill{font-family:var(--font);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;}
+.stat-pill strong{color:var(--text);}
+
+/* LAYOUT */
+.layout{display:flex;flex:1;min-height:0;}
+
+/* SIDEBAR */
+.sidebar{width:260px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:16px 0;}
+.sidebar::-webkit-scrollbar{width:4px;}
+.sidebar::-webkit-scrollbar-track{background:transparent;}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.search-wrap{padding:0 12px 12px;}
+.search{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px 7px 32px;color:var(--text);font-size:12px;font-family:var(--font);outline:none;position:relative;}
+.search-icon{position:absolute;left:22px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;}
+.search-wrap{position:relative;}
+.search:focus{border-color:var(--blue);background:var(--bg);}
+.search::placeholder{color:var(--dim);}
+
+.group-header{padding:6px 16px 4px;font-family:var(--font);font-size:9px;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
+.group-header:hover{color:var(--muted);}
+.group-header .count{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:0 6px;font-size:9px;color:var(--dim);}
+.group-endpoints{overflow:hidden;}
+.ep-item{padding:6px 16px 6px 24px;font-size:12px;font-family:var(--font);color:var(--muted);cursor:pointer;border-left:2px solid transparent;transition:.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px;}
+.ep-item:hover{color:var(--text);background:var(--surface2);}
+.ep-item.active{color:var(--blue);border-left-color:var(--blue);background:var(--blue-bg);}
+.ep-item .method-dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0;}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;padding:32px;}
+.main::-webkit-scrollbar{width:6px;}
+.main::-webkit-scrollbar-track{background:transparent;}
+.main::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* WELCOME STATE */
+.welcome{max-width:640px;margin:80px auto;text-align:center;}
+.welcome-icon{font-size:48px;margin-bottom:20px;opacity:.6;}
+.welcome h2{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;margin-bottom:8px;}
+.welcome p{color:var(--muted);font-size:14px;line-height:1.7;}
+.welcome-stats{display:flex;gap:20px;justify-content:center;margin-top:32px;flex-wrap:wrap;}
+.wstat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 24px;text-align:center;}
+.wstat .num{font-family:var(--font);font-size:28px;font-weight:500;color:var(--blue);display:block;}
+.wstat .lbl{font-size:11px;color:var(--muted);margin-top:4px;}
+
+/* ENDPOINT DETAIL */
+.ep-header{margin-bottom:24px;}
+.ep-title{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
+.method-badge{font-family:var(--font);font-size:11px;font-weight:500;background:var(--green-bg);color:var(--green);border:1px solid rgba(63,185,80,.3);padding:3px 10px;border-radius:4px;}
+.ep-name{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;word-break:break-all;}
+.ep-rfc{font-family:var(--font);font-size:12px;color:var(--muted);margin-bottom:4px;}
+.ep-rfc span{color:var(--purple);}
+.ep-route{font-family:var(--font);font-size:13px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--orange);display:inline-flex;align-items:center;gap:8px;margin-top:8px;}
+.ep-route .base{color:var(--muted);}
+
+.section{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;overflow:hidden;}
+.section-header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--surface2);}
+.section-title{font-family:var(--font);font-size:10px;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px;}
+.section-count{background:var(--surface);border:1px solid var(--border);color:var(--dim);font-size:10px;padding:1px 7px;border-radius:10px;}
+.section-body{padding:0;}
+
+/* PARAM TABLE */
+.param-table{width:100%;border-collapse:collapse;}
+.param-table th{padding:8px 16px;font-family:var(--font);font-size:10px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--dim);text-align:left;border-bottom:1px solid var(--border);}
+.param-table td{padding:9px 16px;font-family:var(--font);font-size:12px;border-bottom:1px solid rgba(48,54,61,.5);vertical-align:middle;}
+.param-table tr:last-child td{border-bottom:none;}
+.param-table tr:hover td{background:var(--surface2);}
+.param-name{color:var(--blue);}
+.param-type{color:var(--muted);}
+.param-in{display:inline-flex;align-items:center;padding:1px 7px;border-radius:3px;font-size:10px;background:var(--green-bg);color:var(--green);border:1px solid rgba(63,185,80,.2);}
+
+/* TABLE LIST */
+.table-list{padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;}
+.table-chip{font-family:var(--font);font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--orange);padding:4px 10px;border-radius:4px;}
+
+/* COLUMN MANAGER */
+.col-mgr{padding:16px;}
+.col-mgr-form{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;}
+.col-mgr-form label{font-family:var(--font);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:5px;}
+.col-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;font-family:var(--font);outline:none;}
+.col-input:focus{border-color:var(--blue);}
+.col-input::placeholder{color:var(--dim);}
+.col-select{appearance:none;cursor:pointer;}
+.add-btn{background:var(--green);color:#000;border:none;border-radius:6px;padding:9px 16px;font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;}
+.add-btn:hover{background:#2ea043;}
+.remove-btn{background:var(--red);color:#fff;border:none;border-radius:6px;padding:9px 16px;font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;}
+.remove-btn:hover{background:#da3633;}
+.col-ops-list{margin-top:12px;display:flex;flex-direction:column;gap:6px;}
+.col-op-item{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-family:var(--font);font-size:12px;}
+.col-op-add{color:var(--green);}
+.col-op-remove{color:var(--red);}
+.col-op-del{margin-left:auto;background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:0 4px;}
+.col-op-del:hover{color:var(--red);}
+.apply-btn{width:100%;margin-top:12px;background:var(--blue);color:#fff;border:none;border-radius:6px;padding:10px;font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+.apply-btn:hover{background:#388bfd;}
+.apply-btn:disabled{opacity:.4;cursor:not-allowed;}
+.col-result{margin-top:10px;padding:10px 12px;border-radius:6px;font-family:var(--font);font-size:12px;display:none;}
+.col-result.ok{background:var(--green-bg);border:1px solid rgba(63,185,80,.3);color:var(--green);}
+.col-result.err{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:var(--red);}
+
+/* SOURCE LINK */
+.source-link{margin-top:6px;display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:11px;color:var(--dim);text-decoration:none;}
+.source-link:hover{color:var(--blue);}
+
+/* EMPTY */
+.empty{padding:40px;text-align:center;color:var(--dim);font-family:var(--font);font-size:12px;}
+
+/* NO PARAMS */
+.no-params{padding:16px;font-family:var(--font);font-size:12px;color:var(--dim);}
+
+@media(max-width:768px){
+  .sidebar{width:200px;}
+  .col-mgr-form{grid-template-columns:1fr 1fr;grid-template-rows:auto auto;}
+  .col-mgr-form .add-btn,.col-mgr-form .remove-btn{grid-column:span 2;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <div class="logo-text">V2 Retail <span>·</span> RFC Explorer</div>
+    <div class="logo-badge">IIS → SAP</div>
+  </div>
+  <div class="topbar-right">
+    <div class="stat-pill"><strong id="total-count">–</strong> endpoints</div>
+    <div class="stat-pill"><strong id="group-count">–</strong> modules</div>
+    <div class="stat-pill" style="color:var(--green)">● LIVE</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input class="search" id="searchInput" type="text" placeholder="Search RFCs..." oninput="filterEndpoints()">
+    </div>
+    <div id="sidebarGroups"></div>
+  </div>
+
+  <!-- MAIN PANEL -->
+  <div class="main" id="mainPanel">
+    <div class="welcome" id="welcomeState">
+      <div class="welcome-icon">⬡</div>
+      <h2>RFC API Explorer</h2>
+      <p>All SAP RFC endpoints defined in your IIS codebase.<br>Select any RFC from the sidebar to inspect parameters, response tables, and manage data lake columns.</p>
+      <div class="welcome-stats">
+        <div class="wstat"><span class="num" id="ws-total">–</span><div class="lbl">Total RFCs</div></div>
+        <div class="wstat"><span class="num" id="ws-groups">–</span><div class="lbl">Modules</div></div>
+        <div class="wstat"><span class="num" id="ws-params">–</span><div class="lbl">Total Parameters</div></div>
+        <div class="wstat"><span class="num" id="ws-tables">–</span><div class="lbl">SAP Tables</div></div>
+      </div>
+    </div>
+    <div id="endpointDetail" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const ENDPOINTS = [{"id":"articleotb","name":"Article_OTB","folder":"BroaderMenu","group":"Broader Menu","rfc":"ZPLC_PO_RFC","route":"api/Article_OTB","method":"POST","params":[{"name":"IM_MATNR_FROM","in":"body","type":"string"},{"name":"articleno","in":"body","type":"string"},{"name":"Material_Group","in":"body","type":"string"},{"name":"Segment","in":"body","type":"string"},{"name":"Division","in":"body","type":"string"},{"name":"Sub_Division","in":"body","type":"string"},{"name":"Major_Category","in":"body","type":"string"},{"name":"Major_Category_Status","in":"body","type":"string"},{"name":"Sub_Category_Description","in":"body","type":"string"},{"name":"MC_Description","in":"body","type":"string"},{"name":"Season","in":"body","type":"string"},{"name":"MVGR","in":"body","type":"string"},{"name":"MVGR_Value","in":"body","type":"string"},{"name":"PO_RAISING_MONTH","in":"body","type":"string"},{"name":"max_opt_in_maj_cat","in":"body","type":"string"},{"name":"AUTO_CONT","in":"body","type":"string"},{"name":"BGT_CONT","in":"body","type":"string"},{"name":"Year","in":"body","type":"string"},{"name":"BGT_OPT_CNT","in":"body","type":"string"},{"name":"BGT_PO_QTY","in":"body","type":"string"},{"name":"BGT_PO_VALUE","in":"body","type":"string"},{"name":"MVGR_COUNT","in":"body","type":"string"},{"name":"MVGR_OPT_COUNT","in":"body","type":"string"},{"name":"TAG_QTY","in":"body","type":"string"},{"name":"PO_QTY","in":"body","type":"string"},{"name":"PO_VAL","in":"body","type":"string"},{"name":"OPT_BAL","in":"body","type":"string"},{"name":"QTY_OTB","in":"body","type":"string"},{"name":"VAL_OTB","in":"body","type":"string"},{"name":"TAG_VAL","in":"body","type":"string"}],"tables":["TT_DATA","EX_RETURN"],"path":"Controllers/BroaderMenu/Article_OTBController.cs"},{"id":"zdcroutingsubrfc","name":"ZDC_ROUTING_SUB_RFC","folder":"DcRouting","group":"DC Routing","rfc":"ZDC_ROUTING_SUB_RFC","route":"api/ZDC_ROUTING_SUB_RFC","method":"POST","params":[{"name":"IM_DC_ROUTING","in":"body","type":"string"},{"name":"IM_GATE_ENTRY","in":"body","type":"string"},{"name":"IM_EBELN","in":"body","type":"string"},{"name":"BGT_START_DATE","in":"body","type":"string"},{"name":"BGT_END_DATE","in":"body","type":"string"},{"name":"ACT_START_DATE","in":"body","type":"string"},{"name":"ACT_END_DATE","in":"body","type":"string"},{"name":"START_TM","in":"body","type":"string"},{"name":"END_TIME","in":"body","type":"string"},{"name":"PREPARED_BY","in":"body","type":"string"},{"name":"REMARKS","in":"body","type":"string"},{"name":"BOX_TOTAL","in":"body","type":"string"},{"name":"TTL_STAGING_QTY","in":"body","type":"string"},{"name":"ACT_VAL","in":"body","type":"string"},{"name":"STAG_SEC","in":"body","type":"string"},{"name":"BIN_COUNT","in":"body","type":"string"},{"name":"ZRFS_QTY","in":"body","type":"string"},{"name":"PLTNO","in":"body","type":"string"},{"name":"CRT_NO","in":"body","type":"string"},{"name":"QC_DONE_QTY","in":"body","type":"string"},{"name":"QC_FAILED_QTY","in":"body","type":"string"},{"name":"LOT_STATUS","in":"body","type":"string"},{"name":"PHY_SAP_PO","in":"body","type":"string"},{"name":"PROCESS_TODO","in":"body","type":"string"},{"name":"COLOUR","in":"body","type":"string"},{"name":"BARCODE_STAT","in":"body","type":"string"},{"name":"ZSIZE","in":"body","type":"string"},{"name":"FABRIC_DTL","in":"body","type":"string"},{"name":"QC_BY","in":"body","type":"string"},{"name":"LOT_ATR","in":"body","type":"string"},{"name":"APPROVED_BY","in":"body","type":"string"},{"name":"PROC_ST_NO","in":"body","type":"string"},{"name":"IS_LOCK_NO","in":"body","type":"string"},{"name":"IS_LOG_DATE","in":"body","type":"string"},{"name":"IS_LOG_TM","in":"body","type":"string"},{"name":"IS_DONE_DT","in":"body","type":"string"},{"name":"IS_DONE_TM","in":"body","type":"string"},{"name":"BARCD_STAT","in":"body","type":"string"},{"name":"PACK_SIZE_QTY","in":"body","type":"string"},{"name":"SCANNER_NAME","in":"body","type":"string"},{"name":"AC_QTY_OLD","in":"body","type":"string"},{"name":"AC_QTY_NEW","in":"body","type":"string"},{"name":"TT_TD_QTY","in":"body","type":"string"},{"name":"ACT_REC_CRATE","in":"body","type":"string"},{"name":"DONE_CRATE","in":"body","type":"string"},{"name":"BGT_SAM","in":"body","type":"string"},{"name":"ACT_SAM","in":"body","type":"string"},{"name":"WITH_PACK_SIZE","in":"body","type":"string"},{"name":"GRC_NO","in":"body","type":"string"},{"name":"GRC_QTY","in":"body","type":"string"},{"name":"GRC_VAL","in":"body","type":"string"},{"name":"REMARKSS","in":"body","type":"string"},{"name":"BIN_NO","in":"body","type":"string"},{"name":"LOT_QTY","in":"body","type":"string"},{"name":"SAMPLE_REC","in":"body","type":"string"},{"name":"ACT_REC_DT","in":"body","type":"string"},{"name":"ACT_REC_TIME","in":"body","type":"string"},{"name":"ACT_REC_HU","in":"body","type":"string"},{"name":"DONE_QTY","in":"body","type":"string"},{"name":"PACK_SIZE_BGT_QTY","in":"body","type":"string"},{"name":"PACK_SIZE_ACT_QTY","in":"body","type":"string"},{"name":"MP_USED","in":"body","type":"string"},{"name":"DONE_CARET","in":"body","type":"string"},{"name":"BAL_QTY","in":"body","type":"string"},{"name":"QTY_VAL","in":"body","type":"string"},{"name":"QC_DONE","in":"body","type":"string"},{"name":"PROCESS_STAT","in":"body","type":"string"},{"name":"ACT_REC_Q","in":"body","type":"string"},{"name":"PROC_TAT","in":"body","type":"string"},{"name":"EFFECIENCY","in":"body","type":"string"},{"name":"GE_NO","in":"body","type":"string"},{"name":"DCNO","in":"body","type":"string"},{"name":"TEXT","in":"body","type":"string"},{"name":"EMP_CD","in":"body","type":"string"},{"name":"PO_NUM","in":"body","type":"string"},{"name":"MAN_PO","in":"body","type":"string"},{"name":"ASS_QTY","in":"body","type":"string"},{"name":"ACT_DONE","in":"body","type":"string"},{"name":"ACT_ST_DT","in":"body","type":"string"},{"name":"ACT_ST_TM","in":"body","type":"string"},{"name":"ACT_END_DT","in":"body","type":"string"},{"name":"ACT_END_TM","in":"body","type":"string"},{"name":"EBELN","in":"body","type":"string"},{"name":"VND_CONFM","in":"body","type":"string"},{"name":"CLR_SIZE","in":"body","type":"string"},{"name":"PACK_NORMS","in":"body","type":"string"},{"name":"PACK_SIZE","in":"body","type":"string"},{"name":"TAFETA_BARCODE","in":"body","type":"string"},{"name":"BARCODE_VEND","in":"body","type":"string"},{"name":"APPR_QUALITY","in":"body","type":"string"},{"name":"EACH_DESIGN","in":"body","type":"string"},{"name":"PRIVATE_LABEL","in":"body","type":"string"},{"name":"PIC_PR_LABEL","in":"body","type":"string"},{"name":"CARTON","in":"body","type":"string"},{"name":"BUYING","in":"body","type":"string"},{"name":"SAMPLES","in":"body","type":"string"},{"name":"PPT_TYPE","in":"body","type":"string"},{"name":"IM_ROUTING_NO","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"},{"name":"IM_GRC","in":"body","type":"string"},{"name":"IM_ASN","in":"body","type":"string"},{"name":"BGT_ST_DT","in":"body","type":"string"},{"name":"BGT_END_DT","in":"body","type":"string"},{"name":"BGT_ST_TM","in":"body","type":"string"},{"name":"BGT_END_TM","in":"body","type":"string"}],"tables":["LT_PROD","LT_DATA","LS_GET_DATA","LS_OT_DETAILS","LS_COMP","EX_RETURN"],"path":"Controllers/DcRouting/ZDC_ROUTING_SUB_RFCController.cs"},{"id":"zwmgateentryrfc","name":"ZWM_GATE_ENTRY_RFC","folder":"DcRouting","group":"DC Routing","rfc":"ZWM_GATE_ENTRY_RFC","route":"api/ZWM_GATE_ENTRY_RFC","method":"POST","params":[{"name":"IM_EBELN","in":"body","type":"string"},{"name":"Gate_Entry_No","in":"body","type":"string"},{"name":"Quantity","in":"body","type":"string"},{"name":"Lot_Ageing","in":"body","type":"string"},{"name":"Process_Ageing","in":"body","type":"string"},{"name":"PO_NO","in":"body","type":"string"},{"name":"Pending_Lot_Qty","in":"body","type":"string"}],"tables":["ET_DATA","EX_RETURN"],"path":"Controllers/DcRouting/ZWM_GATE_ENTRY_RFCController.cs"},{"id":"zwmhustorettrfc","name":"ZWM_HU_STORE_TT_RFC","folder":"DcRouting","group":"DC Routing","rfc":"ZWM_HU_STORE_POST_RFC","route":"api/ZWM_HU_STORE_TT_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_EXIDV","in":"body","type":"string"},{"name":"IM_SAPHU","in":"body","type":"string"}],"tables":["LT_DATA","ES_RETURN"],"path":"Controllers/DcRouting/ZWM_HU_STORE_TT_RFCController.cs"},{"id":"zwmdcroutingrfc","name":"zwm_dc_routing_rfc","folder":"DcRouting","group":"DC Routing","rfc":"ZWM_DC_ROUTING_RFC","route":"api/zwm_dc_routing_rfc","method":"POST","params":[{"name":"IM_GATE_ENTRY","in":"body","type":"string"},{"name":"routingno","in":"body","type":"string"},{"name":"rout_desc","in":"body","type":"string"}],"tables":["LT_DATA","EX_RETURN"],"path":"Controllers/DcRouting/zwm_dc_routing_rfcController.cs"},{"id":"postfabputwaygrc","name":"Post_FABPUTWAYGRC","folder":"FMS_FABRIC_PUTWAY","group":"FMS Fabric Putway","rfc":"ZFMS_RFC_FABPUTWAYGRC_POST","route":"api/Post_FABPUTWAYGRC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_GRC","in":"body","type":"string"},{"name":"SITE","in":"body","type":"string"},{"name":"BIN","in":"body","type":"string"},{"name":"MATERIAL","in":"body","type":"string"},{"name":"SCAN_QTY","in":"body","type":"string"},{"name":"BATCH","in":"body","type":"string"},{"name":"GRC_NO","in":"body","type":"string"},{"name":"GR_LINE","in":"body","type":"string"},{"name":"ZWM_BIN_SCAN_T","in":"body","type":"string"}],"tables":["IT_DATA","ZWM_BIN_SCAN_T","ET_EAN_DATA","ET_DATA","EX_RETURN"],"path":"Controllers/FMS_FABRIC_PUTWAY/Post_FABPUTWAYGRCController.cs"},{"id":"validategrc","name":"Validate_GRC","folder":"FMS_FABRIC_PUTWAY","group":"FMS Fabric Putway","rfc":"ZFMS_RFC_FABPUTWAYGRC_VALIDATE","route":"api/Validate_GRC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_GRC","in":"body","type":"string"}],"tables":["ET_EAN_DATA","ET_DATA","EX_RETURN"],"path":"Controllers/FMS_FABRIC_PUTWAY/Validate_GRCController.cs"},{"id":"validationbin","name":"Validation_BIN","folder":"FMS_FABRIC_PUTWAY","group":"FMS Fabric Putway","rfc":"ZFMS_RFC_FABPUTWAYGRC_BIN_VALI","route":"api/Validation_BIN","method":"POST","params":[{"name":"IM_SITE","in":"body","type":"string"},{"name":"IM_BIN","in":"body","type":"string"},{"name":"IM_LGTYP","in":"body","type":"string"}],"tables":["ET_EAN_DATA","ET_DATA","EX_RETURN"],"path":"Controllers/FMS_FABRIC_PUTWAY/Validation_BINController.cs"},{"id":"zadvancepaymentrfc","name":"ZADVANCE_PAYMENT_RFC","folder":"Finance","group":"Finance","rfc":"ZADVANCE_PAYMENT_RFC","route":"api/ZADVANCE_PAYMENT_RFC","method":"POST","params":[{"name":"I_COMPANY_CODE","in":"body","type":"string"},{"name":"I_POSTING_DATE_LOW","in":"body","type":"string"},{"name":"I_POSTING_DATE_HIGH","in":"body","type":"string"}],"tables":["IT_FINAL","EX_RETURN"],"path":"Controllers/Finance/ZADVANCE_PAYMENT_RFCController.cs"},{"id":"zrfccreditorslovabl","name":"ZRFC_CREDITORS_LOVABL","folder":"Finance","group":"Finance","rfc":"ZRFC_CREDITORS_LOVABL","route":"api/ZRFC_CREDITORS_LOVABL","method":"POST","params":[{"name":"COMPANY_CODE","in":"body","type":"string"},{"name":"VENDOR","in":"body","type":"string"},{"name":"POSTING_DATE","in":"body","type":"string"}],"tables":["LT_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/Finance/ZRFC_CREDITORS_LOVABLController.cs"},{"id":"zsalesmoprfc","name":"ZSALES_MOP_RFC","folder":"Finance","group":"Finance","rfc":"ZSALES_MOP_RFC","route":"api/ZSALES_MOP_RFC","method":"POST","params":[{"name":"IM_DATE_LOW","in":"body","type":"string"},{"name":"IM_DATE_HIGH","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/Finance/ZSALES_MOP_RFCController.cs"},{"id":"gateboxvalidation","name":"Gate_Box_Validation","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_PALLATE1_N","route":"api/Gate_Box_Validation","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"},{"name":"IM_INV","in":"body","type":"string"},{"name":"IM_PALL","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/Gate_Box_ValidationController.cs"},{"id":"gatevalidation","name":"Gate_Validation","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_VALIDATION1_N","route":"api/Gate_Validation","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/Gate_ValidationController.cs"},{"id":"pallateboxvalidation","name":"Pallate_Box_Validation","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_PALLATE1_N","route":"api/Pallate_Box_Validation","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"},{"name":"IM_INV","in":"body","type":"string"},{"name":"IM_PALL","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/Pallate_Box_ValidationController.cs"},{"id":"zvndputwaybinvalrfc","name":"ZVND_PUTWAY_BIN_VAL_RFC","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZVND_PUTWAY_BIN_VAL_RFC","route":"api/ZVND_PUTWAY_BIN_VAL_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_BIN","in":"body","type":"string"}],"tables":["EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZVND_PUTWAY_BIN_VAL_RFCController.cs"},{"id":"zvndputwaypalettevalrfc","name":"ZVND_PUTWAY_PALETTE_VAL_RFC","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZVND_PUTWAY_PALETTE_VAL_RFC","route":"api/ZVND_PUTWAY_PALETTE_VAL_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_BIN","in":"body","type":"string"},{"name":"IM_PALL","in":"body","type":"string"}],"tables":["ET_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZVND_PUTWAY_PALETTE_VAL_RFCController.cs"},{"id":"zwmgatebinvalidation3n","name":"ZWM_GATE_BIN_VALIDATION3_N","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_BIN_VALIDATION3_N","route":"api/ZWM_GATE_BIN_VALIDATION3_N","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_BIN","in":"body","type":"string"},{"name":"IM_PALL","in":"body","type":"string"}],"tables":["IT_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GATE_BIN_VALIDATION3_NController.cs"},{"id":"zwmgatebinvalidation4n","name":"ZWM_GATE_BIN_VALIDATION4_N","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_BIN_VALIDATION4_N","route":"api/ZWM_GATE_BIN_VALIDATION4_N","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_BIN","in":"body","type":"string"},{"name":"IM_GET","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GATE_BIN_VALIDATION4_NController.cs"},{"id":"zwmgatebox3n","name":"ZWM_GATE_BOX3N","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_BOX3N","route":"api/ZWM_GATE_BOX3N","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_GATE","in":"body","type":"string"},{"name":"IM_PALL","in":"body","type":"string"},{"name":"IM_BOX","in":"body","type":"string"},{"name":"IM_WEIGHT","in":"body","type":"string"}],"tables":["IT_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GATE_BOX3NController.cs"},{"id":"zwmgatepallatevalidate3n","name":"ZWM_GATE_PALLATE_VALIDATE3_N","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_PALLATE_VALIDATE3_N","route":"api/ZWM_GATE_PALLATE_VALIDATE3_N","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_PALL","in":"body","type":"string"}],"tables":["IT_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GATE_PALLATE_VALIDATE3_NController.cs"},{"id":"zwmgatepallatevalidate4n","name":"ZWM_GATE_PALLATE_VALIDATE4_N","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_PALLATE_VALIDATE4_N","route":"api/ZWM_GATE_PALLATE_VALIDATE4_N","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_BIN","in":"body","type":"string"},{"name":"IM_GET","in":"body","type":"string"},{"name":"IM_PALETTE","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GATE_PALLATE_VALIDATE4_NController.cs"},{"id":"zwmgatesave3n","name":"ZWM_GATE_SAVE3_N","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GATE_SAVE3_N","route":"api/ZWM_GATE_SAVE3_N","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_GATE","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GATE_SAVE3_NController.cs"},{"id":"zwmgetgateentrydata4rfc","name":"ZWM_GET_GATE_ENTRY_DATA4_RFC","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GET_GATE_ENTRY_DATA4_RFC","route":"api/ZWM_GET_GATE_ENTRY_DATA4_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_GET","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GET_GATE_ENTRY_DATA4_RFCController.cs"},{"id":"zwmgetgateentrydatarfc","name":"ZWM_GET_GATE_ENTRY_DATA_RFC","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GET_GATE_ENTRY_DATA_RFC","route":"api/ZWM_GET_GATE_ENTRY_DATA_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_GATE","in":"body","type":"string"}],"tables":["IT_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GET_GATE_ENTRY_DATA_RFCController.cs"},{"id":"zwmgetgateentrylist4rfc","name":"ZWM_GET_GATE_ENTRY_LIST4_RFC","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GET_GATE_ENTRY_LIST4_RFC","route":"api/ZWM_GET_GATE_ENTRY_LIST4_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GET_GATE_ENTRY_LIST4_RFCController.cs"},{"id":"zwmgetgateentrylistrfc","name":"ZWM_GET_GATE_ENTRY_LIST_RFC","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GET_GATE_ENTRY_LIST_RFC","route":"api/ZWM_GET_GATE_ENTRY_LIST_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_DOCNO","in":"body","type":"string"}],"tables":["IT_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GET_GATE_ENTRY_LIST_RFCController.cs"},{"id":"zwmgetgateentrypallaterfc","name":"ZWM_GET_GATE_ENTRY_PALLATE_RFC","folder":"GateEntry_LOT_Putway","group":"Gate Entry / LOT Putaway","rfc":"ZWM_GET_GATE_ENTRY_PALLATE_RFC","route":"api/ZWM_GET_GATE_ENTRY_PALLATE_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_GATE","in":"body","type":"string"},{"name":"IM_PALL","in":"body","type":"string"}],"tables":["IT_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/GateEntry_LOT_Putway/ZWM_GET_GATE_ENTRY_PALLATE_RFCController.cs"},{"id":"zesicmasterpostrfc","name":"ZESIC_MASTER_POST_RFC","folder":"HRMS","group":"HRMS","rfc":"ZESIC_MASTER_POST_RFC","route":"api/ZESIC_MASTER_POST_RFC","method":"POST","params":[{"name":"IM_ST_CD","in":"body","type":"string"},{"name":"IM_STATUS","in":"body","type":"string"},{"name":"IM_ST_ESIC_CD","in":"body","type":"string"},{"name":"IM_ST_ESIC_CD_REF","in":"body","type":"string"},{"name":"StoreId","in":"body","type":"string"},{"name":"Vendor_Code","in":"body","type":"string"},{"name":"Vendor_Name","in":"body","type":"string"},{"name":"PO_Number","in":"body","type":"string"},{"name":"Date","in":"body","type":"string"},{"name":"DeliveryDate","in":"body","type":"string"},{"name":"POQty","in":"body","type":"string"}],"tables":["LS_GET_DATA","ES_RETURN"],"path":"Controllers/HRMS/ZESIC_MASTER_POST_RFCController.cs"},{"id":"zhrleavepolicyrfc","name":"ZHR_LEAVE_POLICY_RFC","folder":"HRMS","group":"HRMS","rfc":"ZHR_LEAVE_POLICY_RFC","route":"api/ZHR_LEAVE_POLICY_RFC","method":"POST","params":[{"name":"PPT_NO","in":"body","type":"string"},{"name":"RTNO","in":"body","type":"string"},{"name":"START_AT_TIME","in":"body","type":"string"},{"name":"END_AT_TIME","in":"body","type":"string"},{"name":"REMARKS","in":"body","type":"string"},{"name":"PPT_ACCT","in":"body","type":"string"},{"name":"COMP_ART","in":"body","type":"string"}],"tables":["IM_DATA","ES_RETURN"],"path":"Controllers/HRMS/ZHR_LEAVE_POLICY_RFCController.cs"},{"id":"zlwfmasterpostrfc","name":"ZLWF_MASTER_POST_RFC","folder":"HRMS","group":"HRMS","rfc":"ZLWF_MASTER_POST_RFC","route":"api/ZLWF_MASTER_POST_RFC","method":"POST","params":[{"name":"ST_CD","in":"body","type":"string"},{"name":"APPLICABLE","in":"body","type":"string"},{"name":"STATUS","in":"body","type":"string"},{"name":"LWF_SITE_CODE_REF","in":"body","type":"string"},{"name":"TOTAL_AMOUNT","in":"body","type":"string"},{"name":"EMPLOYEE_TTL_CNTB","in":"body","type":"string"},{"name":"EMPLOYEE_MON_CNTB","in":"body","type":"string"},{"name":"EMPLOYER_TTL_CNTB","in":"body","type":"string"},{"name":"EMPLOYER_MON_CNTB","in":"body","type":"string"},{"name":"DEPOSITE_FREQ","in":"body","type":"string"},{"name":"StoreId","in":"body","type":"string"},{"name":"TAX_TYPE","in":"body","type":"string"},{"name":"FREQUENCY","in":"body","type":"string"},{"name":"MIN_WAGES_SLAB","in":"body","type":"string"},{"name":"MAX_WAGES_SLAB","in":"body","type":"string"},{"name":"Vendor_Code","in":"body","type":"string"},{"name":"Vendor_Name","in":"body","type":"string"},{"name":"PO_Number","in":"body","type":"string"},{"name":"Date","in":"body","type":"string"},{"name":"DeliveryDate","in":"body","type":"string"},{"name":"POQty","in":"body","type":"string"}],"tables":["LS_GET_DATA","ES_RETURN"],"path":"Controllers/HRMS/ZLWF_MASTER_POST_RFCController.cs"},{"id":"zpfmasterpostrfc","name":"ZPF_MASTER_POST_RFC","folder":"HRMS","group":"HRMS","rfc":"ZPF_MASTER_POST_RFC","route":"api/ZPF_MASTER_POST_RFC","method":"POST","params":[{"name":"IM_ST_CD","in":"body","type":"string"},{"name":"IM_MIN_WAG","in":"body","type":"string"},{"name":"IM_STATUS","in":"body","type":"string"},{"name":"IM_ST_PF_CD","in":"body","type":"string"},{"name":"IM_ST_PF_CD_REF","in":"body","type":"string"},{"name":"StoreId","in":"body","type":"string"},{"name":"Vendor_Code","in":"body","type":"string"},{"name":"Vendor_Name","in":"body","type":"string"},{"name":"PO_Number","in":"body","type":"string"},{"name":"Date","in":"body","type":"string"},{"name":"DeliveryDate","in":"body","type":"string"},{"name":"POQty","in":"body","type":"string"}],"tables":["LS_GET_DATA","ES_RETURN"],"path":"Controllers/HRMS/ZPF_MASTER_POST_RFCController.cs"},{"id":"zptmasterpostrfc","name":"ZPT_MASTER_POST_RFC","folder":"HRMS","group":"HRMS","rfc":"ZPT_MASTER_POST_RFC","route":"api/ZPT_MASTER_POST_RFC","method":"POST","params":[{"name":"ST_CD","in":"body","type":"string"},{"name":"APPLICABLE","in":"body","type":"string"},{"name":"STATUS","in":"body","type":"string"},{"name":"TAX_TYPE","in":"body","type":"string"},{"name":"LWF_SITE_CODE_REF","in":"body","type":"string"},{"name":"FREQUENCY","in":"body","type":"string"},{"name":"TOTAL_AMOUNT","in":"body","type":"string"},{"name":"EMPLOYEE_TTL_CNTB","in":"body","type":"string"},{"name":"EMPLOYEE_MON_CNTB","in":"body","type":"string"},{"name":"EMPLOYER_TTL_CNTB","in":"body","type":"string"},{"name":"EMPLOYER_MON_CNTB","in":"body","type":"string"},{"name":"MIN_WAGES_SLAB","in":"body","type":"string"},{"name":"MAX_WAGES_SLAB","in":"body","type":"string"},{"name":"StoreId","in":"body","type":"string"},{"name":"Vendor_Code","in":"body","type":"string"},{"name":"Vendor_Name","in":"body","type":"string"},{"name":"PO_Number","in":"body","type":"string"},{"name":"Date","in":"body","type":"string"},{"name":"DeliveryDate","in":"body","type":"string"},{"name":"POQty","in":"body","type":"string"}],"tables":["LS_GET_DATA","ES_RETURN"],"path":"Controllers/HRMS/ZPT_MASTER_POST_RFCController.cs"},{"id":"articledata","name":"ArticleData","folder":"HU_Creation","group":"HU Creation","rfc":"ArticleData","route":"api/ArticleData","method":"POST","params":[],"tables":[],"path":"Controllers/HU_Creation/ArticleDataController.cs"},{"id":"barcode","name":"BarCode","folder":"HU_Creation","group":"HU Creation","rfc":"BarCode","route":"api/BarCode","method":"POST","params":[],"tables":[],"path":"Controllers/HU_Creation/BarCodeController.cs"},{"id":"hucreation","name":"HUCreation","folder":"HU_Creation","group":"HU Creation","rfc":"ZVND_HU_PUSH_API_POST","route":"api/HUCreation","method":"POST","params":[{"name":"HU_NO","in":"body","type":"string"},{"name":"PO_NO","in":"body","type":"string"},{"name":"ARTICLE_NO","in":"body","type":"string"},{"name":"DESIGN","in":"body","type":"string"},{"name":"QUANTITY","in":"body","type":"string"},{"name":"VENDOR_CODE","in":"body","type":"string"},{"name":"EAN","in":"body","type":"string"},{"name":"CREATION_DATE","in":"body","type":"string"},{"name":"CREATION_TIME","in":"body","type":"string"},{"name":"CREATION_USER","in":"body","type":"string"},{"name":"MESSAGE","in":"body","type":"string"},{"name":"STATUS","in":"body","type":"string"}],"tables":["EX_DATA","ES_RETURN"],"path":"Controllers/HU_Creation/HUCreationController.cs"},{"id":"hunamecheck","name":"HUNameCheck","folder":"HU_Creation","group":"HU Creation","rfc":"ZVND_HU_CHECK_RFC","route":"api/HUNameCheck","method":"POST","params":[{"name":"HU_NO","in":"body","type":"string"},{"name":"PO_NO","in":"body","type":"string"}],"tables":["EX_DATA","ES_RETURN"],"path":"Controllers/HU_Creation/HUNameCheckController.cs"},{"id":"hunamegenerator","name":"HUNameGenerator","folder":"HU_Creation","group":"HU Creation","rfc":"HUNameGenerator","route":"api/HUNameGenerator","method":"POST","params":[],"tables":[],"path":"Controllers/HU_Creation/HUNameGeneratorController.cs"},{"id":"poreport","name":"POReport","folder":"HU_Creation","group":"HU Creation","rfc":"POReport","route":"api/POReport","method":"POST","params":[],"tables":[],"path":"Controllers/HU_Creation/POReportController.cs"},{"id":"qrcodezip","name":"QrCodeZip","folder":"HU_Creation","group":"HU Creation","rfc":"QrCodeZip","route":"api/QrCodeZip","method":"POST","params":[],"tables":[],"path":"Controllers/HU_Creation/QrCodeZipController.cs"},{"id":"uploadarticledata","name":"UploadArticleData","folder":"HU_Creation","group":"HU Creation","rfc":"ZVND_HU_PUSH_API_POST","route":"api/UploadArticleData","method":"POST","params":[{"name":"HU_NO","in":"body","type":"string"},{"name":"PO_NO","in":"body","type":"string"},{"name":"ARTICLE_NO","in":"body","type":"string"},{"name":"DESIGN","in":"body","type":"string"},{"name":"QUANTITY","in":"body","type":"string"},{"name":"VENDOR_CODE","in":"body","type":"string"},{"name":"EAN","in":"body","type":"string"},{"name":"CREATION_DATE","in":"body","type":"string"},{"name":"CREATION_TIME","in":"body","type":"string"},{"name":"CREATION_USER","in":"body","type":"string"},{"name":"MESSAGE","in":"body","type":"string"},{"name":"STATUS","in":"body","type":"string"}],"tables":["EX_DATA","ES_RETURN"],"path":"Controllers/HU_Creation/UploadArticleDataController.cs"},{"id":"uploadpoarticledata","name":"UploadPoArticleData","folder":"HU_Creation","group":"HU Creation","rfc":"ZVND_HU_PUSH_API_POST","route":"api/UploadPoArticleData","method":"POST","params":[{"name":"HU_NO","in":"body","type":"string"},{"name":"PO_NO","in":"body","type":"string"},{"name":"ARTICLE_NO","in":"body","type":"string"},{"name":"DESIGN","in":"body","type":"string"},{"name":"QUANTITY","in":"body","type":"string"},{"name":"VENDOR_CODE","in":"body","type":"string"},{"name":"EAN","in":"body","type":"string"},{"name":"CREATION_DATE","in":"body","type":"string"},{"name":"CREATION_TIME","in":"body","type":"string"},{"name":"CREATION_USER","in":"body","type":"string"},{"name":"MESSAGE","in":"body","type":"string"},{"name":"STATUS","in":"body","type":"string"}],"tables":["EX_DATA","ES_RETURN"],"path":"Controllers/HU_Creation/UploadPoArticleDataController.cs"},{"id":"uservalidatepodetail","name":"UserValidatePODetail","folder":"HU_Creation","group":"HU Creation","rfc":"ZSRM_PO_DETAIL_FM","route":"api/UserValidatePODetail","method":"POST","params":[{"name":"PO_NUM","in":"body","type":"string"},{"name":"VENDOR_CODE","in":"body","type":"string"}],"tables":["ET_DATA","ES_RETURN"],"path":"Controllers/HU_Creation/UserValidatePODetailController.cs"},{"id":"zvndhupushapipost","name":"ZVND_HU_PUSH_API_POST","folder":"HU_Creation","group":"HU Creation","rfc":"ZVND_HU_PUSH_API_POST","route":"api/ZVND_HU_PUSH_API_POST","method":"POST","params":[{"name":"HU_NO","in":"body","type":"string"},{"name":"PO_NO","in":"body","type":"string"},{"name":"ARTICLE_NO","in":"body","type":"string"},{"name":"DESIGN","in":"body","type":"string"},{"name":"QUANTITY","in":"body","type":"string"},{"name":"VENDOR_CODE","in":"body","type":"string"},{"name":"EAN","in":"body","type":"string"},{"name":"CREATION_DATE","in":"body","type":"string"},{"name":"CREATION_TIME","in":"body","type":"string"},{"name":"CREATION_USER","in":"body","type":"string"},{"name":"MESSAGE","in":"body","type":"string"},{"name":"STATUS","in":"body","type":"string"}],"tables":["EX_DATA","ES_RETURN"],"path":"Controllers/HU_Creation/ZVND_HU_PUSH_API_POSTController.cs"},{"id":"zvndhuvalidaterfc","name":"ZVND_HU_VALIDATE_RFC","folder":"HU_Creation","group":"HU Creation","rfc":"ZVND_HU_VALIDATE_RFC","route":"api/ZVND_HU_VALIDATE_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_HU_NUMBER","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"}],"tables":["ET_STORES","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/HU_Creation/ZVND_HU_VALIDATE_RFCController.cs"},{"id":"zwmvendpoheader","name":"ZWM_VEND_PO_HEADER","folder":"HU_Creation","group":"HU Creation","rfc":"ZWM_VEND_OPEN_PO","route":"api/ZWM_VEND_PO_HEADER","method":"POST","params":[{"name":"IM_LIFNR","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/HU_Creation/ZWM_VEND_PO_HEADERController.cs"},{"id":"huidentification","name":"HU_Identification","folder":"HU_PRINT","group":"HU Print","rfc":"ZWM_HU_STORE_RFC","route":"api/HU_Identification","method":"POST","params":[{"name":"IM_HU","in":"body","type":"string"},{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_EXIDV","in":"body","type":"string"},{"name":"SAP_HU","in":"body","type":"string"},{"name":"EXIDV","in":"body","type":"string"},{"name":"ST_CD","in":"body","type":"string"},{"name":"ST_NAME","in":"body","type":"string"}],"tables":["EX_DATA","ES_RETURN","EX_RETURN"],"path":"Controllers/HU_PRINT/HU_IdentificationController.cs"},{"id":"huprint","name":"HU_Print","folder":"HU_PRINT","group":"HU Print","rfc":"ZWM_ACTUAL_HU_SAVE","route":"api/HU_Print","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_EXIDV","in":"body","type":"string"},{"name":"IM_SAP_HU","in":"body","type":"string"},{"name":"PO_Number","in":"body","type":"string"}],"tables":["EX_RETURN"],"path":"Controllers/HU_PRINT/HU_PrintController.cs"},{"id":"zwmsavehu","name":"ZWM_SAVE_HU","folder":"HU_SCAN","group":"HU Scan","rfc":"ZWM_SAVE_HU","route":"api/ZWM_SAVE_HU","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_HU","in":"body","type":"string"},{"name":"MATNR","in":"body","type":"string"},{"name":"HU_QTY","in":"body","type":"string"},{"name":"SCAN_QTY","in":"body","type":"string"},{"name":"DIFF_QTY","in":"body","type":"string"}],"tables":["IM_ARTICLES","ET_ERROR"],"path":"Controllers/HU_SCAN/ZWM_SAVE_HUController.cs"},{"id":"zwmscanhu","name":"ZWM_SCAN_HU","folder":"HU_SCAN","group":"HU Scan","rfc":"ZWM_SCAN_HU","route":"api/ZWM_SCAN_HU","method":"POST","params":[{"name":"IM_HU","in":"body","type":"string"},{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"}],"tables":["ET_ATICLES","ET_EAN","ET_ERROR"],"path":"Controllers/HU_SCAN/ZWM_SCAN_HUController.cs"},{"id":"nsoconfigpost","name":"NSOConfigPost","folder":"NSO","group":"NSO","rfc":"ZSRM_NSO_CONF_POST","route":"api/NSOConfigPost","method":"POST","params":[{"name":"IM_CSTATUS","in":"body","type":"string"},{"name":"IM_SRNO","in":"body","type":"string"},{"name":"IM_BUDGTE_ST_DATE","in":"body","type":"string"},{"name":"IM_BUDGTE_END_DATE","in":"body","type":"string"},{"name":"IM_ACT_START_DATE","in":"body","type":"string"},{"name":"IM_ACT_END_DATE","in":"body","type":"string"},{"name":"IM_START_AT_TIME","in":"body","type":"string"},{"name":"IM_END_AT_TIME","in":"body","type":"string"},{"name":"IM_REMARKS","in":"body","type":"string"},{"name":"IM_REMARKS1","in":"body","type":"string"},{"name":"IM_REMARKS2","in":"body","type":"string"},{"name":"IM_ROUTING_NO","in":"body","type":"string"},{"name":"IM_PROCESS_CONFIRM","in":"body","type":"string"},{"name":"IM_HYPERLINK","in":"body","type":"string"},{"name":"IM_BUDGET_ST_DATE","in":"body","type":"string"},{"name":"IM_BUDGET_END_DATE","in":"body","type":"string"},{"name":"IM_ACT_ST_DATE","in":"body","type":"string"},{"name":"IM_SRNO_Desc","in":"body","type":"string"},{"name":"IM_Rout_Desc","in":"body","type":"string"}],"tables":["ES_RETURN"],"path":"Controllers/NSO/NSOConfigPostController.cs"},{"id":"nsoconfigrouting","name":"NSOConfigRouting","folder":"NSO","group":"NSO","rfc":"ZSRM_NSO_CONF_ROUTING","route":"api/NSOConfigRouting","method":"POST","params":[{"name":"IM_SITE_CODE","in":"body","type":"string"},{"name":"PO_NO","in":"body","type":"string"},{"name":"MAJ_CAT","in":"body","type":"string"},{"name":"DESIGN_NO","in":"body","type":"string"},{"name":"QTY","in":"body","type":"string"},{"name":"RTNO","in":"body","type":"string"},{"name":"SiteCode","in":"body","type":"string"},{"name":"SITE_CODE","in":"body","type":"string"},{"name":"MANDT","in":"body","type":"string"},{"name":"SRNO","in":"body","type":"string"},{"name":"SPRAS","in":"body","type":"string"},{"name":"TEXT","in":"body","type":"string"}],"tables":["ET_DATA","EX_DATA","ES_RETURN"],"path":"Controllers/NSO/NSOConfigRoutingController.cs"},{"id":"nsoexpensepost","name":"NSOExpensePost","folder":"NSO","group":"NSO","rfc":"ZRFC_ACC_DOC_POST","route":"api/NSOExpensePost","method":"POST","params":[{"name":"IM_DC_ROUTING","in":"body","type":"string"},{"name":"IM_GATE_ENTRY","in":"body","type":"string"},{"name":"USERNAME","in":"body","type":"string"},{"name":"HEADER_TXT","in":"body","type":"string"},{"name":"DOC_DATE","in":"body","type":"string"},{"name":"PSTNG_DATE","in":"body","type":"string"},{"name":"TRANS_DATE","in":"body","type":"string"},{"name":"FISC_YEAR","in":"body","type":"string"},{"name":"FIS_PERIOD","in":"body","type":"string"},{"name":"REF_DOC_NO","in":"body","type":"string"},{"name":"ITEMNO_ACC","in":"body","type":"string"},{"name":"GL_ACCOUNT","in":"body","type":"string"},{"name":"COSTCENTER","in":"body","type":"string"},{"name":"PROFIT_CTR","in":"body","type":"string"},{"name":"AMT_DOCCUR","in":"body","type":"string"},{"name":"VENDOR_NO","in":"body","type":"string"},{"name":"BLINE_DATE","in":"body","type":"string"},{"name":"ITEM_TEXT","in":"body","type":"string"},{"name":"GE_NO","in":"body","type":"string"},{"name":"DCNO","in":"body","type":"string"},{"name":"TEXT","in":"body","type":"string"},{"name":"EMP_CD","in":"body","type":"string"},{"name":"PO_NUM","in":"body","type":"string"}],"tables":["LT_ACCOUNTGL","LT_CURRENCYAMOUNT","LT_PAYBLE","LT_DATA","LS_HEADER","ES_RETURN"],"path":"Controllers/NSO/NSOExpensePostController.cs"},{"id":"nsositelist","name":"NSOSiteList","folder":"NSO","group":"NSO","rfc":"ZNSO_RFC_SITELIST","route":"api/NSOSiteList","method":"POST","params":[{"name":"IM_SITE_CODE","in":"body","type":"string"},{"name":"PO_NO","in":"body","type":"string"},{"name":"MAJ_CAT","in":"body","type":"string"},{"name":"DESIGN_NO","in":"body","type":"string"},{"name":"QTY","in":"body","type":"string"},{"name":"RTNO","in":"body","type":"string"},{"name":"SITE_CODE","in":"body","type":"string"},{"name":"WERKS","in":"body","type":"string"},{"name":"KTEXT","in":"body","type":"string"},{"name":"ZSNRO","in":"body","type":"string"}],"tables":["ET_DATA","EX_DATA","ES_RETURN"],"path":"Controllers/NSO/NSOSiteListController.cs"},{"id":"nsoglcodes","name":"NSO_GL_CODES","folder":"NSO","group":"NSO","rfc":"ZRFC_GL_CODE","route":"api/NSO_GL_CODES","method":"POST","params":[{"name":"IM_EBELN","in":"body","type":"string"},{"name":"MANDT","in":"body","type":"string"},{"name":"GL_ACC","in":"body","type":"string"},{"name":"GL_TYPE","in":"body","type":"string"},{"name":"ZDESC","in":"body","type":"string"}],"tables":["GT_DATA","EX_RETURN"],"path":"Controllers/NSO/NSO_GL_CODESController.cs"},{"id":"getpicklistdata","name":"GetPicklistData","folder":"PaperlessPicklist","group":"Paperless Picklist","rfc":"ZWM_RFC_GET_PICKLIST_DATA","route":"api/GetPicklistData","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_PICNR","in":"body","type":"string"}],"tables":["ET_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/PaperlessPicklist/GetPicklistDataController.cs"},{"id":"getpicklistnumber","name":"GetPicklistNumber","folder":"PaperlessPicklist","group":"Paperless Picklist","rfc":"ZWM_RFC_GET_PICKLIST","route":"api/GetPicklistNumber","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_DATUM","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"WM_NO","in":"body","type":"string"},{"name":"MATERIAL","in":"body","type":"string"},{"name":"PLANT","in":"body","type":"string"},{"name":"STOR_LOC","in":"body","type":"string"},{"name":"BATCH","in":"body","type":"string"},{"name":"CRATE","in":"body","type":"string"},{"name":"BIN","in":"body","type":"string"},{"name":"STORAGE_TYPE","in":"body","type":"string"},{"name":"MEINS","in":"body","type":"string"},{"name":"AVL_STOCK","in":"body","type":"string"},{"name":"OPEN_STOCK","in":"body","type":"string"},{"name":"SCAN_QTY","in":"body","type":"string"},{"name":"PICNR","in":"body","type":"string"},{"name":"PICK_QTY","in":"body","type":"string"},{"name":"HU_NO","in":"body","type":"string"},{"name":"BARCODE","in":"body","type":"string"},{"name":"MATKL","in":"body","type":"string"},{"name":"WGBEZ","in":"body","type":"string"},{"name":"SONUM","in":"body","type":"string"},{"name":"DELNUM","in":"body","type":"string"},{"name":"POSNR","in":"body","type":"string"},{"name":"GNATURE","in":"body","type":"string"},{"name":"SAMMG","in":"body","type":"string"},{"name":"PICK_STATUS","in":"body","type":"string"}],"tables":["ET_DATA","EX_RETURN"],"path":"Controllers/PaperlessPicklist/GetPicklistNumberController.cs"},{"id":"postpicklistscanneddata","name":"PostPickListScannedData","folder":"PaperlessPicklist","group":"Paperless Picklist","rfc":"ZWM_RFC_PICKLIST_SCAN_POST","route":"api/PostPickListScannedData","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_WERKS","in":"body","type":"string"},{"name":"IM_PICNR","in":"body","type":"string"},{"name":"WM_NO","in":"body","type":"string"},{"name":"MATERIAL","in":"body","type":"string"},{"name":"PLANT","in":"body","type":"string"},{"name":"STOR_LOC","in":"body","type":"string"},{"name":"BATCH","in":"body","type":"string"},{"name":"CRATE","in":"body","type":"string"},{"name":"BIN","in":"body","type":"string"},{"name":"STORAGE_TYPE","in":"body","type":"string"},{"name":"MEINS","in":"body","type":"string"},{"name":"AVL_STOCK","in":"body","type":"string"},{"name":"OPEN_STOCK","in":"body","type":"string"},{"name":"SCAN_QTY","in":"body","type":"string"},{"name":"PICNR","in":"body","type":"string"},{"name":"PICK_QTY","in":"body","type":"string"},{"name":"HU_NO","in":"body","type":"string"},{"name":"BARCODE","in":"body","type":"string"},{"name":"MATKL","in":"body","type":"string"},{"name":"WGBEZ","in":"body","type":"string"},{"name":"SONUM","in":"body","type":"string"},{"name":"DELNUM","in":"body","type":"string"},{"name":"POSNR","in":"body","type":"string"},{"name":"GNATURE","in":"body","type":"string"},{"name":"SAMMG","in":"body","type":"string"},{"name":"PICK_STATUS","in":"body","type":"string"}],"tables":["IT_DATA","ET_DATA","EX_RETURN"],"path":"Controllers/PaperlessPicklist/PostPickListScannedDataController.cs"},{"id":"articleidentifier","name":"ArticleIdentifier","folder":"Sampling","group":"Sampling","rfc":"ZEAN_ART_DETAILS","route":"api/ArticleIdentifier","method":"POST","params":[{"name":"LV_ART","in":"body","type":"string"},{"name":"HU_NO","in":"body","type":"string"},{"name":"Article_Number","in":"body","type":"string"},{"name":"Vendor_Code","in":"body","type":"string"},{"name":"Vendor_Name","in":"body","type":"string"},{"name":"GRC_Date","in":"body","type":"string"},{"name":"GRC_Cost","in":"body","type":"string"},{"name":"GRC_Qty","in":"body","type":"string"},{"name":"Bill_No","in":"body","type":"string"}],"tables":["ET_DATA","EX_DATA","ES_RETURN"],"path":"Controllers/Sampling/ArticleIdentifierController.cs"},{"id":"articleyesorno","name":"ArticleYesOrNo","folder":"Sampling","group":"Sampling","rfc":"ZARTICLE_YES_NO_POST","route":"api/ArticleYesOrNo","method":"POST","params":[{"name":"ID","in":"body","type":"string"},{"name":"ARTICLE","in":"body","type":"string"},{"name":"CREATION_DT","in":"body","type":"string"},{"name":"CREATION_TM","in":"body","type":"string"},{"name":"STATUS","in":"body","type":"string"},{"name":"REMARKS","in":"body","type":"string"}],"tables":["EX_RETURN"],"path":"Controllers/Sampling/ArticleYesOrNoController.cs"},{"id":"articleyesornodata","name":"ArticleYesOrNoData","folder":"Sampling","group":"Sampling","rfc":"ArticleYesOrNoData","route":"api/ArticleYesOrNoData","method":"POST","params":[],"tables":[],"path":"Controllers/Sampling/ArticleYesOrNoDataController.cs"},{"id":"qcdone","name":"QcDone","folder":"Sampling","group":"Sampling","rfc":"ZQCDONE_RFC","route":"api/QcDone","method":"POST","params":[{"name":"LV_ART","in":"body","type":"string"},{"name":"HU_NO","in":"body","type":"string"}],"tables":["ET_DATA","EX_DATA","ES_RETURN"],"path":"Controllers/Sampling/QcDoneController.cs"},{"id":"storesiteconfsave","name":"Store_Site_CONF_SAVE","folder":"Site_Creation","group":"Site Creation","rfc":"ZWM_STORE_SITE_CONF_SAVE","route":"api/Store_Site_CONF_SAVE","method":"POST","params":[{"name":"SRNO","in":"body","type":"string"},{"name":"PROC_DESC","in":"body","type":"string"},{"name":"PROC_CONF","in":"body","type":"string"},{"name":"ACT_START_DATE","in":"body","type":"string"},{"name":"ACT_END_DATE","in":"body","type":"string"},{"name":"REMARK","in":"body","type":"string"}],"tables":["IM_DATA","EX_RETURN"],"path":"Controllers/Site_Creation/Store_Site_CONF_SAVEController.cs"},{"id":"storesitecreation","name":"Store_Site_Creation","folder":"Site_Creation","group":"Site Creation","rfc":"ZSITE_RFC_CREATE","route":"api/Store_Site_Creation","method":"POST","params":[{"name":"RM_NAME","in":"body","type":"string"},{"name":"ZONE_1","in":"body","type":"string"},{"name":"ZSTATE","in":"body","type":"string"},{"name":"DISTRICT_NAME","in":"body","type":"string"},{"name":"CITY","in":"body","type":"string"},{"name":"CITY_POPULATION","in":"body","type":"string"},{"name":"C_B_PASS","in":"body","type":"string"},{"name":"B_PASS","in":"body","type":"string"},{"name":"F_PASS","in":"body","type":"string"},{"name":"LLRATE","in":"body","type":"string"},{"name":"VRATE","in":"body","type":"string"},{"name":"RANK","in":"body","type":"string"},{"name":"SITE_TYPE","in":"body","type":"string"},{"name":"MRKT_NAME","in":"body","type":"string"},{"name":"FRONTAGE","in":"body","type":"string"},{"name":"TOTAL_AREA","in":"body","type":"string"},{"name":"BSMT_PRKG","in":"body","type":"string"},{"name":"FRONT_PRKG","in":"body","type":"string"},{"name":"UGF","in":"body","type":"string"},{"name":"LGF","in":"body","type":"string"},{"name":"GROUND_FLOOR","in":"body","type":"string"},{"name":"FIRST_FLOOR","in":"body","type":"string"},{"name":"SECOND_FLOOR","in":"body","type":"string"},{"name":"THIRD_FLOOR","in":"body","type":"string"},{"name":"FORTH_FLOOR","in":"body","type":"string"},{"name":"FIFTH_FLOOR","in":"body","type":"string"},{"name":"GOOGLE_COORDINATES","in":"body","type":"string"},{"name":"COMPETITORS_NAME","in":"body","type":"string"},{"name":"COMPETITORS_SALE","in":"body","type":"string"},{"name":"REMARKS","in":"body","type":"string"},{"name":"REMARKS1","in":"body","type":"string"},{"name":"REMARKS2","in":"body","type":"string"},{"name":"BROKER_NAME","in":"body","type":"string"},{"name":"BROKERM_NO","in":"body","type":"string"},{"name":"LANDLORD_NAME","in":"body","type":"string"},{"name":"LANDLORD_M_NO","in":"body","type":"string"},{"name":"PROOF","in":"body","type":"string"},{"name":"DISTRICT_POPULATION","in":"body","type":"string"},{"name":"CITY_POPULATION2","in":"body","type":"string"},{"name":"DISTT_POP_PER_KM","in":"body","type":"string"},{"name":"CITY_POP_PER_KM","in":"body","type":"string"},{"name":"LITERACY_RATE","in":"body","type":"string"},{"name":"NO_OF_SCH_10_KM","in":"body","type":"string"},{"name":"NO_OF_COL_UN_10","in":"body","type":"string"},{"name":"AV_HLD_INC_DIST","in":"body","type":"string"},{"name":"NO_ATM_CITY","in":"body","type":"string"},{"name":"NO_OF_BANK_CITY","in":"body","type":"string"},{"name":"NO_IND_FAC","in":"body","type":"string"},{"name":"UNEMP_RATE_CITY","in":"body","type":"string"},{"name":"DIS_FR_RAIL","in":"body","type":"string"},{"name":"DIS_FR_BUS","in":"body","type":"string"},{"name":"NO4_WH_PASS","in":"body","type":"string"},{"name":"NO2_WH_PASS","in":"body","type":"string"},{"name":"NO_SHOP_MALL","in":"body","type":"string"},{"name":"NO_MUTI_CIN_CITY","in":"body","type":"string"},{"name":"PRES_FOOD_COURT","in":"body","type":"string"}],"tables":["IM_DATA","ES_RETURN"],"path":"Controllers/Site_Creation/Store_Site_CreationController.cs"},{"id":"storesitelist","name":"Store_Site_List","folder":"Site_Creation","group":"Site Creation","rfc":"ZWM_STORE_SITE_CONF","route":"api/Store_Site_List","method":"POST","params":[{"name":"IM_SITE_CODE","in":"body","type":"string"}],"tables":["ET_DATA","EX_RETURN"],"path":"Controllers/Site_Creation/Store_Site_ListController.cs"},{"id":"zwmhubwisestorelistrfc","name":"ZWM_HUBWISE_STORE_LIST_RFC","folder":"Vehicle_Loading","group":"Vehicle Loading","rfc":"ZWM_HUBWISE_STORE_LIST_RFC","route":"api/ZWM_HUBWISE_STORE_LIST_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_HUB","in":"body","type":"string"}],"tables":["ET_STORES","ET_EAN_DATA","ET_ERROR"],"path":"Controllers/Vehicle_Loading/ZWM_HUBWISE_STORE_LIST_RFCController.cs"},{"id":"zwmhuselectionrfc","name":"ZWM_HU_SELECTION_RFC","folder":"Vehicle_Loading","group":"Vehicle Loading","rfc":"ZWM_HU_SELECTION_RFC","route":"api/ZWM_HU_SELECTION_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_VEH","in":"body","type":"string"},{"name":"IM_TRANSPORT_CODE","in":"body","type":"string"},{"name":"IM_SEAL_NO","in":"body","type":"string"},{"name":"IM_DRIVER_NAME","in":"body","type":"string"},{"name":"IM_DRIVER_MOB","in":"body","type":"string"},{"name":"IM_HUB_FLAG","in":"body","type":"string"},{"name":"IM_STORE_FLAG","in":"body","type":"string"},{"name":"IM_HUB","in":"body","type":"string"},{"name":"IM_GRP","in":"body","type":"string"},{"name":"STORE","in":"body","type":"string"}],"tables":["STORE_LIST","ET_HULIST","ET_EAN_DATA","ET_ERROR"],"path":"Controllers/Vehicle_Loading/ZWM_HU_SELECTION_RFCController.cs"},{"id":"zwmsavescannedhulistrfc","name":"ZWM_SAVE_SCANNEDHULIST_RFC","folder":"Vehicle_Loading","group":"Vehicle Loading","rfc":"ZWM_SAVE_SCANNEDHULIST_RFC","route":"api/ZWM_SAVE_SCANNEDHULIST_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_VEHICLE","in":"body","type":"string"},{"name":"HU_LIST","in":"body","type":"string"},{"name":"IM_REMOVE","in":"body","type":"string"},{"name":"SRC_STORE","in":"body","type":"string"},{"name":"DST_STORE","in":"body","type":"string"},{"name":"LRNO","in":"body","type":"string"},{"name":"EXTERNAL_HU","in":"body","type":"string"},{"name":"INTERNAL_HU","in":"body","type":"string"},{"name":"QUANTITY","in":"body","type":"string"},{"name":"PALETTE","in":"body","type":"string"},{"name":"CLA_BIN","in":"body","type":"string"},{"name":"DCLA_STATUS","in":"body","type":"string"},{"name":"UOM","in":"body","type":"string"},{"name":"SCAN","in":"body","type":"string"}],"tables":["HU_LIST","ET_HULIST","ET_EAN_DATA","ET_ERROR"],"path":"Controllers/Vehicle_Loading/ZWM_SAVE_SCANNEDHULIST_RFCController.cs"},{"id":"zwmtransporterdetailsrfc","name":"ZWM_TRANSPORTER_DETAILS_RFC","folder":"Vehicle_Loading","group":"Vehicle Loading","rfc":"ZWM_TRANSPORTER_DETAILS_RFC","route":"api/ZWM_TRANSPORTER_DETAILS_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PLANT","in":"body","type":"string"},{"name":"IM_HUB","in":"body","type":"string"}],"tables":["ET_TRANSPORT_DET","ET_EAN_DATA","ET_ERROR"],"path":"Controllers/Vehicle_Loading/ZWM_TRANSPORTER_DETAILS_RFCController.cs"},{"id":"completeroutingstatuslist","name":"CompleteRoutingStatusList","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_GET_ROUTING_LIST","route":"api/CompleteRoutingStatusList","method":"POST","params":[{"name":"IM_PO","in":"body","type":"string"},{"name":"IM_DESIGN","in":"body","type":"string"},{"name":"IM_SATNR","in":"body","type":"string"}],"tables":["ET_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/CompleteRoutingStatusListController.cs"},{"id":"majdrp","name":"Maj_Drp","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZPUR_TREND_F4","route":"api/Maj_Drp","method":"POST","params":[{"name":"I_GJAHR","in":"body","type":"string"},{"name":"I_MATCAT","in":"body","type":"string"}],"tables":["ET_CAT2","EX_RETURN"],"path":"Controllers/Vendor_SRM_Routing/Maj_DrpController.cs"},{"id":"podeldatedatapost","name":"PO_DEL_Date_DATA_POST","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_RFC_PO_UPDATE_DELV_DATE","route":"api/PO_DEL_Date_DATA_POST","method":"POST","params":[{"name":"IM_PO_NUMBER","in":"body","type":"string"},{"name":"IM_DELIVERY_DATE","in":"body","type":"string"}],"tables":["IT_DATA","ZST_SRM_ASN","EX_RETURN"],"path":"Controllers/Vendor_SRM_Routing/PO_DEL_Date_DATA_POSTController.cs"},{"id":"podetail","name":"PO_Detail","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_PO_DETAIL","route":"api/PO_Detail","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"}],"tables":["ET_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/PO_DetailController.cs"},{"id":"pofabpo","name":"PO_Fab_PO","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_RTL_FAB_PO","route":"api/PO_Fab_PO","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_EBELN","in":"body","type":"string"}],"tables":["ET_DATA","EX_RETURN"],"path":"Controllers/Vendor_SRM_Routing/PO_Fab_POController.cs"},{"id":"pptroutingstatuslist","name":"PPTRoutingStatusList","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZRFC_PPT_GET_ROUT","route":"api/PPTRoutingStatusList","method":"POST","params":[{"name":"IM_PO_NO","in":"body","type":"string"},{"name":"IM_DESIGN","in":"body","type":"string"},{"name":"IM_SATNR","in":"body","type":"string"},{"name":"IM_PPT_NO","in":"body","type":"string"}],"tables":["ET_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/PPTRoutingStatusListController.cs"},{"id":"pptlist","name":"PPT_LIST","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZRFC_PPT_GET","route":"api/PPT_LIST","method":"POST","params":[{"name":"IM_PO_NO","in":"body","type":"string"},{"name":"IM_DESIGN","in":"body","type":"string"},{"name":"IM_SATNR","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"},{"name":"PPT_NO","in":"body","type":"string"},{"name":"Vendor_code","in":"body","type":"string"},{"name":"Vendor_Name","in":"body","type":"string"},{"name":"PPT_Creation_date","in":"body","type":"string"},{"name":"Subdivision","in":"body","type":"string"},{"name":"LRTNO_desc","in":"body","type":"string"},{"name":"LRTNO","in":"body","type":"string"},{"name":"PPT_SHOW","in":"body","type":"string"}],"tables":["ET_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/PPT_LISTController.cs"},{"id":"pptpost","name":"PPT_POST","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZRFC_PPT_CONF_POST","route":"api/PPT_POST","method":"POST","params":[{"name":"PPT_NO","in":"body","type":"string"},{"name":"RTNO","in":"body","type":"string"},{"name":"START_AT_TIME","in":"body","type":"string"},{"name":"END_AT_TIME","in":"body","type":"string"},{"name":"REMARKS","in":"body","type":"string"},{"name":"PPT_ACCT","in":"body","type":"string"},{"name":"COMP_ART","in":"body","type":"string"}],"tables":["IM_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/PPT_POSTController.cs"},{"id":"prvspo","name":"PRvsPO","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZPUR_TREND_DATA","route":"api/PRvsPO","method":"POST","params":[{"name":"I_GJAHR","in":"body","type":"string"},{"name":"I_MATCAT","in":"body","type":"string"}],"tables":["ET_DAT","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/PRvsPOController.cs"},{"id":"paymentsrm","name":"Paymentsrm","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_VEND_PAYMENT_INFO","route":"api/Paymentsrm","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_LIFNR","in":"body","type":"string"}],"tables":["ET_DATA","EX_RETURN"],"path":"Controllers/Vendor_SRM_Routing/PaymentsrmController.cs"},{"id":"routingstatusgroup","name":"RoutingStatusGROUP","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_PO_RFC_GET_ROUTING","route":"api/RoutingStatusGROUP","method":"POST","params":[{"name":"IM_PO_NO","in":"body","type":"string"},{"name":"IM_DESIGN","in":"body","type":"string"},{"name":"IM_SATNR","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"}],"tables":["ET_GROUT_STAT","ET_PRD_ROUTING","ET_BR","ET_ACCST","ET_PPSR","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/RoutingStatusGROUPController.cs"},{"id":"routingstatuslist","name":"RoutingStatusList","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_PO_RFC_GET_ROUTING","route":"api/RoutingStatusList","method":"POST","params":[{"name":"IM_PO_NO","in":"body","type":"string"},{"name":"IM_DESIGN","in":"body","type":"string"},{"name":"IM_SATNR","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"}],"tables":["ET_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/RoutingStatusListController.cs"},{"id":"routingstatusgrplist","name":"RoutingStatusgrpList","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_PO_RFC_GET_ROUTING","route":"api/RoutingStatusgrpList","method":"POST","params":[{"name":"IM_PO_NO","in":"body","type":"string"},{"name":"IM_DESIGN","in":"body","type":"string"},{"name":"IM_SATNR","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"}],"tables":["ET_DATA","ET_PRD_ROUTING","ET_BR","ET_ACCST","ET_PPSR","ET_AMS","ET_FTA","ET_POSR","ET_TPM","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/RoutingStatusgrpListController.cs"},{"id":"updateroutingstatus","name":"Update_Routing_Status","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZSRM_ROUTING_POST","route":"api/Update_Routing_Status","method":"POST","params":[{"name":"PO_NO","in":"body","type":"string"},{"name":"MAJ_CAT","in":"body","type":"string"},{"name":"DESIGN_NO","in":"body","type":"string"},{"name":"QTY","in":"body","type":"string"},{"name":"RTNO","in":"body","type":"string"},{"name":"COMP_ART","in":"body","type":"string"},{"name":"FILEPATH","in":"body","type":"string"},{"name":"REMARKS","in":"body","type":"string"},{"name":"HHTUSER","in":"body","type":"string"},{"name":"ASN_NO","in":"body","type":"string"},{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"}],"tables":["EX_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Routing/Update_Routing_StatusController.cs"},{"id":"zme2mlive","name":"ZME2M_LIve","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZME2M_LIVE","route":"api/ZME2M_LIve","method":"POST","params":[{"name":"IM_DATE_FROM","in":"body","type":"string"},{"name":"IM_DATE_TO","in":"body","type":"string"},{"name":"IM_COMP","in":"body","type":"string"},{"name":"SIGN","in":"body","type":"string"},{"name":"OPTION","in":"body","type":"string"},{"name":"LOW","in":"body","type":"string"},{"name":"HIGH","in":"body","type":"string"},{"name":"Stcode","in":"body","type":"string"}],"tables":["IT_WERKS","ET_ARTICLE_COLOR","ET_PUR_DATA","ET_EAN_DATA","EX_RETURN"],"path":"Controllers/Vendor_SRM_Routing/ZME2M_LIveController.cs"},{"id":"zmmartcreationrfc","name":"ZMM_ART_CREATION_RFC","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZMM_ART_CREATION_RFC","route":"api/ZMM_ART_CREATION_RFC","method":"POST","params":[{"name":"HSN_CODE","in":"body","type":"string"},{"name":"SUB_DIV","in":"body","type":"string"},{"name":"MC_CD","in":"body","type":"string"},{"name":"VENDOR","in":"body","type":"string"},{"name":"DSG_NO","in":"body","type":"string"},{"name":"MRP","in":"body","type":"string"},{"name":"SEASON","in":"body","type":"string"},{"name":"ARTICLE_DES1","in":"body","type":"string"},{"name":"PRICE_BAND_CATEGORY","in":"body","type":"string"},{"name":"M_MAIN_MVGR","in":"body","type":"string"},{"name":"M_MACRO_MVGR","in":"body","type":"string"},{"name":"M_FAB_DIV","in":"body","type":"string"},{"name":"M_FAB","in":"body","type":"string"},{"name":"M_FAB2","in":"body","type":"string"},{"name":"M_YARN","in":"body","type":"string"},{"name":"M_YARN02","in":"body","type":"string"},{"name":"M_WEAVE_2","in":"body","type":"string"},{"name":"M_COMPOSITION","in":"body","type":"string"},{"name":"M_FINISH","in":"body","type":"string"},{"name":"M_CONSTRUCTION","in":"body","type":"string"},{"name":"M_SHADE","in":"body","type":"string"},{"name":"M_LYCRA","in":"body","type":"string"},{"name":"M_GSM","in":"body","type":"string"},{"name":"M_COUNT","in":"body","type":"string"},{"name":"M_OUNZ","in":"body","type":"string"},{"name":"M_COLLAR","in":"body","type":"string"},{"name":"M_NECK_BAND_STYLE","in":"body","type":"string"},{"name":"M_PLACKET","in":"body","type":"string"},{"name":"M_BLT_MAIN_STYLE","in":"body","type":"string"},{"name":"M_SUB_STYLE_BLT","in":"body","type":"string"},{"name":"M_SLEEVES_MAIN_STYLE","in":"body","type":"string"},{"name":"M_BTM_FOLD","in":"body","type":"string"},{"name":"M_NECK_BAND","in":"body","type":"string"},{"name":"M_FO_BTN_STYLE","in":"body","type":"string"},{"name":"NO_OF_POCKET","in":"body","type":"string"},{"name":"M_POCKET","in":"body","type":"string"},{"name":"POCKET_PLACEMENT","in":"body","type":"string"},{"name":"M_FIT","in":"body","type":"string"},{"name":"M_PATTERN","in":"body","type":"string"},{"name":"M_LENGTH","in":"body","type":"string"},{"name":"M_DC_SUB_STYLE","in":"body","type":"string"},{"name":"M_BTN_MAIN_MVGR","in":"body","type":"string"},{"name":"M_ZIP","in":"body","type":"string"},{"name":"M_ZIP_COL","in":"body","type":"string"},{"name":"M_PRINT_TYPE","in":"body","type":"string"},{"name":"M_PRINT_PLACEMENT","in":"body","type":"string"},{"name":"M_PRINT_STYLE","in":"body","type":"string"},{"name":"M_PATCHES","in":"body","type":"string"},{"name":"M_PATCH_TYPE","in":"body","type":"string"},{"name":"M_EMBROIDERY","in":"body","type":"string"},{"name":"M_EMB_TYPE","in":"body","type":"string"},{"name":"M_WASH","in":"body","type":"string"},{"name":"M_PD","in":"body","type":"string"},{"name":"MVGR_BRAND_VENDOR","in":"body","type":"string"},{"name":"M_YARN_02","in":"body","type":"string"}],"tables":["IM_DATA","LT_DATA","ET_EAN_DATA","EX_DATA"],"path":"Controllers/Vendor_SRM_Routing/ZMM_ART_CREATION_RFCController.cs"},{"id":"zpomodification","name":"ZPO_MODIFICATION","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZPO_MODIFICATION","route":"api/ZPO_MODIFICATION","method":"POST","params":[{"name":"IM_PO_NO","in":"body","type":"string"},{"name":"IM_PO_DEL_DATE","in":"body","type":"string"},{"name":"IM_DEL_CHG_DATE_LOW","in":"body","type":"string"},{"name":"IM_DEL_CHG_DATE_HIGH","in":"body","type":"string"},{"name":"EBELN","in":"body","type":"string"},{"name":"ORIGNAL_DEL_DATE","in":"body","type":"string"},{"name":"CHNG_NO","in":"body","type":"string"},{"name":"CURRENT_DEL_DATE","in":"body","type":"string"},{"name":"DEL_EXT_DATE","in":"body","type":"string"},{"name":"DELAYED_BY","in":"body","type":"string"},{"name":"REASON","in":"body","type":"string"}],"tables":["ET_PO_OUTPUT","EX_RETURN"],"path":"Controllers/Vendor_SRM_Routing/ZPO_MODIFICATIONController.cs"},{"id":"zvndputwaysavedatarfc","name":"ZVND_PUTWAY_SAVE_DATA_RFC","folder":"Vendor_SRM_Routing","group":"Vendor SRM / Routing","rfc":"ZVND_PUTWAY_SAVE_DATA_RFC","route":"api/ZVND_PUTWAY_SAVE_DATA_RFC","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"}],"tables":["IT_DATA","EX_RETURN"],"path":"Controllers/Vendor_SRM_Routing/ZVND_PUTWAY_SAVE_DATA_RFCController.cs"},{"id":"zonevendordata","name":"ZoneVendorData","folder":"Vendor_SRM_Zone","group":"Vendor SRM Zone","rfc":"ZSRM_GET_VENDOR_ZONE_DATA","route":"api/ZoneVendorData","method":"POST","params":[{"name":"IM_ZONE_ID","in":"body","type":"string"}],"tables":["ET_DATA","EX_RETURN"],"path":"Controllers/Vendor_SRM_Zone/ZoneVendorDataController.cs"},{"id":"zonevendorpodata","name":"ZoneVendorPoData","folder":"Vendor_SRM_Zone","group":"Vendor SRM Zone","rfc":"ZSRM_VEND_PEND_PO","route":"api/ZoneVendorPoData","method":"POST","params":[{"name":"IM_LIFNR","in":"body","type":"string"}],"tables":["ET_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Zone/ZoneVendorPoDataController.cs"},{"id":"zonepodetail","name":"Zone_PO_Detail","folder":"Vendor_SRM_Zone","group":"Vendor SRM Zone","rfc":"ZSRM_PO_DETAIL","route":"api/Zone_PO_Detail","method":"POST","params":[{"name":"IM_USER","in":"body","type":"string"},{"name":"IM_PO","in":"body","type":"string"}],"tables":["ET_DATA","ES_RETURN"],"path":"Controllers/Vendor_SRM_Zone/Zone_PO_DetailController.cs"}];
+
+const GITHUB_BASE = "https://github.com/akash0631/rfc-api/blob/master/";
+const IIS_BASE    = "https://V2DC-ADDVERB/";
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+function init() {
+  // Stats
+  const totalParams = ENDPOINTS.reduce((s,e)=>s+e.params.length,0);
+  const totalTables = new Set(ENDPOINTS.flatMap(e=>e.tables)).size;
+  const groups = [...new Set(ENDPOINTS.map(e=>e.group))];
+  
+  document.getElementById("total-count").textContent = ENDPOINTS.length;
+  document.getElementById("group-count").textContent  = groups.length;
+  document.getElementById("ws-total").textContent   = ENDPOINTS.length;
+  document.getElementById("ws-groups").textContent  = groups.length;
+  document.getElementById("ws-params").textContent  = totalParams;
+  document.getElementById("ws-tables").textContent  = totalTables;
+
+  renderSidebar(ENDPOINTS);
+  
+  // Auto-open from hash
+  if (location.hash) {
+    const id = location.hash.slice(1);
+    const ep = ENDPOINTS.find(e=>e.id===id);
+    if (ep) showEndpoint(ep);
+  }
+}
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+function renderSidebar(endpoints) {
+  const grouped = {};
+  for (const ep of endpoints) {
+    if (!grouped[ep.group]) grouped[ep.group]=[];
+    grouped[ep.group].push(ep);
+  }
+  
+  const container = document.getElementById("sidebarGroups");
+  container.innerHTML = "";
+  
+  for (const [group, eps] of Object.entries(grouped)) {
+    const gid = "g_"+group.replace(/\W/g,"_");
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <div class="group-header" onclick="toggleGroup('${gid}')">
+        <span>${group}</span>
+        <span class="count">${eps.length}</span>
+      </div>
+      <div class="group-endpoints" id="${gid}">
+        ${eps.map(ep=>`
+          <div class="ep-item" id="item_${ep.id}" onclick="showEndpoint(ENDPOINTS.find(e=>e.id==='${ep.id}'))">
+            <span class="method-dot"></span>
+            ${ep.name}
+          </div>
+        `).join("")}
+      </div>
+    `;
+    container.appendChild(div);
+  }
+}
+
+function toggleGroup(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display==="none" ? "" : "none";
+}
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+function filterEndpoints() {
+  const q = document.getElementById("searchInput").value.toLowerCase().trim();
+  if (!q) { renderSidebar(ENDPOINTS); return; }
+  const filtered = ENDPOINTS.filter(e=>
+    e.name.toLowerCase().includes(q) ||
+    e.rfc.toLowerCase().includes(q) ||
+    e.group.toLowerCase().includes(q) ||
+    e.params.some(p=>p.name.toLowerCase().includes(q)) ||
+    e.tables.some(t=>t.toLowerCase().includes(q))
+  );
+  renderSidebar(filtered);
+}
+
+// ─── Endpoint Detail ──────────────────────────────────────────────────────────
+let currentEp = null;
+let colOps = [];
+
+function showEndpoint(ep) {
+  if (!ep) return;
+  currentEp = ep;
+  colOps = [];
+  location.hash = ep.id;
+  
+  // Highlight sidebar
+  document.querySelectorAll(".ep-item").forEach(el=>el.classList.remove("active"));
+  const item = document.getElementById("item_"+ep.id);
+  if (item) { item.classList.add("active"); item.scrollIntoView({block:"nearest"}); }
+  
+  document.getElementById("welcomeState").style.display = "none";
+  document.getElementById("endpointDetail").style.display = "block";
+  
+  const paramsHtml = ep.params.length ? `
+    <table class="param-table">
+      <thead><tr><th>Parameter</th><th>Type</th><th>Source</th></tr></thead>
+      <tbody>
+        ${ep.params.map(p=>`
+          <tr>
+            <td class="param-name">${p.name}</td>
+            <td class="param-type">string</td>
+            <td><span class="param-in">body</span></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  ` : `<div class="no-params">No explicit request parameters extracted — check source file.</div>`;
+
+  const tablesHtml = ep.tables.length ? ep.tables.map(t=>`
+    <span class="table-chip">${t}</span>
+  `).join("") : `<span style="color:var(--dim);font-family:var(--font);font-size:12px;">No tables detected</span>`;
+
+  document.getElementById("endpointDetail").innerHTML = `
+    <div class="ep-header">
+      <div class="ep-title">
+        <span class="method-badge">POST</span>
+        <span class="ep-name">${ep.name}</span>
+      </div>
+      <div class="ep-rfc">SAP RFC Function: <span>${ep.rfc}</span></div>
+      <div>
+        <div class="ep-route">
+          <span class="base">IIS → SAP /</span>${ep.route}
+        </div>
+      </div>
+      <a class="source-link" href="${GITHUB_BASE}${ep.path}" target="_blank">
+        ↗ View source on GitHub
+      </a>
+    </div>
+
+    <!-- Request Parameters -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">
+          Request Parameters
+          <span class="section-count">${ep.params.length}</span>
+        </span>
+      </div>
+      <div class="section-body">${paramsHtml}</div>
+    </div>
+
+    <!-- Response Tables -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">
+          SAP Response Tables
+          <span class="section-count">${ep.tables.length}</span>
+        </span>
+      </div>
+      <div class="table-list">${tablesHtml}</div>
+    </div>
+
+    <!-- Column Manager -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Manage Data Lake Columns</span>
+      </div>
+      <div class="col-mgr">
+        <div class="col-mgr-form">
+          <div>
+            <label>Column Name</label>
+            <input class="col-input" id="colName" type="text" placeholder="e.g. STORE_CODE">
+          </div>
+          <div>
+            <label>SQL Type</label>
+            <input class="col-input" id="colType" type="text" placeholder="e.g. NVARCHAR(50)" value="NVARCHAR(255)">
+          </div>
+          <div style="display:flex;gap:8px;">
+            <div>
+              <label>&nbsp;</label>
+              <button class="add-btn" onclick="addColOp('ADD')">+ Add</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button class="remove-btn" onclick="addColOp('REMOVE')">− Remove</button>
+            </div>
+          </div>
+        </div>
+        <div id="colOpsList" class="col-ops-list"></div>
+        <button class="apply-btn" id="applyBtn" onclick="applyColumns()" disabled>
+          ⚡ Apply Changes to Data Lake
+        </button>
+        <div class="col-result" id="colResult"></div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Column Manager ───────────────────────────────────────────────────────────
+function addColOp(action) {
+  const name = document.getElementById("colName").value.trim().toUpperCase();
+  const type = document.getElementById("colType").value.trim() || "NVARCHAR(255)";
+  if (!name) { document.getElementById("colName").focus(); return; }
+  
+  colOps.push({action, column: name, sqlType: type});
+  document.getElementById("colName").value = "";
+  renderColOps();
+}
+
+function removeColOp(i) {
+  colOps.splice(i, 1);
+  renderColOps();
+}
+
+function renderColOps() {
+  const el = document.getElementById("colOpsList");
+  if (!el) return;
+  el.innerHTML = colOps.map((op,i)=>`
+    <div class="col-op-item">
+      <span class="${op.action==='ADD'?'col-op-add':'col-op-remove'}">${op.action==='ADD'?'+':'-'}</span>
+      <span style="color:var(--blue)">${op.column}</span>
+      <span style="color:var(--muted)">${op.action==='ADD'?op.sqlType:''}</span>
+      <button class="col-op-del" onclick="removeColOp(${i})">✕</button>
+    </div>
+  `).join("");
+  
+  const btn = document.getElementById("applyBtn");
+  if (btn) btn.disabled = colOps.length === 0;
+}
+
+async function applyColumns() {
+  if (!currentEp || colOps.length === 0) return;
+  
+  const btn = document.getElementById("applyBtn");
+  const result = document.getElementById("colResult");
+  btn.disabled = true;
+  btn.textContent = "Applying...";
+  
+  // Derive table name from first table in ep, or use RFC name
+  const tableName = currentEp.tables[0] || currentEp.rfc.replace(/_RFC$/,"");
+  
+  try {
+    const r = await fetch("/columns", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({tableName, operations: colOps})
+    });
+    const d = await r.json();
+    
+    if (r.ok) {
+      result.className = "col-result ok";
+      result.textContent = `✓ Applied ${colOps.length} change(s) to ${tableName}. SQL migration pushed to GitHub.`;
+      result.style.display = "block";
+      colOps = [];
+      renderColOps();
+    } else {
+      throw new Error(d.error || "Unknown error");
+    }
+  } catch(e) {
+    result.className = "col-result err";
+    result.textContent = "✗ Error: " + e.message;
+    result.style.display = "block";
+  }
+  
+  btn.textContent = "⚡ Apply Changes to Data Lake";
+  btn.disabled = colOps.length === 0;
+}
+
+init();
+</script>
+</body>
+</html>

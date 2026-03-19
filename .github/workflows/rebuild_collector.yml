@@ -1,0 +1,86 @@
+name: Rebuild RFC Collector with Pascal case fix
+on:
+  workflow_dispatch:
+jobs:
+  rebuild:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find dotnet and rebuild RFC Collector
+        shell: powershell
+        run: |
+          # Find dotnet
+          $dotnet = $null
+          foreach ($p in @("dotnet","C:\dotnet8\dotnet.exe","C:\Program Files\dotnet\dotnet.exe","C:\dotnet\dotnet.exe")) {
+            if (Get-Command $p -EA SilentlyContinue) { $dotnet = $p; break }
+            if ($p -ne "dotnet" -and (Test-Path $p)) { $dotnet = $p; break }
+          }
+          Write-Host "dotnet: $dotnet"
+          if (-not $dotnet) { Write-Host "dotnet not found!"; exit 1 }
+          
+          # Show dotnet version
+          & $dotnet --version
+          
+          # Publish RFC Collector
+          & $dotnet publish rfc-collector/RfcCollector/RfcCollector.csproj -c Release -r win-x64 --self-contained true -o C:\RfcCollector_new
+          Write-Host "Publish exit: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          
+          # Show what was built
+          Get-ChildItem C:\RfcCollector_new | Select Name | Format-Table
+          Write-Host "New exe: $((Get-Item 'C:\RfcCollector_new\RfcCollector.exe' -EA SilentlyContinue).Length) bytes"
+
+      - name: Swap service exe and restart
+        shell: powershell
+        run: |
+          # Stop service
+          Stop-Service RfcCollector -Force -EA SilentlyContinue
+          Start-Sleep 4
+          
+          # Backup old
+          Copy-Item "C:\RfcCollector\RfcCollector.exe" "C:\RfcCollector\RfcCollector.exe.bak" -Force -EA SilentlyContinue
+          
+          # Copy new files over
+          Copy-Item "C:\RfcCollector_new\*" "C:\RfcCollector\" -Force
+          
+          # Write correct appsettings
+          $cfg = @{
+            Logging = @{ LogLevel = @{ Default = "Information"; "Microsoft.AspNetCore" = "Warning" } }
+            AllowedHosts = "*"
+            IIS_HOST = "127.0.0.1"
+            IIS_PORT = "80"
+          }
+          $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
+          Write-Host "Config written"
+          
+          # Start service
+          Start-Service RfcCollector
+          Start-Sleep 12
+          Write-Host "Service: $((Get-Service RfcCollector).Status)"
+
+      - name: Test corrected URL routing
+        shell: powershell
+        run: |
+          # The fix: ZADVANCE_PAYMENT_RFC → ZAdvancePaymentRfc → /api/ZAdvancePaymentRfc/Execute
+          Write-Host "=== Test RFC Collector health ==="
+          try { $r = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8; Write-Host $r.Content } catch { Write-Host $_.Exception.Message }
+          
+          Write-Host "=== Test IIS :80 direct ==="
+          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          try { 
+            $r = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+            Write-Host "IIS :80 → HTTP $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))"
+          } catch { Write-Host "IIS :80 error: $($_.Exception.Message)" }
+          
+          Write-Host "=== Test full pipeline via RFC Collector ==="
+          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":3}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "FETCH HTTP $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(600,$r.Content.Length)))
+          } catch { Write-Host "FETCH ERROR: $($_.Exception.Message)" }
+          
+          Write-Host "=== IIS appcmd list sites ==="
+          & "C:\Windows\System32\inetsrv\appcmd.exe" list sites
+          & "C:\Windows\System32\inetsrv\appcmd.exe" list vdir

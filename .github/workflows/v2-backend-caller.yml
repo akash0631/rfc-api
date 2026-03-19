@@ -1,0 +1,11 @@
+name: v2 Backend Caller
+
+on:
+  push:
+    paths:
+      - '.trigger-v2-backend'
+
+jobs:
+  call-deploy:
+    uses: akash0631/rfc-api/.github/workflows/fix-and-deploy-v2-backend.yml@master
+    secrets: inherit

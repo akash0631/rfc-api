@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>V2 Retail — RFC Pipeline Hub</title>
+  <style>
+    :root{--blue:#1A3C6E;--accent:#E8401C;--green:#22c55e;--light:#F4F7FB;--border:#dde3ee;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',sans-serif;background:var(--light);color:#222;min-height:100vh;}
+
+    /* Top bar */
+    #topbar{background:var(--blue);padding:16px 32px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,.3);}
+    .logo{display:flex;align-items:center;gap:14px;}
+    .logo-icon{width:40px;height:40px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;}
+    .logo-text{color:#fff;font-size:22px;font-weight:700;letter-spacing:.3px;}
+    .logo-sub{color:#a8c4e8;font-size:12px;margin-top:2px;}
+    .status-pill{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);color:#86efac;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;}
+    .status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+    /* Hero */
+    .hero{padding:52px 32px 36px;text-align:center;max-width:760px;margin:0 auto;}
+    .hero h1{font-size:32px;font-weight:800;color:var(--blue);margin-bottom:10px;}
+    .hero p{color:#555;font-size:16px;line-height:1.6;max-width:580px;margin:0 auto;}
+
+    /* Stats bar */
+    .stats{display:flex;justify-content:center;gap:0;margin:28px auto;max-width:720px;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.06);}
+    .stat{flex:1;padding:18px 16px;text-align:center;border-right:1px solid var(--border);}
+    .stat:last-child{border-right:none;}
+    .stat-num{font-size:26px;font-weight:800;color:var(--blue);}
+    .stat-label{font-size:11px;color:#888;margin-top:3px;text-transform:uppercase;letter-spacing:.5px;}
+
+    /* Cards grid */
+    .section{max-width:1040px;margin:0 auto;padding:0 24px 48px;}
+    .section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#888;margin-bottom:16px;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;}
+    .card{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:24px;text-decoration:none;color:inherit;transition:all .2s;display:block;position:relative;overflow:hidden;}
+    .card:hover{border-color:var(--blue);box-shadow:0 4px 20px rgba(26,60,110,.12);transform:translateY(-2px);}
+    .card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--blue);opacity:0;transition:.2s;}
+    .card:hover::before{opacity:1;}
+    .card.accent::before{background:var(--accent);opacity:1;}
+    .card.green::before{background:var(--green);opacity:1;}
+    .card-icon{font-size:28px;margin-bottom:12px;}
+    .card-title{font-size:16px;font-weight:700;color:var(--blue);margin-bottom:6px;}
+    .card-desc{font-size:13px;color:#666;line-height:1.5;}
+    .card-meta{margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .tag{background:#f0f4fa;color:var(--blue);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+    .tag.green{background:#dcfce7;color:#15803d;}
+    .tag.orange{background:#fff7ed;color:#c2410c;}
+    .arrow{margin-left:auto;color:#aaa;font-size:16px;transition:.2s;}
+    .card:hover .arrow{color:var(--blue);transform:translateX(3px);}
+
+    /* Divider */
+    .divider{max-width:1040px;margin:8px auto 24px;padding:0 24px;}
+    .divider hr{border:none;border-top:1px solid var(--border);}
+
+    /* Footer */
+    footer{text-align:center;padding:24px;color:#aaa;font-size:12px;border-top:1px solid var(--border);margin-top:8px;}
+    footer a{color:#888;text-decoration:none;}
+    footer a:hover{color:var(--blue);}
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="logo">
+    <div class="logo-icon">V2</div>
+    <div>
+      <div class="logo-text">V2 Retail · RFC Pipeline</div>
+      <div class="logo-sub">SAP ECC → Data Lake → Any App</div>
+    </div>
+  </div>
+  <div class="status-pill"><div class="status-dot"></div>All Systems Live</div>
+</div>
+
+<div class="hero">
+  <h1>RFC Pipeline Hub</h1>
+  <p>Central command for the V2 Retail SAP integration layer. Fetch SAP data, explore 113 RFCs, query the Data Lake, and auto-generate new API controllers from spec docs.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num">113</div><div class="stat-label">RFC Controllers</div></div>
+  <div class="stat"><div class="stat-num">82</div><div class="stat-label">Data Lake Tables</div></div>
+  <div class="stat"><div class="stat-num">18</div><div class="stat-label">SAP Modules</div></div>
+  <div class="stat"><div class="stat-num">300+</div><div class="stat-label">Stores</div></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Core Tools</div>
+  <div class="grid">
+
+    <a class="card accent" href="/rfc-generator.html">
+      <div class="card-icon">⚡</div>
+      <div class="card-title">RFC Generator</div>
+      <div class="card-desc">Upload a SAP RFC spec (.docx) → Claude generates the C# controller → auto-deploys to IIS on .46 in ~90 seconds.</div>
+      <div class="card-meta">
+        <span class="tag orange">Auto CI/CD</span>
+        <span class="tag">Claude AI</span>
+        <span class="arrow">→</span>
+      </div>
+    </a>
+
+    <a class="card" href="/rfc_explorer.html">
+      <div class="card-icon">🔍</div>
+      <div class="card-title">RFC Explorer</div>
+      <div class="card-desc">Browse all 113 RFC controllers across 18 modules. Search by name, view import/export parameters, endpoint routes, and SQL tables.</div>
+      <div class="card-meta">
+        <span class="tag">113 RFCs</span>
+        <span class="tag">18 Modules</span>
+        <span class="arrow">→</span>
+      </div>
+    </a>
+
+    <a class="card green" href="https://v2-rfc-pipeline.akash-bab.workers.dev/sap-fetch" target="_blank">
+      <div class="card-icon">🛰️</div>
+      <div class="card-title">SAP Fetch UI</div>
+      <div class="card-desc">Live SAP data fetcher. Pick any RFC, fill parameters, hit Fetch — data lands in claudetestv2 SQL tables on .46 instantly.</div>
+      <div class="card-meta">
+        <span class="tag green">Live SAP</span>
+        <span class="tag">40+ RFCs</span>
+        <span class="arrow">→</span>
+      </div>
+    </a>
+
+    <a class="card" href="/data-lake.html">
+      <div class="card-icon">🗄️</div>
+      <div class="card-title">Data Lake API</div>
+      <div class="card-desc">Swagger UI for all 82 Data Lake tables. OData REST — $filter, $top, $skip, $select, $orderby. Try it out directly against Azure DAB.</div>
+      <div class="card-meta">
+        <span class="tag">82 Tables</span>
+        <span class="tag">OData REST</span>
+        <span class="arrow">→</span>
+      </div>
+    </a>
+
+  </div>
+</div>
+
+<div class="divider"><hr/></div>
+
+<div class="section">
+  <div class="section-title">Infrastructure</div>
+  <div class="grid">
+
+    <a class="card" href="https://v2-rfc-pipeline.akash-bab.workers.dev/explore" target="_blank">
+      <div class="card-icon">📡</div>
+      <div class="card-title">API Explorer (Worker)</div>
+      <div class="card-desc">Interactive RFC endpoint explorer hosted on Cloudflare Worker. Live endpoint documentation with request/response structure.</div>
+      <div class="card-meta">
+        <span class="tag">Cloudflare Worker</span>
+        <span class="arrow">→</span>
+      </div>
+    </a>
+
+    <a class="card" href="https://my-dab-app.azurewebsites.net/" target="_blank">
+      <div class="card-icon">☁️</div>
+      <div class="card-title">Azure DAB</div>
+      <div class="card-desc">Azure Data API Builder serving DataV2 SQL Server (192.168.151.28). Health status and direct REST access to all registered tables.</div>
+      <div class="card-meta">
+        <span class="tag">Azure App Service</span>
+        <span class="tag">DataV2</span>
+        <span class="arrow">→</span>
+      </div>
+    </a>
+
+    <a class="card" href="https://github.com/akash0631/rfc-api" target="_blank">
+      <div class="card-icon">💻</div>
+      <div class="card-title">GitHub Repo</div>
+      <div class="card-desc">Source for all 113 RFC controllers, RFC Collector service, Cloudflare Worker, GitHub Actions CI/CD workflows, and DAB config.</div>
+      <div class="card-meta">
+        <span class="tag">akash0631/rfc-api</span>
+        <span class="tag">Public</span>
+        <span class="arrow">→</span>
+      </div>
+    </a>
+
+    <a class="card" href="https://v2-rfc-deploy.akash-bab.workers.dev/health" target="_blank">
+      <div class="card-icon">🚀</div>
+      <div class="card-title">Deploy Worker</div>
+      <div class="card-desc">Dedicated Cloudflare Worker handling RFC auto-deployment pipeline. Processes docx uploads, calls Claude, pushes to GitHub, tracks jobs.</div>
+      <div class="card-meta">
+        <span class="tag">v2-rfc-deploy</span>
+        <span class="arrow">→</span>
+      </div>
+    </a>
+
+  </div>
+</div>
+
+<div class="divider"><hr/></div>
+
+<div class="section">
+  <div class="section-title">Architecture</div>
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;font-family:monospace;font-size:13px;color:#444;line-height:2;">
+    <span style="color:var(--accent);font-weight:700;">SAP ECC Dev</span> (192.168.144.174 / client 210)
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;↓ &nbsp;<span style="color:#888">ABAP RFC over NCo</span>
+    <span style="color:var(--blue);font-weight:700;">IIS Store Tracker</span> (VM-CRM .46 :80) &nbsp;←&nbsp; 113 .NET 4.8 controllers
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;↓ &nbsp;<span style="color:#888">HTTP POST /api/{RfcName}/Execute</span>
+    <span style="color:var(--blue);font-weight:700;">RFC Collector</span> (VM-CRM .46 :9090) &nbsp;←&nbsp; ASP.NET Core 8 service
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;↓ &nbsp;<span style="color:#888">Azure VPN tunnel</span>
+    <span style="color:var(--blue);font-weight:700;">v2-rfc-relay</span> (Azure App Service) &nbsp;←&nbsp; HTTPS bridge
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;↓ &nbsp;<span style="color:#888">Cloudflare Worker</span>
+    <span style="color:var(--accent);font-weight:700;">v2-rfc-pipeline</span> (Cloudflare) &nbsp;←&nbsp; /explore /sap-fetch /data-lake
+    <br>&nbsp;&nbsp;&nbsp;&nbsp;↓ &nbsp;<span style="color:#888">SQL Server write</span>
+    <span style="color:var(--blue);font-weight:700;">claudetestv2</span> (VM-CRM .46 :1433) &nbsp;→&nbsp; <span style="color:var(--green);font-weight:700;">DataV2</span> (.28) &nbsp;→&nbsp; <span style="color:var(--blue);font-weight:700;">Azure DAB</span> &nbsp;→&nbsp; <span style="color:var(--accent);font-weight:700;">Any App</span>
+  </div>
+</div>
+
+<footer>
+  V2 Retail RFC Pipeline &nbsp;·&nbsp; Built on Cloudflare Workers + Pages + Azure DAB + GitHub Actions
+  &nbsp;·&nbsp; <a href="https://github.com/akash0631/rfc-api">GitHub</a>
+  &nbsp;·&nbsp; <a href="https://v2-rfc-pipeline.akash-bab.workers.dev/explore">API Docs</a>
+</footer>
+
+</body>
+</html>

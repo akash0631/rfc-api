@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V2 RFC API Explorer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; min-height: 100vh; color: #1e293b; }
+  .topbar { background: #fff; border-bottom: 1px solid #e2e8f0; padding: 14px 28px; display: flex; align-items: center; gap: 14px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #1e293b; letter-spacing: -0.3px; }
+  .topbar-logo span { color: #4361ee; }
+  .topbar-badge { background: #f0f4ff; border: 1px solid #c7d2fe; color: #4361ee; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; font-family: monospace; }
+  .topbar-env { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 11px; color: #64748b; }
+  .env-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; display: inline-block; }
+  .search-bar { padding: 0 28px; margin: 20px 0 0; }
+  .search-bar input { width: 100%; max-width: 560px; padding: 9px 14px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: #fff; color: #1e293b; outline: none; }
+  .search-bar input:focus { border-color: #4361ee; box-shadow: 0 0 0 3px #eef0ff; }
+  .layout { display: flex; gap: 0; }
+  .sidebar { width: 220px; min-width: 220px; padding: 20px 0 40px; position: sticky; top: 57px; height: calc(100vh - 57px); overflow-y: auto; border-right: 1px solid #e2e8f0; background: #fff; }
+  .sidebar-section { padding: 6px 16px 2px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; margin-top: 10px; }
+  .sidebar a { display: block; padding: 6px 16px; font-size: 12px; color: #475569; text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar a:hover { color: #4361ee; background: #f8faff; border-left-color: #c7d2fe; }
+  .sidebar a.active { color: #4361ee; font-weight: 600; border-left-color: #4361ee; background: #f0f4ff; }
+  .main { flex: 1; padding: 24px 28px 60px; max-width: 860px; }
+  .group-header { display: flex; align-items: center; gap: 10px; margin: 28px 0 14px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
+  .group-header h2 { font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.6px; }
+  .group-header .count { background: #f1f5f9; color: #64748b; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; font-family: monospace; }
+  .card { border: 1px solid #e4e8f0; border-radius: 10px; padding: 16px; margin-bottom: 10px; background: #fff; transition: box-shadow 0.15s; }
+  .card:hover { box-shadow: 0 2px 12px rgba(67,97,238,0.08); }
+  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .badge-method { background: #4361ee; color: #fff; border-radius: 5px; padding: 3px 10px; font-size: 11px; font-weight: 700; font-family: monospace; }
+  .badge-method.get { background: #16a34a; }
+  .endpoint-path { font-size: 13px; font-weight: 600; font-family: monospace; color: #1e293b; }
+  .badge-env { padding: 2px 9px; border-radius: 5px; font-size: 11px; font-family: monospace; font-weight: 600; }
+  .badge-env.dev { background: #f0fdf4; border: 1px solid #86efac; color: #16a34a; }
+  .badge-env.prd { background: #fff7ed; border: 1px solid #fed7aa; color: #ea580c; }
+  .badge-env.qa { background: #faf5ff; border: 1px solid #d8b4fe; color: #9333ea; }
+  .badge-tag { background: #f8fafc; border: 1px solid #e2e8f0; color: #64748b; padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: 600; }
+  .card-desc { font-size: 12px; color: #475569; margin-bottom: 10px; line-height: 1.5; }
+  .card-body { display: flex; gap: 10px; flex-wrap: wrap; }
+  .block { flex: 1; min-width: 200px; }
+  .block-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin-bottom: 5px; }
+  pre { background: #f8fafc; border: 1px solid #e2e8f0; color: #334155; padding: 10px 12px; border-radius: 7px; font-size: 11px; overflow-x: auto; line-height: 1.6; font-family: 'Fira Code', 'Courier New', monospace; }
+  .table-fields { font-size: 10px; color: #64748b; background: #fafbff; border: 1px solid #e8ecff; border-radius: 6px; padding: 8px 10px; margin-top: 4px; }
+  .table-fields .tf-row { display: flex; gap: 8px; padding: 2px 0; border-bottom: 1px solid #f0f2ff; }
+  .table-fields .tf-row:last-child { border-bottom: none; }
+  .tf-name { font-weight: 700; color: #4361ee; font-family: monospace; min-width: 90px; }
+  .tf-type { color: #9333ea; font-family: monospace; min-width: 90px; }
+  .tf-desc { color: #94a3b8; }
+  .card-footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #64748b; font-family: monospace; display: flex; gap: 12px; flex-wrap: wrap; }
+  .card-footer a { color: #4361ee; text-decoration: none; }
+  .card-footer a:hover { text-decoration: underline; }
+  .section-anchor { display: block; position: relative; top: -80px; visibility: hidden; }
+  .stats { display: flex; gap: 14px; padding: 0 28px; margin: 16px 0 0; flex-wrap: wrap; }
+  .stat { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 130px; }
+  .stat-num { font-size: 22px; font-weight: 800; color: #4361ee; font-family: monospace; }
+  .stat-label { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  @media (max-width: 700px) { .sidebar { display: none; } .main { padding: 16px; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">V2 <span>Retail</span> ÃÂ· RFC API Explorer</div>
+  <div class="topbar-badge">103 Controllers</div>
+  <div class="topbar-env">
+    <span class="env-dot"></span> DEV 192.168.144.174
+    &nbsp;|&nbsp; Cloudflare Worker Active
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num">6</div><div class="stat-label">Inbound RFCs</div></div>
+  <div class="stat"><div class="stat-num">3</div><div class="stat-label">Environments</div></div>
+  <div class="stat"><div class="stat-num">103</div><div class="stat-label">Total Controllers</div></div>
+  <div class="stat"><div class="stat-num">2</div><div class="stat-label">Inbound Modules</div></div>
+</div>
+
+<div class="search-bar">
+  <input type="text" id="search" placeholder="Search RFC name, description, field..." oninput="filterCards(this.value)">
+</div>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="sidebar-section">Inbound</div>
+    <a href="#unloading">HU Scanning &amp; Putway</a>
+    <a href="#putway">Inbound Putway to Bin</a>
+    <div class="sidebar-section">Finance</div>
+    <a href="#finance">Finance RFCs</a>
+    <div class="sidebar-section">Core</div>
+    <a href="#store">Store Master</a>
+    <a href="#test">Test / Utility</a>
+  </nav>
+
+  <div class="main">
+
+    <!-- Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ UNLOADING Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ -->
+    <a class="section-anchor" id="unloading"></a>
+    <div class="group-header">
+      <h2>Ã°ÂÂÂ¦ Unloading Ã¢ÂÂ HU Scanning &amp; Putway to Palette</h2>
+      <span class="count">3 RFCs</span>
+    </div>
+
+    <!-- ZVND_UNLOAD_HU_VALIDATE_RFC -->
+    <div class="card" data-tags="unloading hu validate inbound">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZVND_UNLOAD_HU_VALIDATE_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+        <span class="badge-tag">Inbound</span>
+      </div>
+      <p class="card-desc">Validate a scanned Handling Unit (HU) during vehicle unloading. Returns PO number, invoice, and vendor name linked to the HU.</p>
+      <div class="card-body">
+        <div class="block">
+          <div class="block-label">Import Parameters</div>
+          <pre>{
+  "IM_USER":  "[WWWOBJID]",
+  "IM_PLANT": "[WERKS_D]",
+  "IM_HU":    "[ZEXT_HU]"
+}</pre>
+        </div>
+        <div class="block">
+          <div class="block-label">Export Ã¢ÂÂ ET_DATA (ZTT_VEN_BOX)</div>
+          <div class="table-fields">
+            <div class="tf-row"><span class="tf-name">HU_NO</span><span class="tf-type">ZEXT_HU</span><span class="tf-desc">HU number</span></div>
+            <div class="tf-row"><span class="tf-name">PO_NO</span><span class="tf-type">EBELN</span><span class="tf-desc">Purchase order</span></div>
+            <div class="tf-row"><span class="tf-name">INV_NO</span><span class="tf-type">ZBILL_NO</span><span class="tf-desc">Invoice number</span></div>
+            <div class="tf-row"><span class="tf-name">VENDOR_CODE</span><span class="tf-type">LIFNR</span><span class="tf-desc">Vendor code</span></div>
+            <div class="tf-row"><span class="tf-name">VENDOR_NAME</span><span class="tf-type">NAME1</span><span class="tf-desc">Vendor name</span></div>
+            <div class="tf-row"><span class="tf-name">ARTICLE_NO</span><span class="tf-type">MATNR</span><span class="tf-desc">Article number</span></div>
+            <div class="tf-row"><span class="tf-name">DESIGN</span><span class="tf-type">CHAR</span><span class="tf-desc">Design code</span></div>
+            <div class="tf-row"><span class="tf-name">QUANTITY</span><span class="tf-type">MENGE</span><span class="tf-desc">Quantity</span></div>
+            <div class="tf-row"><span class="tf-name">EAN</span><span class="tf-type">EAN11</span><span class="tf-desc">Barcode</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>EXPORT: EX_RETURN (BAPIRET2)</span>
+        <span>File: ZVND_UNLOAD_HU_VALIDATE_RFCController.cs</span>
+      </div>
+    </div>
+
+    <!-- ZVND_UNLOAD_PALLATE_VALIDATION -->
+    <div class="card" data-tags="unloading palette validate inbound">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZVND_UNLOAD_PALLATE_VALIDATION</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+        <span class="badge-tag">Inbound</span>
+      </div>
+      <p class="card-desc">Validate a scanned Palette after HU validation. Confirms palette is valid and ready for putway. Returns BAPIRET2 status only.</p>
+      <div class="card-body">
+        <div class="block">
+          <div class="block-label">Import Parameters</div>
+          <pre>{
+  "IM_USER":  "[WWWOBJID]",
+  "IM_PLANT": "[WERKS_D]",
+  "IM_HU":    "[ZEXT_HU]",
+  "IM_PALL":  "[ZZPALETTE]"
+}</pre>
+        </div>
+        <div class="block">
+          <div class="block-label">Response</div>
+          <pre>{
+  "Status":  true,
+  "Message": "Palette validated"
+}</pre>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>EXPORT: EX_RETURN (BAPIRET2)</span>
+        <span>File: ZVND_UNLOAD_PALLATE_VALIDATIONController.cs</span>
+      </div>
+    </div>
+
+    <!-- ZVND_UNLOAD_SAVE_RFC -->
+    <div class="card" data-tags="unloading save inbound">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZVND_UNLOAD_SAVE_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+        <span class="badge-tag">Inbound</span>
+      </div>
+      <p class="card-desc">Save unloading data to SAP after both HU and Palette are validated. Accepts a table of unload records (ZTT_UNLOAD_SAVE).</p>
+      <div class="card-body">
+        <div class="block">
+          <div class="block-label">Request Body</div>
+          <pre>{
+  "IM_USER": "[WWWOBJID]",
+  "IM_PARMS": [
+    {
+      "PLANT":   "[WERKS_D]",
+      "VEHICLE": "[ZVEH]",
+      "EXT_HU":  "[ZEXT_HU]",
+      "PALETTE": "[ZZPALETTE]",
+      "PO_NO":   "[EBELN]",
+      "BILL_NO": "[ZBILL_NO]"
+    }
+  ]
+}</pre>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>TABLE: IM_PARMS (ZTT_UNLOAD_SAVE)</span>
+        <span>EXPORT: EX_RETURN (BAPIRET2)</span>
+        <span>File: ZVND_UNLOAD_SAVE_RFCController.cs</span>
+      </div>
+    </div>
+
+    <!-- Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ PUTWAY TO BIN Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ -->
+    <a class="section-anchor" id="putway"></a>
+    <div class="group-header">
+      <h2>Ã°ÂÂÂ Inbound Putway to Bin</h2>
+      <span class="count">3 RFCs</span>
+    </div>
+
+    <!-- ZVND_PUTWAY_BIN_VAL_RFC -->
+    <div class="card" data-tags="putway bin validate inbound">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZVND_PUTWAY_BIN_VAL_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+        <span class="badge-tag">Putway</span>
+      </div>
+      <p class="card-desc">Validate a scanned BIN location (LGPLA) for inbound putway. BIN is shown greyed-out on screen after successful validation.</p>
+      <div class="card-body">
+        <div class="block">
+          <div class="block-label">Import Parameters</div>
+          <pre>{
+  "IM_USER":  "[WWWOBJID]",
+  "IM_PLANT": "[WERKS_D]",
+  "IM_BIN":   "[LGPLA]"
+}</pre>
+        </div>
+        <div class="block">
+          <div class="block-label">Response</div>
+          <pre>{
+  "Status":  true,
+  "Message": "BIN validated"
+}</pre>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>EXPORT: EX_RETURN (BAPIRET2)</span>
+        <span>File: ZVND_PUTWAY_BIN_VAL_RFCController.cs</span>
+      </div>
+    </div>
+
+    <!-- ZVND_PUTWAY_PALETTE_VAL_RFC -->
+    <div class="card" data-tags="putway palette validate inbound">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZVND_PUTWAY_PALETTE_VAL_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+        <span class="badge-tag">Putway</span>
+      </div>
+      <p class="card-desc">Validate a Palette for inbound putway. Returns vendor details, PO, invoice info and the total box count on that palette (ZTT_VEN_BOX).</p>
+      <div class="card-body">
+        <div class="block">
+          <div class="block-label">Import Parameters</div>
+          <pre>{
+  "IM_USER":  "[WWWOBJID]",
+  "IM_PLANT": "[WERKS_D]",
+  "IM_BIN":   "[ZEXT_HU]",
+  "IM_PALL":  "[ZZPALETTE]"
+}</pre>
+        </div>
+        <div class="block">
+          <div class="block-label">Export Ã¢ÂÂ ET_DATA (ZTT_VEN_BOX)</div>
+          <div class="table-fields">
+            <div class="tf-row"><span class="tf-name">HU_NO</span><span class="tf-type">ZEXT_HU</span><span class="tf-desc">HU number</span></div>
+            <div class="tf-row"><span class="tf-name">PO_NO</span><span class="tf-type">EBELN</span><span class="tf-desc">Purchase order</span></div>
+            <div class="tf-row"><span class="tf-name">INV_NO</span><span class="tf-type">ZBILL_NO</span><span class="tf-desc">Invoice number</span></div>
+            <div class="tf-row"><span class="tf-name">VENDOR_NAME</span><span class="tf-type">NAME1</span><span class="tf-desc">Vendor name</span></div>
+            <div class="tf-row"><span class="tf-name">QUANTITY</span><span class="tf-type">MENGE</span><span class="tf-desc">Quantity per HU</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>EXPORT: EX_RETURN (BAPIRET2), ET_DATA (ZTT_VEN_BOX)</span>
+        <span>Response includes BoxCount</span>
+        <span>File: ZVND_PUTWAY_PALETTE_VAL_RFCController.cs</span>
+      </div>
+    </div>
+
+    <!-- ZVND_PUTWAY_SAVE_DATA_RFC -->
+    <div class="card" data-tags="putway save data inbound">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZVND_PUTWAY_SAVE_DATA_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+        <span class="badge-tag">Putway</span>
+      </div>
+      <p class="card-desc">Save putway data to SAP after BIN and Palette are validated. Sends IT_DATA table rows (ZTT_PUTWAY_SAVE). After save, palette and bin clear from screen; PO/Vendor info persists.</p>
+      <div class="card-body">
+        <div class="block">
+          <div class="block-label">Request Body</div>
+          <pre>{
+  "IM_USER": "[WWWOBJID]",
+  "IT_DATA": [
+    {
+      "PLANT":   "[WERKS_D]",
+      "BIN":     "[LGPLA]",
+      "PALETTE": "[ZZPALETTE]",
+      "EXT_HU":  "[ZEXT_HU]",
+      "PO_NO":   "[EBELN]",
+      "BILL_NO": "[ZBILL_NO]"
+    }
+  ]
+}</pre>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>TABLE: IT_DATA (ZTT_PUTWAY_SAVE)</span>
+        <span>EXPORT: EX_RETURN (BAPIRET2)</span>
+        <span>File: ZVND_PUTWAY_SAVE_DATA_RFCController.cs</span>
+      </div>
+    </div>
+
+    <!-- Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ FINANCE Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ -->
+    <a class="section-anchor" id="finance"></a>
+    <div class="group-header">
+      <h2>Ã°ÂÂÂ° Finance RFCs</h2>
+      <span class="count">2 RFCs</span>
+    </div>
+
+    <!-- AUTO:ZFINANCE_DOCUMENT_RFC:2026-03-13 -->
+    <div class="card" data-tags="finance document">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZFINANCE_DOCUMENT_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+      </div>
+      <p class="card-desc">Finance document retrieval with posting date range filtering.</p>
+      <pre>{
+  "I_COMPANY_CODE":      "[BUKRS]",
+  "I_POSTING_DATE_LOW":  "[DATS]",
+  "I_POSTING_DATE_HIGH": "[DATS]"
+}</pre>
+      <div class="card-footer">
+        <span>Ã¢ÂÂ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_FINANCE_DOCUMENTS">ET_FINANCE_DOCUMENTS</a></span>
+      </div>
+    </div>
+
+    <!-- AUTO:ZADVANCE_PAYMENT_RFC:2026-03-13 -->
+    <div class="card" data-tags="finance advance payment">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZADVANCE_PAYMENT_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+      </div>
+      <p class="card-desc">Fetches advance payment documents for a company code within a posting date range.</p>
+      <pre>{
+  "I_COMPANY_CODE":      "[BUKRS]",
+  "I_POSTING_DATE_LOW":  "[BUDAT]",
+  "I_POSTING_DATE_HIGH": "[BUDAT]"
+}</pre>
+      <div class="card-footer">
+        <span>Ã¢ÂÂ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ADVANCE_PAYMENT">ET_ADVANCE_PAYMENT</a></span>
+      </div>
+    </div>
+
+    <!-- Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ STORE MASTER Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ -->
+    <a class="section-anchor" id="store"></a>
+    <div class="group-header">
+      <h2>Ã°ÂÂÂª Store Master</h2>
+      <span class="count">1 RFC</span>
+    </div>
+
+    <!-- AUTO:ZGET_STORE_MASTER_RFC:2026-03-13 -->
+    <div class="card" data-tags="store master">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZGET_STORE_MASTER_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+      </div>
+      <p class="card-desc">Fetch store master data from SAP by store code.</p>
+      <pre>{
+  "IV_STORE_CODE": "[CHAR10]"
+}</pre>
+      <div class="card-footer">
+        <span>Ã¢ÂÂ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZGET_STORE_MASTER">ET_ZGET_STORE_MASTER</a></span>
+      </div>
+    </div>
+
+    <!-- Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ TEST / UTILITY Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ -->
+    <a class="section-anchor" id="test"></a>
+    <div class="group-header">
+      <h2>Ã°ÂÂÂ§ Test / Utility</h2>
+      <span class="count">1 RFC</span>
+    </div>
+
+    <!-- AUTO:ZTEST_RFC:2026-03-13 -->
+    <div class="card" data-tags="test utility">
+      <div class="card-head">
+        <span class="badge-method">POST</span>
+        <code class="endpoint-path">/api/ZTEST_RFC</code>
+        <span class="badge-env dev">DEV ÃÂ· 192.168.144.174</span>
+      </div>
+      <p class="card-desc">Test RFC for pipeline validation.</p>
+      <pre>{
+  "IM_USER":  "[CHAR]",
+  "IM_WERKS": "[CHAR]"
+}</pre>
+      <div class="card-footer">
+        <span>Ã¢ÂÂ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZTEST">ET_ZTEST</a></span>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+function filterCards(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.card').forEach(card => {
+    const text = (card.textContent + ' ' + (card.dataset.tags || '')).toLowerCase();
+    card.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+// Sidebar active highlight on scroll
+const anchors = document.querySelectorAll('.section-anchor');
+const links   = document.querySelectorAll('.sidebar a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  anchors.forEach(a => { if (window.scrollY >= a.offsetTop - 100) current = a.id; });
+  links.forEach(l => {
+    l.classList.toggle('active', l.getAttribute('href') === '#' + current);
+  });
+}, { passive: true });
+</script>
+
+    <!-- AUTO:ZADVANCE_PAYMENT_RFC:2026-03-17 -->
+    <div style="border:1px solid #e4e8f0;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="background:#4361ee;color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;font-family:monospace;">POST</span>
+        <code style="font-size:13px;font-weight:600;">/api/ZADVANCE_PAYMENT_RFC</code>
+        <span style="background:#f0fdf4;border:1px solid #86efac;color:#16a34a;padding:2px 9px;border-radius:5px;font-size:11px;font-family:monospace;">Dev</span>
+      </div>
+      <p style="font-size:12px;color:#475569;margin-bottom:10px;">ZADVANCE_PAYMENT_RFC</p>
+      <pre style="background:#13141f;color:#9aa5d4;padding:12px;border-radius:7px;font-size:11px;overflow-x:auto;">{
+  "I_COMPANY_CODE": "[I_POSTING_DATE_LOW]",
+  "I_POSTING_DATE_HIGH": "[DOCUMENT_TYPE]"
+}</pre>
+    </div>
+
+    <!-- AUTO: ZADVANCE_PAYMENT_RFC:2026-03-17 -->
+    <div style="border:1px solid #e4e8f0;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="background:#4361ee;color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;font-family:monospace;">POST</span>
+        <code style="font-size:13px;font-weight:600;">/api/ ZADVANCE_PAYMENT_RFC</code>
+        <span style="background:#f0fdf4;border:1px solid #86efac;color:#16a34a;padding:2px 9px;border-radius:5px;font-size:11px;font-family:monospace;">Dev</span>
+      </div>
+      <p style="font-size:12px;color:#475569;margin-bottom:10px;"> ZADVANCE_PAYMENT_RFC</p>
+      <pre style="background:#13141f;color:#9aa5d4;padding:12px;border-radius:7px;font-size:11px;overflow-x:auto;">{
+  "I_COMPANY_CODE": "[I_POSTING_DATE_LOW]",
+  "I_POSTING_DATE_HIGH": "[DOCUMENT_TYPE]"
+}</pre>
+    </div>
+
+    <!-- AUTO:ZADVANCE_PAYMENT_RFC:2026-03-17 -->
+    <div style="border:1px solid #e4e8f0;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="background:#4361ee;color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;font-family:monospace;">POST</span>
+        <code style="font-size:13px;font-weight:600;">/api/ZADVANCE_PAYMENT_RFC</code>
+        <span style="background:#f0fdf4;border:1px solid #86efac;color:#16a34a;padding:2px 9px;border-radius:5px;font-size:11px;font-family:monospace;">Dev</span>
+      </div>
+      <p style="font-size:12px;color:#475569;margin-bottom:10px;">ZADVANCE_PAYMENT_RFC</p>
+      <pre style="background:#13141f;color:#9aa5d4;padding:12px;border-radius:7px;font-size:11px;overflow-x:auto;">{
+  "I_COMPANY_CODE": "[I_POSTING_DATE_LOW]",
+  "I_POSTING_DATE_HIGH": "[DOCUMENT_TYPE]"
+}</pre>
+    </div>
+
+  <!-- AUTO:ZPO_DD_UPD_RFC:2026-03-17 -->
+  <div style="border:1px solid #e4e8f0;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+      <span style="background:#4361ee;color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;font-family:monospace;">POST</span>
+      <code style="font-size:13px;font-weight:600;">/api/ZPO_DD_UPD_RFC</code>
+      <span style="background:#f0fdf4;border:1px solid #16a34a;color:#16a34a;padding:2px 9px;border-radius:5px;font-size:11px;font-family:monospace;">DEV Â· 192.168.144.174</span>
+    </div>
+    <p style="font-size:12px;color:#475569;margin-bottom:10px;">PO delivery date update RFC</p>
+    <pre style="background:#13141f;color:#9aa5d4;padding:12px;border-radius:7px;font-size:11px;overflow-x:auto;">{}</pre>
+    <div style="margin-top:8px;font-size:11px;color:#64748b;font-family:monospace;">
+      â Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZPO_DD_UPD" style="color:#4361ee;">https://my-dab-app.azurewebsites.net/api/ET_ZPO_DD_UPD</a>
+    </div>
+  </div>
+
+    <!-- AUTO:ZADVANCE_PAYMENT_RFC:2026-03-17 -->
+    <div style="border:1px solid #e4e8f0;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="background:#4361ee;color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;font-family:monospace;">POST</span>
+        <code style="font-size:13px;font-weight:600;">/api/ZADVANCE_PAYMENT_RFC</code>
+        <span style="background:#f0fdf4;border:1px solid #86efac;color:#16a34a;padding:2px 9px;border-radius:5px;font-size:11px;font-family:monospace;">Dev</span>
+      </div>
+      <p style="font-size:12px;color:#475569;margin-bottom:10px;">ZADVANCE_PAYMENT_RFC</p>
+      <pre style="background:#13141f;color:#9aa5d4;padding:12px;border-radius:7px;font-size:11px;overflow-x:auto;">{
+  "I_COMPANY_CODE": "[I_POSTING_DATE_LOW]",
+  "I_POSTING_DATE_HIGH": "[DOCUMENT_TYPE]"
+}</pre>
+    </div>
+
+  <!-- AUTO:ZPO_DD_UPD_RFC:2026-03-17 -->
+  <div style="border:1px solid #e4e8f0;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+      <span style="background:#4361ee;color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;font-family:monospace;">POST</span>
+      <code style="font-size:13px;font-weight:600;">/api/ZPO_DD_UPD_RFC</code>
+      <span style="background:#f0fdf4;border:1px solid #16a34a;color:#16a34a;padding:2px 9px;border-radius:5px;font-size:11px;font-family:monospace;">DEV · 192.168.144.174</span>
+    </div>
+    <p style="font-size:12px;color:#475569;margin-bottom:10px;">Purchase Order Due Date Update RFC</p>
+    <pre style="background:#13141f;color:#9aa5d4;padding:12px;border-radius:7px;font-size:11px;overflow-x:auto;">{}</pre>
+    <div style="margin-top:8px;font-size:11px;color:#64748b;font-family:monospace;">
+      ↓ Data Lake: <a href="https://my-dab-app.azurewebsites.net/api/ET_ZPO_DD_UPD" style="color:#4361ee;">https://my-dab-app.azurewebsites.net/api/ET_ZPO_DD_UPD</a>
+    </div>
+  </div>
+</body>
+</html>

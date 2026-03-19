@@ -1,0 +1,65 @@
+name: Build RFC app on .46
+'on':
+  push:
+    paths:
+    - .github/workflows/build_rfc_46.yml
+jobs:
+  build:
+    runs-on:
+    - self-hosted
+    - test-vm
+    steps:
+    - name: Copy compiled app from .36 + wire + restart
+      shell: cmd
+      run: 'net use \\192.168.151.36\C$ vrl@55555 /user:Administrator /persistent:no
+
+        echo NET_USE: %ERRORLEVEL%
+
+        echo === DLLs on .36 ===
+
+        dir "\\192.168.151.36\C$\actions-runner\_work\rfc-api\rfc-api\bin\Release"
+        /B 2>nul | find /c ".dll"
+
+        if not exist C:\RfcApp mkdir C:\RfcApp
+
+        robocopy "\\192.168.151.36\C$\actions-runner\_work\rfc-api\rfc-api\bin\Release"
+        C:\RfcApp /E /IS /IT /NFL /NDL
+
+        echo ROBOCOPY: %ERRORLEVEL%
+
+        copy /Y "\\192.168.151.36\C$\actions-runner\_work\rfc-api\rfc-api\Web.config"
+        C:\RfcApp\ 2>nul
+
+        net use \\192.168.151.36\C$ /delete /y 2>nul
+
+        dir C:\RfcApp\*.dll /B 2>nul | find /c ".dll"
+
+        dir C:\RfcApp\Vendor*.dll /B 2>nul
+
+        powershell -NoProfile -Command "$j=Get-Content C:\RfcCollector\appsettings.json|ConvertFrom-Json;
+        $j.IIS_HOST=''127.0.0.1''; $j.IIS_PORT=''8888''; $j|ConvertTo-Json -Depth
+        10|Set-Content C:\RfcCollector\appsettings.json; Write-Host Config-updated"
+
+        powershell -NoProfile -Command "Import-Module WebAdministration; Restart-WebAppPool
+        RfcApiPool -EA SilentlyContinue; Start-Sleep 6; Write-Host pool-recycled"
+
+        net stop RfcCollector
+
+        timeout /t 4 /nobreak
+
+        net start RfcCollector
+
+        timeout /t 12 /nobreak
+
+        sc query RfcCollector | findstr STATE
+
+        '
+    - name: Smoke test
+      shell: powershell
+      run: "$b = '{\"rfc\":\"ZADVANCE_PAYMENT_RFC\",\"params\":{\"I_COMPANY_CODE\"\
+        :\"1000\",\"I_POSTING_DATE_LOW\":\"20260301\",\"I_POSTING_DATE_HIGH\":\"20260316\"\
+        },\"targetTable\":\"ET_ZADVANCE_PAYMENT\",\"targetDb\":\"claudetestv2\",\"\
+        maxRows\":5}'\ntry {\n  $r = Invoke-WebRequest http://localhost:9090/fetch\
+        \ -Method POST -Body $b -ContentType application/json -UseBasicParsing -TimeoutSec\
+        \ 60\n  Write-Host \"FETCH HTTP $($r.StatusCode)\"\n  Write-Host ($r.Content.Substring(0,[Math]::Min(2000,$r.Content.Length)))\n\
+        } catch {\n  Write-Host \"FETCH ERROR: $($_.Exception.Message)\"\n}\n"

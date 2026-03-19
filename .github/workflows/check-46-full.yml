@@ -1,0 +1,55 @@
+name: Check .46 Full Environment
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Check all requirements
+        shell: powershell
+        run: |
+          Write-Host "=== .NET Framework versions ==="
+          Get-ChildItem "HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP" -Recurse |
+            Get-ItemProperty -name Version, Release -ErrorAction SilentlyContinue |
+            Where-Object { $_.PSChildName -match "^(?!S)\p{L}"} |
+            Select-Object PSChildName, Version, Release
+
+          Write-Host "=== IIS Sites ==="
+          Import-Module WebAdministration -ErrorAction SilentlyContinue
+          Get-Website -ErrorAction SilentlyContinue | Select Name, State, PhysicalPath
+
+          Write-Host "=== SAP NCo DLLs ==="
+          $sapPaths = @("C:\Windows\System32","C:\Windows\assembly","C:\SAP","C:\sapnco","C:\Program Files\SAP")
+          foreach ($p in $sapPaths) {
+            if (Test-Path $p) {
+              $files = Get-ChildItem $p -Recurse -Filter "*sapnco*" -ErrorAction SilentlyContinue
+              if ($files) { $files | Select FullName, Length }
+            }
+          }
+
+          Write-Host "=== SAP NCo in GAC ==="
+          $gac = "C:\Windows\assembly"
+          Get-ChildItem $gac -Recurse -Filter "*sapnco*" -ErrorAction SilentlyContinue | Select FullName
+
+          Write-Host "=== Can reach SAP Dev (.174) ==="
+          $s = New-Object Net.Sockets.TcpClient
+          try { $s.Connect("192.168.144.174", 3300); Write-Host "SAP Dev port 3300: OPEN" } 
+          catch { Write-Host "SAP Dev port 3300: CLOSED - $_" }
+          $s.Close()
+
+          Write-Host "=== Can reach SAP Prod (.170) ==="
+          $s2 = New-Object Net.Sockets.TcpClient
+          try { $s2.Connect("192.168.144.170", 3300); Write-Host "SAP Prod port 3300: OPEN" }
+          catch { Write-Host "SAP Prod port 3300: CLOSED" }
+          $s2.Close()
+
+          Write-Host "=== MSBuild ==="
+          $msPaths = @(
+            "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+            "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe",
+            "C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe"
+          )
+          foreach ($p in $msPaths) { if (Test-Path $p) { Write-Host "MSBuild: $p" } }
+
+          Write-Host "=== IIS App Pools ==="
+          Get-WebConfiguration "system.applicationHost/applicationPools/add" -ErrorAction SilentlyContinue | Select Name, ManagedRuntimeVersion, State
