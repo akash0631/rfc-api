@@ -1,0 +1,14 @@
+name: Fix46_911131
+on:
+  push:
+    paths:
+      - '.github/workflows/fix46_911131.yml'
+jobs:
+  run:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Copy correct DLLs from packages + recycle + test
+        shell: cmd
+        run: |
+          powershell -NoProfile -Command "& {$cred=New-Object PSCredential('V2DC-ADDVERB\Administrator',(ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force));$s=New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop;Write-Host Connected;Invoke-Command -Session $s -ScriptBlock {$pkg='D:\V2 Projects\Vendor_SRM_Routing_Application\packages';$out='C:\V2RfcTest\bin';Write-Host 'Copying correct DLL versions from packages...';Get-ChildItem $pkg -Recurse -Filter '*.dll' | Where-Object {$_.FullName -notmatch '\\net[0-9][0-9]\\' -or $_.FullName -match '\\net4[0-9]\\' -or $_.FullName -match '\\net45\\'} | Group-Object Name | ForEach-Object {$best=$_.Group | Sort-Object {[System.Reflection.AssemblyName]::GetAssemblyName($_.FullName).Version} -Descending | Select-Object -First 1;Copy-Item $best.FullName $out -Force;Write-Host $best.Name};Write-Host Done;Import-Module WebAdministration -EA SilentlyContinue;Restart-WebAppPool V2RfcTestPool -EA SilentlyContinue;Start-Sleep 15;try{$r=Invoke-WebRequest 'http://localhost:9292/api/ZpoDdUpdRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host SUCCESS $r.StatusCode $r.Content}catch{Write-Host FAIL $_.Exception.Message}};Remove-PSSession $s}"
+          echo Done: %ERRORLEVEL%
