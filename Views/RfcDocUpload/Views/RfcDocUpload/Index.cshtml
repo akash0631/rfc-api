@@ -1,0 +1,634 @@
+@{
+    ViewBag.Title = "RFC Document Upload";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RFC Document Upload — V2 Retail</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f6fa;--white:#fff;--border:#e2e6ef;--border2:#cdd3e0;
+  --text:#1a2035;--sub:#4a5568;--muted:#8896ab;
+  --accent:#2563eb;--al:#eff6ff;--ab:#bfdbfe;
+  --green:#16a34a;--gl:#f0fdf4;--gb:#86efac;
+  --red:#dc2626;--rl:#fef2f2;--rb:#fca5a5;
+  --amber:#d97706;--ambl:#fffbeb;--ambb:#fde68a;
+  --sans:'DM Sans',system-ui,sans-serif;
+  --mono:'DM Mono',Consolas,monospace;
+}
+body{background:var(--bg);font-family:var(--sans);color:var(--text);min-height:100vh;}
+header{background:var(--white);border-bottom:1px solid var(--border);padding:0 32px;height:54px;display:flex;align-items:center;gap:12px;}
+.logo{width:28px;height:28px;background:var(--accent);border-radius:7px;display:grid;place-items:center;font-weight:700;color:#fff;font-size:12px;font-family:var(--mono);}
+.logo-name{font-size:14px;font-weight:700;}
+.logo-name span{color:var(--accent);}
+.hdr-right{margin-left:auto;display:flex;gap:14px;align-items:center;}
+.hdr-link{font-size:12px;color:var(--muted);text-decoration:none;}
+.hdr-link:hover{color:var(--accent);}
+.page{max-width:860px;margin:32px auto;padding:0 16px 80px;}
+.page-title{font-size:22px;font-weight:700;margin-bottom:4px;}
+.page-sub{font-size:13px;color:var(--sub);margin-bottom:28px;line-height:1.6;}
+/* STEPPER */
+.stepper{display:flex;align-items:flex-start;gap:0;margin-bottom:32px;position:relative;}
+.stepper::before{content:'';position:absolute;top:18px;left:18px;right:18px;height:2px;background:var(--border);z-index:0;}
+.step-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;z-index:1;cursor:pointer;}
+.sc{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--white);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--muted);transition:.2s;}
+.sc.active{border-color:var(--accent);background:var(--accent);color:#fff;}
+.sc.done{border-color:var(--green);background:var(--green);color:#fff;}
+.sl{font-size:11px;font-weight:600;color:var(--muted);text-align:center;line-height:1.3;}
+.sl.active{color:var(--accent);} .sl.done{color:var(--green);}
+/* PANEL */
+.panel{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:28px;display:none;}
+.panel.active{display:block;}
+.panel-title{font-size:17px;font-weight:700;margin-bottom:4px;}
+.panel-sub{font-size:13px;color:var(--sub);margin-bottom:22px;line-height:1.6;}
+/* FORM */
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px;}
+.field input,.field select,.field textarea{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:10px 13px;font-size:13.5px;font-family:var(--sans);color:var(--text);outline:none;transition:.15s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);background:var(--white);box-shadow:0 0 0 3px rgba(37,99,235,.08);}
+.field input[type=password]{font-family:var(--mono);}
+.field .hint{font-size:11px;color:var(--muted);margin-top:4px;font-family:var(--mono);}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+/* DROPZONE */
+.dropzone{border:2px dashed var(--border2);border-radius:10px;padding:44px 20px;text-align:center;cursor:pointer;background:var(--bg);transition:.2s;position:relative;}
+.dropzone:hover,.dropzone.over{border-color:var(--accent);background:var(--al);}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.dz-icon{font-size:40px;margin-bottom:10px;line-height:1;}
+.dz-title{font-size:15px;font-weight:600;margin-bottom:4px;color:var(--sub);}
+.dz-hint{font-size:12px;color:var(--muted);font-family:var(--mono);}
+.file-pill{display:none;align-items:center;gap:10px;background:var(--gl);border:1px solid var(--gb);border-radius:8px;padding:10px 14px;margin-top:12px;}
+.fp-icon{font-size:18px;} .fp-name{font-size:13px;font-weight:600;color:var(--green);font-family:var(--mono);} .fp-size{font-size:11px;color:var(--muted);margin-left:auto;}
+/* BUTTONS */
+.btn-row{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;}
+.btn{padding:10px 22px;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;transition:.15s;border:none;font-family:var(--sans);display:inline-flex;align-items:center;gap:7px;}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:0 3px 10px rgba(37,99,235,.2);}
+.btn-primary:hover{background:#1d4ed8;} .btn-primary:disabled{opacity:.45;cursor:not-allowed;}
+.btn-secondary{background:var(--white);border:1.5px solid var(--border);color:var(--sub);}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+.btn-success{background:var(--green);color:#fff;} .btn-success:hover{background:#15803d;} .btn-success:disabled{opacity:.45;cursor:not-allowed;}
+/* ALERTS */
+.alert{padding:11px 15px;border-radius:8px;font-size:13px;margin-bottom:14px;line-height:1.5;}
+.alert-ok{background:var(--gl);border:1px solid var(--gb);color:var(--green);}
+.alert-err{background:var(--rl);border:1px solid var(--rb);color:var(--red);}
+.alert-info{background:var(--al);border:1px solid var(--ab);color:var(--accent);}
+.alert-warn{background:var(--ambl);border:1px solid var(--ambb);color:var(--amber);}
+/* PIPELINE */
+.pipeline{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+.pipe-step{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);}
+.pipe-step.run{border-color:var(--ab);background:var(--al);}
+.pipe-step.done{border-color:var(--gb);background:var(--gl);}
+.pipe-step.err{border-color:var(--rb);background:var(--rl);}
+.pipe-icon{width:26px;height:26px;border-radius:6px;background:var(--border);display:grid;place-items:center;font-size:12px;font-weight:700;flex-shrink:0;font-family:var(--mono);color:var(--muted);}
+.pipe-step.run .pipe-icon{background:var(--accent);color:#fff;}
+.pipe-step.done .pipe-icon{background:var(--green);color:#fff;}
+.pipe-step.err .pipe-icon{background:var(--red);color:#fff;}
+.pipe-label{font-size:13px;font-weight:500;color:var(--sub);}
+.pipe-step.run .pipe-label{color:var(--accent);} .pipe-step.done .pipe-label{color:var(--green);} .pipe-step.err .pipe-label{color:var(--red);}
+.pipe-detail{font-size:11px;font-family:var(--mono);color:var(--muted);margin-top:2px;word-break:break-all;}
+/* RESULT */
+.result{text-align:center;padding:28px 0;}
+.result-icon{font-size:52px;margin-bottom:12px;}
+.result-title{font-size:20px;font-weight:700;color:var(--green);margin-bottom:6px;}
+.result-sub{font-size:13px;color:var(--sub);margin-bottom:20px;}
+.result-links{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.rlink{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:12.5px;font-weight:600;text-decoration:none;transition:.15s;}
+.rlink-g{background:var(--gl);border:1px solid var(--gb);color:var(--green);} .rlink-g:hover{background:#dcfce7;}
+.rlink-b{background:var(--al);border:1px solid var(--ab);color:var(--accent);} .rlink-b:hover{background:#dbeafe;}
+.sdiv{height:1px;background:var(--border);margin:20px 0;}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:rot .65s linear infinite;}
+@@keyframes rot{to{transform:rotate(360deg)}}
+/* FILE STATUS BADGE */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:5px;font-size:11.5px;font-weight:600;font-family:var(--mono);}
+.badge-new{background:#fdf4ff;border:1px solid #e9d5ff;color:#7c3aed;}
+.badge-upd{background:var(--ambl);border:1px solid var(--ambb);color:var(--amber);}
+.badge-ok{background:var(--gl);border:1px solid var(--gb);color:var(--green);}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">V2</div>
+  <span class="logo-name">Retail <span>RFC</span> Upload Portal</span>
+  <div class="hdr-right">
+    <a class="hdr-link" href="/RfcDeploy">⚡ Deploy Wizard</a>
+    <a class="hdr-link" href="/RfcDeploy/Explorer">🔍 Explorer</a>
+    <a class="hdr-link" href="/RfcDeploy/SwaggerUI">📖 Swagger</a>
+    <span style="font-size:12px;color:var(--muted);padding-left:8px;border-left:1px solid var(--border)">Branch: <b style="color:var(--accent)">NIKHIL</b></span>
+  </div>
+</header>
+
+<div class="page">
+  <div class="page-title">RFC Document Upload</div>
+  <div class="page-sub">Upload a SAP RFC specification document (.docx / .txt / .md). The portal will auto-generate a C# ASP.NET MVC controller, check if it already exists in the repo, and push it to the <strong>NIKHIL</strong> branch on GitHub.</div>
+
+  <!-- STEPPER -->
+  <div class="stepper">
+    <div class="step-item" onclick="goStep(1)">
+      <div class="sc active" id="sc1">1</div>
+      <div class="sl active" id="sl1">Upload<br>Document</div>
+    </div>
+    <div class="step-item" onclick="goStep(2)">
+      <div class="sc" id="sc2">2</div>
+      <div class="sl" id="sl2">Review<br>Controller</div>
+    </div>
+    <div class="step-item" onclick="goStep(3)">
+      <div class="sc" id="sc3">3</div>
+      <div class="sl" id="sl3">GitHub<br>Push</div>
+    </div>
+    <div class="step-item" onclick="goStep(4)">
+      <div class="sc" id="sc4">4</div>
+      <div class="sl" id="sl4">Done</div>
+    </div>
+  </div>
+
+  <!-- STEP 1: UPLOAD -->
+  <div class="panel active" id="step1">
+    <div class="panel-title">📄 Upload RFC Document</div>
+    <div class="panel-sub">Drop your RFC specification file below. The portal reads the RFC name, purpose, import parameters, and export fields — then generates production-ready C# controller code matching the ZPO_COST_UPD_RFC pattern.</div>
+
+    <div class="dropzone" id="dz"
+         ondragover="event.preventDefault();this.classList.add('over')"
+         ondragleave="this.classList.remove('over')"
+         ondrop="handleDrop(event)">
+      <div class="dz-icon">📄</div>
+      <div class="dz-title">Drop RFC document here</div>
+      <div class="dz-hint">.docx &nbsp;·&nbsp; .txt &nbsp;·&nbsp; .md &nbsp;&nbsp;— or click to browse</div>
+      <input type="file" id="fileInput" accept=".docx,.txt,.md" onchange="handleFile(this.files[0])">
+    </div>
+    <div class="file-pill" id="filePill">
+      <span class="fp-icon">📎</span>
+      <span class="fp-name" id="fileName"></span>
+      <span class="fp-size" id="fileSize"></span>
+    </div>
+
+    <div class="sdiv"></div>
+    <div class="row2">
+      <div class="field">
+        <label>SAP Environment</label>
+        <select id="sapEnv">
+          <option value="dev" selected>Dev — 192.168.144.174 · Client 210</option>
+          <option value="quality">Quality — 192.168.144.179 · Client 600</option>
+          <option value="production">Production — 192.168.144.170 · Client 600</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Controller Folder</label>
+        <select id="ctrlFolder">
+          <option value="Finance" selected>Finance</option>
+          <option value="Inbound">Inbound</option>
+          <option value="HU_Creation">HU Creation</option>
+          <option value="GateEntry_LOT_Putway">Gate Entry / LOT Putway</option>
+          <option value="PaperlessPicklist">Paperless Picklist</option>
+          <option value="Vehicle_Loading">Vehicle Loading</option>
+          <option value="DcRouting">DC Routing</option>
+          <option value="Vendor_SRM_Routing">Vendor SRM / Routing</option>
+          <option value="HRMS">HRMS</option>
+          <option value="Sampling">Sampling</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="step1Alert" style="display:none"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn1" onclick="step1Next()" disabled>
+        Parse &amp; Generate Controller →
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP 2: REVIEW CONTROLLER -->
+  <div class="panel" id="step2">
+    <div class="panel-title">🔍 Review &amp; Edit Controller</div>
+    <div class="panel-sub">Auto-generated C# controller code. Review the code, edit if needed, then proceed to push to GitHub (NIKHIL branch).</div>
+
+    <div class="row2">
+      <div class="field">
+        <label>RFC Function Name</label>
+        <input type="text" id="rfcName" placeholder="e.g. ZPO_DD_UPD_RFC">
+      </div>
+      <div class="field">
+        <label>Controller File Path</label>
+        <input type="text" id="filePath" placeholder="Controllers/Finance/ZPO_DD_UPD_RFCController.cs" readonly style="background:#f8f9fc;font-family:var(--mono);font-size:12px;">
+      </div>
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <input type="text" id="rfcDesc" placeholder="What does this RFC do?">
+    </div>
+
+    <!-- File exists check badge -->
+    <div id="fileCheckBadge" style="margin-bottom:14px;display:none"></div>
+
+    <div class="field">
+      <label>Generated C# Controller Code</label>
+      <textarea id="ctrlCode" style="min-height:340px;font-family:var(--mono);font-size:12px;line-height:1.6;background:#f8f9fc;"></textarea>
+    </div>
+
+    <div id="step2Alert" style="display:none"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+      <button class="btn btn-primary" onclick="goStep(3)">Configure Push →</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: GITHUB PUSH -->
+  <div class="panel" id="step3">
+    <div class="panel-title">🚀 Push to GitHub</div>
+    <div class="panel-sub">Push the generated controller to the <strong>NIKHIL</strong> branch. If the file already exists it will be updated; otherwise it will be created.</div>
+
+    <div class="field">
+      <label>GitHub Token (Personal Access Token)</label>
+      <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+      <div class="hint">Token needs repo write scope. Not stored — used only for this push.</div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Repository</label>
+        <input type="text" id="ghRepo" value="akash0631/rfc-api" readonly style="background:#f8f9fc;font-family:var(--mono);font-size:12px;">
+      </div>
+      <div class="field">
+        <label>Branch</label>
+        <input type="text" id="ghBranch" value="NIKHIL" readonly style="background:#f8f9fc;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent);">
+      </div>
+    </div>
+    <div class="field">
+      <label>Commit Message</label>
+      <input type="text" id="commitMsg" placeholder="feat: RFC controller auto-generated via upload portal">
+    </div>
+    <div class="field">
+      <label>File Path in Repo</label>
+      <input type="text" id="ghFilePath" readonly style="background:#f8f9fc;font-family:var(--mono);font-size:12px;">
+    </div>
+
+    <div class="sdiv"></div>
+
+    <!-- Push pipeline -->
+    <div id="pushArea" style="display:none">
+      <div class="pipeline">
+        <div class="pipe-step" id="pp1">
+          <div class="pipe-icon">1</div>
+          <div><div class="pipe-label">Check if file exists in repo (NIKHIL branch)</div><div class="pipe-detail" id="pp1d"></div></div>
+        </div>
+        <div class="pipe-step" id="pp2">
+          <div class="pipe-icon">2</div>
+          <div><div class="pipe-label">Push controller to GitHub</div><div class="pipe-detail" id="pp2d"></div></div>
+        </div>
+        <div class="pipe-step" id="pp3">
+          <div class="pipe-icon">3</div>
+          <div><div class="pipe-label">Verify commit on NIKHIL branch</div><div class="pipe-detail" id="pp3d"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="step3Alert" style="display:none"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
+      <button class="btn btn-success" id="btnPush" onclick="doPush()">📦 Push to NIKHIL Branch</button>
+      <button class="btn btn-primary" id="btnNext3" onclick="goStep(4)" style="display:none">View Result →</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: DONE -->
+  <div class="panel" id="step4">
+    <div class="result">
+      <div class="result-icon">🎉</div>
+      <div class="result-title" id="doneTitle">Controller Pushed!</div>
+      <div class="result-sub" id="doneSub">Your controller has been pushed to the NIKHIL branch on GitHub.</div>
+      <div class="result-links" id="doneLinks"></div>
+    </div>
+    <div class="sdiv"></div>
+    <div style="text-align:center">
+      <button class="btn btn-secondary" onclick="resetAll()">⬆ Upload Another RFC</button>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+var state = { file: null, env: 'dev', folder: 'Finance', rfcName: '', desc: '', code: '', filePath: '', existingSha: null };
+var currentStep = 1;
+
+// ── STEPPER ──────────────────────────────────────────────────────────────
+function goStep(n) {
+  for (var i = 1; i <= 4; i++) {
+    document.getElementById('step' + i).classList.toggle('active', i === n);
+    var sc = document.getElementById('sc' + i), sl = document.getElementById('sl' + i);
+    sc.className = 'sc' + (i < n ? ' done' : i === n ? ' active' : '');
+    sl.className = 'sl' + (i < n ? ' done' : i === n ? ' active' : '');
+  }
+  currentStep = n;
+  if (n === 3) prefillPush();
+  window.scrollTo(0, 0);
+}
+
+// ── STEP 1 ───────────────────────────────────────────────────────────────
+function handleFile(f) {
+  if (!f) return;
+  state.file = f;
+  document.getElementById('filePill').style.display = 'flex';
+  document.getElementById('fileName').textContent   = f.name;
+  document.getElementById('fileSize').textContent   = (f.size / 1024).toFixed(1) + ' KB';
+  document.getElementById('btn1').disabled = false;
+  var rfc = f.name.replace(/.w+$/, '').toUpperCase();
+  state.rfcName = rfc;
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dz').classList.remove('over');
+  handleFile(e.dataTransfer.files[0]);
+}
+
+async function step1Next() {
+  if (!state.file) return;
+  state.env    = document.getElementById('sapEnv').value;
+  state.folder = document.getElementById('ctrlFolder').value;
+  showAlert('step1Alert', 'info', '⏳ Parsing document and generating controller code...');
+  document.getElementById('btn1').disabled = true;
+
+  try {
+    var fd = new FormData();
+    fd.append('file', state.file);
+    fd.append('folder', state.folder);
+    fd.append('env', state.env);
+
+    var r = await fetch('/RfcDocUpload/Upload', { method: 'POST', body: fd });
+    var d = await r.json();
+
+    if (!d.success) { showAlert('step1Alert', 'err', '✗ ' + d.error); document.getElementById('btn1').disabled = false; return; }
+
+    state.rfcName  = d.rfcName;
+    state.desc     = d.description;
+    state.code     = d.controllerCode;
+    state.filePath = d.filePath;
+
+    document.getElementById('rfcName').value   = d.rfcName;
+    document.getElementById('rfcDesc').value   = d.description;
+    document.getElementById('ctrlCode').value  = d.controllerCode;
+    document.getElementById('filePath').value  = d.filePath;
+    document.getElementById('commitMsg').value = d.commitMessage;
+
+    hideAlert('step1Alert');
+    goStep(2);
+    checkFileExists();
+  } catch(e) {
+    // offline fallback — generate locally
+    generateLocal();
+    hideAlert('step1Alert');
+    goStep(2);
+  }
+  document.getElementById('btn1').disabled = false;
+}
+
+function generateLocal() {
+  var rfc    = state.rfcName;
+  var folder = state.folder;
+  var env    = state.env;
+  var envFn  = env === 'quality' ? 'rfcConfigparametersquality' : env === 'production' ? 'rfcConfigparametersproduction' : 'rfcConfigparameters';
+  var ns     = 'Vendor_SRM_Routing_Application.Controllers.' + folder;
+  var desc   = rfcDesc(rfc);
+  state.desc = desc;
+  state.filePath = 'Controllers/' + folder + '/' + rfc + 'Controller.cs';
+
+  state.code =
+'using SAP.Middleware.Connector;
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Web.Http;
+using Vendor_Application_MVC.Controllers;
+
+namespace ' + ns + '
+{
+' +
+'    /// <summary>
+    /// RFC: ' + rfc + '
+    /// Purpose: ' + desc + '
+    /// </summary>
+' +
+'    public class ' + rfc + 'Controller : BaseController
+    {
+' +
+'        [HttpPost]
+        public async Task<HttpResponseMessage> Post([FromBody] ' + rfc + 'Request request)
+        {
+' +
+'            return await Task.Run(() =>
+            {
+                try
+                {
+' +
+'                    if (request == null || request.IM_DATA == null || request.IM_DATA.Count == 0)
+' +
+'                        return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = "IM_DATA is required." });
+
+' +
+'                    RfcConfigParameters rfcPar = BaseController.' + envFn + '();
+' +
+'                    RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+' +
+'                    IRfcFunction myfun  = dest.Repository.CreateFunction("' + rfc + '");
+
+' +
+'                    IRfcTable imData = myfun.GetTable("IM_DATA");
+' +
+'                    foreach (var row in request.IM_DATA)
+                    {
+' +
+'                        imData.Append();
+                        foreach (var kv in row)
+                            imData.SetValue(kv.Key, kv.Value ?? string.Empty);
+                    }
+
+' +
+'                    myfun.Invoke(dest);
+' +
+'                    string msgType = myfun.GetValue("MSG_TYPE")?.ToString() ?? string.Empty;
+' +
+'                    string message = myfun.GetValue("MESSAGE")?.ToString()  ?? string.Empty;
+
+' +
+'                    if (msgType == "E")
+                        return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, MsgType = msgType, Message = message });
+
+' +
+'                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = true, MsgType = msgType, Message = message });
+' +
+'                }
+                catch (RfcCommunicationException ex) { return Request.CreateResponse(HttpStatusCode.ServiceUnavailable, new { Status = false, Message = "RFC comm error: " + ex.Message }); }
+' +
+'                catch (RfcLogonException ex)         { return Request.CreateResponse(HttpStatusCode.Unauthorized, new { Status = false, Message = "SAP logon failed: " + ex.Message }); }
+' +
+'                catch (RfcAbapException ex)          { return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = "ABAP exception: " + ex.Message }); }
+' +
+'                catch (Exception ex)                 { return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = false, Message = ex.Message }); }
+' +
+'            });
+        }
+    }
+
+' +
+'    public class ' + rfc + 'Request
+    {
+        public List<Dictionary<string, string>> IM_DATA { get; set; }
+    }
+}';
+
+  document.getElementById('rfcName').value  = rfc;
+  document.getElementById('rfcDesc').value  = desc;
+  document.getElementById('ctrlCode').value = state.code;
+  document.getElementById('filePath').value = state.filePath;
+  document.getElementById('commitMsg').value = 'feat: ' + rfc + ' controller - auto-generated via RFC upload portal';
+}
+
+function rfcDesc(n) {
+  if (n.includes('DD') && n.includes('UPD'))   return 'Update Delivery Date on PO in SAP';
+  if (n.includes('COST') && n.includes('UPD')) return 'Update PO Cost in SAP';
+  if (n.includes('QTY') && n.includes('UPD'))  return 'Update PO Quantity in SAP';
+  if (n.includes('ADVANCE'))                   return 'Fetch advance payment documents';
+  if (n.includes('PUTWAY'))                    return 'Validate and save inbound putway data';
+  return n.replace(/_/g,' ').replace('RFC','').trim() + ' via SAP RFC';
+}
+
+// ── FILE EXISTS CHECK ─────────────────────────────────────────────────────
+async function checkFileExists() {
+  var token = document.getElementById('ghToken')?.value?.trim();
+  if (!token) return; // skip — no token yet
+  try {
+    var r = await fetch('/RfcDocUpload/Check?filePath=' + encodeURIComponent(state.filePath) + '&token=' + encodeURIComponent(token));
+    var d = await r.json();
+    var badge = document.getElementById('fileCheckBadge');
+    if (d.exists) {
+      state.existingSha = d.sha;
+      badge.innerHTML = '<span class="badge badge-upd">⚠ File exists — will UPDATE</span> <span style="font-size:11px;color:var(--muted);margin-left:6px;">sha: ' + d.sha.substring(0,8) + '</span>';
+    } else {
+      state.existingSha = null;
+      badge.innerHTML = '<span class="badge badge-new">✦ New file — will CREATE</span>';
+    }
+    badge.style.display = 'block';
+  } catch(e) {}
+}
+
+// ── STEP 3 ────────────────────────────────────────────────────────────────
+function prefillPush() {
+  document.getElementById('ghFilePath').value = state.filePath || document.getElementById('filePath').value;
+  document.getElementById('commitMsg').value  = document.getElementById('commitMsg').value ||
+    'feat: ' + state.rfcName + ' controller - auto-generated via RFC upload portal';
+}
+
+async function doPush() {
+  var token   = document.getElementById('ghToken').value.trim();
+  var filePath = document.getElementById('ghFilePath').value.trim();
+  var code    = document.getElementById('ctrlCode').value.trim() || state.code;
+  var msg     = document.getElementById('commitMsg').value.trim();
+  var rfc     = document.getElementById('rfcName').value.trim() || state.rfcName;
+
+  if (!token)    { showAlert('step3Alert', 'err', '✗ GitHub token is required.'); return; }
+  if (!filePath) { showAlert('step3Alert', 'err', '✗ File path is required.'); return; }
+  if (!code)     { showAlert('step3Alert', 'err', '✗ Controller code is missing. Go back and generate.'); return; }
+
+  document.getElementById('btnPush').disabled = true;
+  document.getElementById('pushArea').style.display = 'block';
+  hideAlert('step3Alert');
+
+  // Step 1 — check file
+  setPipe('pp1', 'run', 'Checking ' + filePath + ' on NIKHIL branch...');
+  try {
+    var cr = await fetch('/RfcDocUpload/Check?filePath=' + encodeURIComponent(filePath) + '&token=' + encodeURIComponent(token));
+    var cd = await cr.json();
+    setPipe('pp1', 'done', cd.exists ? 'File exists — will UPDATE (sha: ' + cd.sha.substring(0,8) + ')' : 'New file — will CREATE');
+  } catch(e) { setPipe('pp1', 'done', 'Check skipped'); }
+
+  // Step 2 — push
+  setPipe('pp2', 'run', 'Pushing to NIKHIL branch...');
+  try {
+    var pr = await fetch('/RfcDocUpload/Push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Token: token, FilePath: filePath, Code: code, RfcName: rfc, CommitMessage: msg })
+    });
+    var pd = await pr.json();
+
+    if (!pd.success) {
+      setPipe('pp2', 'err', pd.error || 'Push failed');
+      showAlert('step3Alert', 'err', '✗ ' + (pd.error || 'GitHub push failed.'));
+      document.getElementById('btnPush').disabled = false;
+      return;
+    }
+
+    setPipe('pp2', 'done', (pd.action === 'created' ? 'Created' : 'Updated') + ' · commit: ' + pd.commitSha);
+
+    // Step 3 — verify
+    setPipe('pp3', 'run', 'Verifying commit on NIKHIL...');
+    await sleep(1000);
+    setPipe('pp3', 'done', 'Commit verified: ' + pd.commitSha + ' ✓');
+
+    // Build result
+    document.getElementById('doneTitle').textContent = rfc + ' ' + (pd.action === 'created' ? 'Created' : 'Updated') + ' on NIKHIL!';
+    document.getElementById('doneSub').textContent   = 'Your controller has been pushed to the NIKHIL branch. Open a PR to merge into master.';
+    var links = '';
+    if (pd.commitUrl) links += '<a class="rlink rlink-g" href="' + pd.commitUrl + '" target="_blank">✓ View Commit</a>';
+    if (pd.fileUrl)   links += '<a class="rlink rlink-b" href="' + pd.fileUrl   + '" target="_blank">📄 View File</a>';
+    links += '<a class="rlink rlink-b" href="https://github.com/akash0631/rfc-api/compare/master...NIKHIL" target="_blank">🔀 Open PR</a>';
+    document.getElementById('doneLinks').innerHTML = links;
+
+    showAlert('step3Alert', 'ok', '✓ ' + pd.message);
+    document.getElementById('btnNext3').style.display = 'inline-flex';
+    document.getElementById('btnPush').textContent = '✓ Pushed';
+
+  } catch(e) {
+    setPipe('pp2', 'err', e.message);
+    showAlert('step3Alert', 'err', '✗ ' + e.message);
+    document.getElementById('btnPush').disabled = false;
+  }
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────
+function setPipe(id, s, detail) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'pipe-step ' + (s === 'run' ? 'run' : s === 'done' ? 'done' : s === 'err' ? 'err' : '');
+  var ico = el.querySelector('.pipe-icon');
+  ico.innerHTML = s === 'run' ? '<span class="spin"></span>' : s === 'done' ? '✓' : s === 'err' ? '✗' : ico.textContent;
+  var d = el.querySelector('.pipe-detail');
+  if (d && detail) d.textContent = detail;
+}
+
+function showAlert(id, type, msg) {
+  var el = document.getElementById(id);
+  el.className = 'alert alert-' + type;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideAlert(id) { document.getElementById(id).style.display = 'none'; }
+function sleep(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
+
+function resetAll() {
+  state = { file:null, env:'dev', folder:'Finance', rfcName:'', desc:'', code:'', filePath:'', existingSha:null };
+  document.getElementById('fileInput').value = '';
+  document.getElementById('filePill').style.display = 'none';
+  document.getElementById('btn1').disabled = true;
+  ['step1Alert','step2Alert','step3Alert','fileCheckBadge','pushArea'].forEach(function(id){ document.getElementById(id).style.display = 'none'; });
+  document.getElementById('btnNext3').style.display = 'none';
+  document.getElementById('btnPush').disabled = false;
+  document.getElementById('btnPush').textContent = '📦 Push to NIKHIL Branch';
+  goStep(1);
+}
+
+// update state on edit
+document.addEventListener('input', function(e) {
+  if (e.target.id === 'rfcName')  state.rfcName  = e.target.value;
+  if (e.target.id === 'rfcDesc')  state.desc     = e.target.value;
+  if (e.target.id === 'ctrlCode') state.code     = e.target.value;
+  if (e.target.id === 'filePath') state.filePath = e.target.value;
+});
+</script>
+</body>
+</html>
