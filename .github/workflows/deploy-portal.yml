@@ -4,20 +4,25 @@ on:
     branches: [master]
     paths:
       - 'portal/**'
-      - 'dab-config.json'
-      - 'v2_sap_api_explorer.html'
       - 'rfc_hub.html'
+      - '.github/workflows/deploy-portal.yml'
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     name: Deploy to Cloudflare Pages
-    permissions:
-      contents: read
-      deployments: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
 
       - name: Copy rfc_hub.html to portal folder
         run: |
@@ -25,12 +30,8 @@ jobs:
           echo "Portal files:"
           ls portal/
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 33b6cfffad5dd935e73e9061a56f1506
-          projectName: v2-rfc-portal
-          directory: portal
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          branch: master
+      - name: Deploy to Cloudflare Pages via Wrangler
+        run: wrangler pages deploy portal --project-name=v2-rfc-portal --branch=master
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 33b6cfffad5dd935e73e9061a56f1506
