@@ -1,0 +1,139 @@
+@{
+    ViewBag.Title = "RFC Swagger Preview";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>@ViewBag.Title - V2 Retail</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f6fa;}
+header{background:#fff;border-bottom:1px solid #e2e6ef;padding:0 24px;height:52px;display:flex;align-items:center;gap:10px;}
+.logo{font-size:14px;font-weight:700;color:#1a2035;} .logo span{color:#2563eb;}
+.hdr-right{margin-left:auto;display:flex;gap:10px;align-items:center;}
+.hdr-link{font-size:12px;color:#8896ab;text-decoration:none;padding:5px 10px;border:1px solid #e2e6ef;border-radius:6px;}
+.hdr-link:hover{color:#2563eb;border-color:#2563eb;}
+.branch-badge{background:#eff6ff;border:1px solid #bfdbfe;color:#2563eb;padding:3px 10px;border-radius:5px;font-size:11px;font-weight:700;}
+.info-bar{background:#fff;border-bottom:1px solid #e2e6ef;padding:12px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.info-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#8896ab;display:block;margin-bottom:2px;}
+.info-value{font-size:13px;font-weight:600;color:#1a2035;font-family:Consolas,monospace;}
+.tabs{display:flex;border-bottom:2px solid #e2e6ef;background:#fff;padding:0 24px;}
+.tab{padding:10px 20px;font-size:13px;font-weight:600;color:#8896ab;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;}
+.tab.active{color:#2563eb;border-color:#2563eb;}
+.panel{display:none;padding:20px 24px;} .panel.active{display:block;}
+.swagger-wrap .swagger-ui .topbar{display:none!important;}
+.json-box{background:#f8f9fc;border:1px solid #e2e6ef;border-radius:8px;padding:16px;font-family:Consolas,monospace;font-size:12px;line-height:1.7;white-space:pre;overflow:auto;max-height:600px;color:#4a5568;}
+.try-field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#4a5568;margin-bottom:5px;}
+.try-field input,.try-field textarea{width:100%;background:#f8f9fc;border:1.5px solid #e2e6ef;border-radius:7px;padding:9px 12px;font-size:13px;font-family:Consolas,monospace;outline:none;margin-bottom:12px;}
+.btn{padding:9px 20px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;}
+.btn-primary{background:#2563eb;color:#fff;} .btn-primary:hover{background:#1d4ed8;}
+.resp-box{margin-top:14px;background:#f8f9fc;border:1px solid #e2e6ef;border-radius:8px;padding:14px;font-family:Consolas,monospace;font-size:12px;white-space:pre;overflow:auto;max-height:300px;display:none;}
+.resp-ok{border-color:#86efac;background:#f0fdf4;color:#16a34a;}
+.resp-err{border-color:#fca5a5;background:#fef2f2;color:#dc2626;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">V2 Retail <span>RFC</span> Swagger</div>
+  <div class="hdr-right">
+    <span class="branch-badge">Finaltest</span>
+    <a class="hdr-link" href="/RfcDocUpload">&larr; Upload Portal</a>
+    <a class="hdr-link" href="/RfcDeploy/SwaggerUI">Full Swagger</a>
+    <a class="hdr-link" href="/RfcDeploy/Explorer">Explorer</a>
+  </div>
+</header>
+
+<div class="info-bar">
+  <div><span class="info-label">RFC Name</span><span class="info-value" id="rfcNameDisplay">-</span></div>
+  <div><span class="info-label">Endpoint</span><span class="info-value" id="endpointDisplay">-</span></div>
+  <div><span class="info-label">Branch</span><span class="info-value" style="color:#2563eb">Finaltest</span></div>
+  <div style="margin-left:auto"><a id="ghFileLink" href="https://github.com/akash0631/rfc-api/tree/Finaltest" target="_blank" class="hdr-link">View on GitHub &rarr;</a></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('swagger')">Swagger UI</div>
+  <div class="tab" onclick="showTab('json')">OpenAPI JSON</div>
+  <div class="tab" onclick="showTab('try')">Try It</div>
+</div>
+
+<div class="panel active" id="tab-swagger">
+  <div class="swagger-wrap" id="swagger-ui"></div>
+</div>
+<div class="panel" id="tab-json">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <span style="font-size:13px;font-weight:600;color:#4a5568">OpenAPI 3.0 Specification</span>
+    <button class="btn btn-primary" style="padding:6px 14px;font-size:12px" onclick="copyJson()">Copy JSON</button>
+  </div>
+  <div class="json-box" id="jsonBox">Loading...</div>
+</div>
+<div class="panel" id="tab-try">
+  <div class="try-field">
+    <label>Endpoint URL</label>
+    <input type="text" id="tryUrl" value="http://v2retail.net:9005/api/">
+    <label>Request Body (JSON)</label>
+    <textarea id="tryBody" rows="8">{"IM_DATA": [{"EBELN": "4500001234","PO_ITEM": "00001","MATNR": "MAT001","DELIV_DATE": "20260401"}]}</textarea>
+    <button class="btn btn-primary" onclick="tryIt()">Send Request</button>
+    <div class="resp-box" id="tryResp"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.js"></script>
+<script>
+var params = new URLSearchParams(location.search);
+var rfcName = params.get('rfcName') || 'RFC_NAME';
+var folder  = params.get('folder')  || 'Finance';
+var desc    = params.get('desc')    || 'SAP RFC Endpoint';
+var swaggerJsonUrl = '/RfcDocUpload/SwaggerJson?rfcName=' + encodeURIComponent(rfcName) + '&folder=' + encodeURIComponent(folder) + '&desc=' + encodeURIComponent(desc);
+
+document.getElementById('rfcNameDisplay').textContent  = rfcName;
+document.getElementById('endpointDisplay').textContent = '/api/' + rfcName;
+document.getElementById('tryUrl').value = 'http://v2retail.net:9005/api/' + rfcName;
+document.getElementById('ghFileLink').href = 'https://github.com/akash0631/rfc-api/tree/Finaltest/Controllers/' + folder + '/' + rfcName + 'Controller.cs';
+
+SwaggerUIBundle({
+    url: swaggerJsonUrl,
+    dom_id: '#swagger-ui',
+    presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+    layout: 'BaseLayout',
+    deepLinking: true,
+    tryItOutEnabled: true,
+    onComplete: function() {
+        fetch(swaggerJsonUrl).then(function(r){return r.json();}).then(function(d){
+            document.getElementById('jsonBox').textContent = JSON.stringify(d, null, 2);
+        }).catch(function(){document.getElementById('jsonBox').textContent = 'Could not load JSON spec.';});
+    }
+});
+
+function showTab(name) {
+    ['swagger','json','try'].forEach(function(t){
+        document.getElementById('tab-'+t).classList.toggle('active', t===name);
+    });
+    document.querySelectorAll('.tab').forEach(function(el,i){
+        el.classList.toggle('active', ['swagger','json','try'][i]===name);
+    });
+}
+function copyJson() {
+    navigator.clipboard.writeText(document.getElementById('jsonBox').textContent)
+        .then(function(){var b=event.target;b.textContent='Copied!';setTimeout(function(){b.textContent='Copy JSON';},2000);});
+}
+async function tryIt() {
+    var url = document.getElementById('tryUrl').value.trim();
+    var body = document.getElementById('tryBody').value.trim();
+    var resp = document.getElementById('tryResp');
+    try {
+        var r = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:body});
+        var d = await r.json();
+        resp.textContent = JSON.stringify(d, null, 2);
+        resp.className = 'resp-box ' + (r.ok ? 'resp-ok' : 'resp-err');
+    } catch(e) {
+        resp.textContent = 'Error: ' + e.message + ' (IIS server may not be reachable from browser)';
+        resp.className = 'resp-box resp-err';
+    }
+    resp.style.display = 'block';
+}
+</script>
+</body>
+</html>
