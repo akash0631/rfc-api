@@ -1,107 +1,43 @@
 name: FreshTestSetup
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/freshtest.yml'
 jobs:
   setup:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Build fresh and create new site on port 9292
+      - name: Build to C:\V2RfcTest on port 9292 - clean new site
         shell: cmd
         run: |
           set VSPROJ=D:\V2 Projects\Vendor_SRM_Routing_Application
-          set OUTDIR=C:\V2RfcTest
+          set OUT=C:\V2RfcTest
           set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
-
-          echo === Create fresh output directory ===
-          if not exist %OUTDIR%\bin mkdir %OUTDIR%\bin
-
-          echo === Build directly from local VS project to new folder ===
-          "%MSBUILD%" "%VSPROJ%\Vendor_SRM_Routing_Application.csproj" /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=%OUTDIR%\bin\ /p:VisualStudioVersion=17.0 /nologo /verbosity:minimal
+          if not exist %OUT%\bin mkdir %OUT%\bin
+          "%MSBUILD%" "%VSPROJ%\Vendor_SRM_Routing_Application.csproj" /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=%OUT%\bin\ /p:VisualStudioVersion=17.0 /nologo /verbosity:minimal
           echo BUILD: %ERRORLEVEL%
           if %ERRORLEVEL% NEQ 0 exit /b 1
-
-          echo === Copy Web.config ===
-          copy /Y "%VSPROJ%\Web.config" %OUTDIR%\Web.config
-          copy /Y "%VSPROJ%\Global.asax" %OUTDIR%\Global.asax 2>nul
-
-          echo === DLLs built ===
-          dir %OUTDIR%\bin\Vendor*.dll /B 2>nul
-          dir %OUTDIR%\bin\*.dll /B 2>nul | find /c ".dll"
-
-          echo === Create new app pool V2RfcTestPool ===
+          dir %OUT%\bin\Vendor*.dll /B 2>nul
           C:\Windows\System32\inetsrv\appcmd.exe delete apppool /apppool.name:V2RfcTestPool 2>nul
           C:\Windows\System32\inetsrv\appcmd.exe add apppool /name:V2RfcTestPool /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated
-
-          echo === Create new site V2RfcTest on port 9292 ===
           C:\Windows\System32\inetsrv\appcmd.exe delete site /site.name:V2RfcTest 2>nul
-          C:\Windows\System32\inetsrv\appcmd.exe add site /name:V2RfcTest /bindings:"http/*:9292:" /physicalPath:%OUTDIR%
+          C:\Windows\System32\inetsrv\appcmd.exe add site /name:V2RfcTest /bindings:"http/*:9292:" /physicalPath:%OUT%
           C:\Windows\System32\inetsrv\appcmd.exe set site /site.name:V2RfcTest "/[path='/'].applicationPool:V2RfcTestPool"
           C:\Windows\System32\inetsrv\appcmd.exe start site /site.name:V2RfcTest
-          echo Site created: %ERRORLEVEL%
-
-          echo === Open firewall port 9292 ===
           netsh advfirewall firewall delete rule name="V2RfcTest-9292" >nul 2>&1
           netsh advfirewall firewall add rule name="V2RfcTest-9292" dir=in action=allow protocol=TCP localport=9292 profile=any
-
-          echo === Port 9292 listening? ===
           netstat -ano | findstr ":9292"
 
-      - name: Write correct Web.config and test
+      - name: Write Web.config and test
         shell: powershell
         run: |
-          # Write a clean minimal Web.config pointing to SAP Dev
-          $cfg = @'
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <appSettings>
-    <add key="webpages:Version" value="3.0.0.0" />
-    <add key="webpages:Enabled" value="false" />
-    <add key="ClientValidationEnabled" value="true" />
-    <add key="UnobtrusiveJavaScriptEnabled" value="true" />
-    <add key="Name" value="Connection Name" />
-    <add key="AppServerHost" value="192.168.144.174" />
-    <add key="Client" value="210" />
-    <add key="User" value="POWERBI" />
-    <add key="Password" value="India@123456" />
-    <add key="SystemNumber" value="00" />
-    <add key="Language" value="EN" />
-  </appSettings>
-  <system.web>
-    <compilation debug="false" targetFramework="4.8" />
-    <httpRuntime targetFramework="4.8" maxRequestLength="2147483647" />
-    <customErrors mode="Off"/>
-  </system.web>
-  <system.webServer>
-    <handlers>
-      <remove name="ExtensionlessUrlHandler-Integrated-4.0" />
-      <remove name="OPTIONSVerbHandler" />
-      <remove name="TRACEVerbHandler" />
-      <add name="ExtensionlessUrlHandler-Integrated-4.0" path="*." verb="*" type="System.Web.Handlers.TransferRequestHandler" preCondition="integratedMode,runtimeVersionv4.0" />
-    </handlers>
-  </system.webServer>
-</configuration>
-'@
+          $cfg = '<?xml version="1.0" encoding="utf-8"?><configuration><appSettings><add key="webpages:Version" value="3.0.0.0"/><add key="webpages:Enabled" value="false"/><add key="ClientValidationEnabled" value="true"/><add key="UnobtrusiveJavaScriptEnabled" value="true"/><add key="Name" value="Connection Name"/><add key="AppServerHost" value="192.168.144.174"/><add key="Client" value="210"/><add key="User" value="POWERBI"/><add key="Password" value="India@123456"/><add key="SystemNumber" value="00"/><add key="Language" value="EN"/></appSettings><system.web><compilation debug="false" targetFramework="4.8"/><httpRuntime targetFramework="4.8" maxRequestLength="2147483647"/><customErrors mode="Off"/></system.web><system.webServer><handlers><remove name="ExtensionlessUrlHandler-Integrated-4.0"/><remove name="OPTIONSVerbHandler"/><remove name="TRACEVerbHandler"/><add name="ExtensionlessUrlHandler-Integrated-4.0" path="*." verb="*" type="System.Web.Handlers.TransferRequestHandler" preCondition="integratedMode,runtimeVersionv4.0"/></handlers></system.webServer></configuration>'
           [System.IO.File]::WriteAllText("C:\V2RfcTest\Web.config", $cfg, [System.Text.Encoding]::UTF8)
-          Write-Host "Web.config written: SAP Dev 192.168.144.174 / client 210"
-
+          Write-Host "Web.config: SAP Dev 192.168.144.174 / client 210"
           Import-Module WebAdministration -EA SilentlyContinue
           Restart-WebAppPool "V2RfcTestPool" -EA SilentlyContinue
           Start-Sleep 15
-
-          Write-Host "=== TEST :9292 ==="
           $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-
-          try {
-            $r = Invoke-WebRequest "http://localhost:9292/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
-            Write-Host "HEALTH: $($r.StatusCode) $($r.Content)"
-          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
-
-          try {
-            $r2 = Invoke-WebRequest "http://localhost:9292/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "=== EXECUTE SUCCESS ==="
-            Write-Host "HTTP: $($r2.StatusCode)"
-            Write-Host $r2.Content
-          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
-
-          Write-Host "=== Confirm NO existing sites were touched ==="
-          Get-Website | Where-Object {$_.Name -ne "V2RfcTest"} | Select Name, State | Format-Table
+          try { $r=Invoke-WebRequest "http://localhost:9292/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10; Write-Host "HEALTH: $($r.StatusCode) $($r.Content)" } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+          try { $r2=Invoke-WebRequest "http://localhost:9292/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30; Write-Host "EXECUTE: $($r2.StatusCode)"; Write-Host $r2.Content } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
