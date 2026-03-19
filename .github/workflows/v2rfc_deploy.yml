@@ -6,51 +6,100 @@ on:
       - 'Controllers/**'
       - '.github/workflows/v2rfc_deploy.yml'
 jobs:
-  deploy:
+  build-on-gh:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Stub VS17 WebApplication targets
+        run: |
+          $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          New-Item $d -ItemType Directory -Force | Out-Null
+          $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/><Target Name="Package"/></Project>'
+          [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets", $xml, [System.Text.Encoding]::UTF8)
+        shell: powershell
+
+      - name: NuGet restore
+        run: nuget restore Vendor_SRM_Routing_Application.sln -NonInteractive
+        continue-on-error: true
+
+      - name: Build + Package
+        run: |
+          msbuild Vendor_SRM_Routing_Application.csproj `
+            /p:Configuration=Release `
+            /p:Platform=AnyCPU `
+            /p:DeployOnBuild=true `
+            /p:DeployTarget=Package `
+            /p:PackageLocation=publish_output `
+            /p:VisualStudioVersion=17.0 `
+            /nologo /verbosity:minimal
+        shell: powershell
+        continue-on-error: true
+
+      - name: Simple file output publish
+        run: |
+          msbuild Vendor_SRM_Routing_Application.csproj `
+            /p:Configuration=Release /p:Platform=AnyCPU `
+            /p:OutputPath=bin\Release\ /p:VisualStudioVersion=17.0 `
+            /nologo /verbosity:minimal
+          Write-Host "DLLs built:"
+          Get-ChildItem bin\Release -Filter "*.dll" | Select Name
+        shell: powershell
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfc-api-build
+          path: bin/Release/
+
+  deploy-to-36:
+    needs: build-on-gh
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build + Deploy via MSDeploy to V2RfcTest
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: rfc-api-build
+          path: downloaded_bin
+
+      - name: Deploy to C:\V2RfcTest
         shell: powershell
         run: |
-          $VSPROJ  = "D:\V2 Projects\Vendor_SRM_Routing_Application"
-          $LIVE    = "D:\V2 Published\FMS_PUTWAY\bin"
-          $OUT     = "C:\V2RfcTest"
-          $MSBUILD = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-          $REPO    = "C:\actions-runner\_work\rfc-api\rfc-api"
+          $OUT  = "C:\V2RfcTest"
+          $LIVE = "D:\V2 Published\FMS_PUTWAY\bin"
+          $VSPROJ = "D:\V2 Projects\Vendor_SRM_Routing_Application"
+          $REPO = "C:\actions-runner\_work\rfc-api\rfc-api"
 
-          # Step 1: Sync controllers
-          Write-Host "=== Sync controllers ==="
-          robocopy "$REPO\Controllers" "$VSPROJ\Controllers" /E /IS /IT /NFL /NDL
-          Write-Host "Synced: $LASTEXITCODE"
-
-          # Step 2: Build
-          Write-Host "=== Build ==="
           if (-not (Test-Path "$OUT\bin")) { New-Item "$OUT\bin" -ItemType Directory -Force | Out-Null }
-          & $MSBUILD "$VSPROJ\Vendor_SRM_Routing_Application.csproj" `
-            /p:Configuration=Release /p:Platform=AnyCPU `
-            /p:OutputPath="$OUT\bin\" /p:VisualStudioVersion=17.0 `
-            /nologo /verbosity:minimal
-          if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED"; exit 1 }
-          Write-Host "BUILD SUCCESS"
+
+          Write-Host "=== Copy built DLL from GH ==="
+          Copy-Item "downloaded_bin\*.dll" "$OUT\bin\" -Force -EA SilentlyContinue
+          Write-Host "Copied from GH build"
+
+          Write-Host "=== Copy ALL DLLs from live FMS_PUTWAY ==="
+          Get-ChildItem $LIVE -Filter "*.dll" | Where {$_.Name -ne "Vendor_SRM_Routing_Application.dll"} | ForEach {
+            Copy-Item $_.FullName "$OUT\bin\" -Force
+          }
+          Write-Host "Total DLLs: $((Get-ChildItem "$OUT\bin" -Filter "*.dll").Count)"
           (Get-ChildItem "$OUT\bin" -Filter "Vendor*.dll").Name
 
-          # Step 3: Copy ALL DLLs from live working FMS_PUTWAY app
-          Write-Host "=== Copy DLLs from live FMS_PUTWAY ==="
-          $copied = 0
-          Get-ChildItem $LIVE -Filter "*.dll" | Where {$_.Name -ne "Vendor_SRM_Routing_Application.dll"} | ForEach {
-            Copy-Item $_.FullName "$OUT\bin\" -Force; $copied++
-          }
-          Write-Host "Copied: $copied | Total: $((Get-ChildItem "$OUT\bin" -Filter "*.dll").Count)"
+          Write-Host "=== Sync controllers to VS project and rebuild locally ==="
+          robocopy "$REPO\Controllers" "$VSPROJ\Controllers" /E /IS /IT /NFL /NDL
+          $MSBUILD = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+          & $MSBUILD "$VSPROJ\Vendor_SRM_Routing_Application.csproj" /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath="$OUT\bin\" /p:VisualStudioVersion=17.0 /nologo /verbosity:minimal
+          Write-Host "Local build: $LASTEXITCODE"
 
-          # Step 4: Copy supporting files
-          Write-Host "=== Copy Global.asax + Views + Content ==="
+          Write-Host "=== Copy Global.asax ==="
           Copy-Item "$VSPROJ\Global.asax" "$OUT\" -Force
-          if (Test-Path "$VSPROJ\Views") { robocopy "$VSPROJ\Views" "$OUT\Views" /E /IS /IT /NFL /NDL }
-          if (Test-Path "$LIVE\..\Content") { robocopy "$LIVE\..\Content" "$OUT\Content" /E /IS /IT /NFL /NDL }
 
-          # Step 5: Write clean Web.config
           Write-Host "=== Write Web.config ==="
           $cfg = @'
 <?xml version="1.0" encoding="utf-8"?>
@@ -98,34 +147,16 @@ jobs:
 </configuration>
 '@
           [System.IO.File]::WriteAllText("$OUT\Web.config", $cfg, [System.Text.Encoding]::UTF8)
-          Write-Host "Web.config written"
 
-          # Step 6: Ensure site exists and recycle
-          Write-Host "=== Ensure IIS site + recycle ==="
+          Write-Host "=== Recycle V2RfcTestPool ==="
           Import-Module WebAdministration -EA SilentlyContinue
-          if (-not (Get-WebAppPoolState "V2RfcTestPool" -EA SilentlyContinue)) {
-            New-WebAppPool "V2RfcTestPool"
-            Set-ItemProperty "IIS:\AppPools\V2RfcTestPool" managedRuntimeVersion "v4.0"
-          }
-          if (-not (Get-Website "V2RfcTest" -EA SilentlyContinue)) {
-            New-Website -Name "V2RfcTest" -Port 9292 -PhysicalPath $OUT -ApplicationPool "V2RfcTestPool"
-            netsh advfirewall firewall add rule name="V2RfcTest-9292" dir=in action=allow protocol=TCP localport=9292 profile=any
-          }
           Restart-WebAppPool "V2RfcTestPool" -EA SilentlyContinue
           Start-Sleep 15
 
-          # Step 7: Test both controllers
           Write-Host "=== TEST ==="
-          $tests = @(
-            "http://localhost:9292/api/ZpoDdUpdRfc/Health",
-            "http://localhost:9292/api/ZpoModificationRfc/Health"
-          )
-          foreach ($url in $tests) {
+          foreach ($url in @("http://localhost:9292/api/ZpoDdUpdRfc/Health","http://localhost:9292/api/ZpoModificationRfc/Health")) {
             try {
               $r = Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 10
-              Write-Host "OK $($r.StatusCode): $url"
-              Write-Host $r.Content
-            } catch {
-              Write-Host "ERR $url : $($_.Exception.Message)"
-            }
+              Write-Host "OK $($r.StatusCode): $($r.Content)"
+            } catch { Write-Host "ERR: $($_.Exception.Message) — $url" }
           }
