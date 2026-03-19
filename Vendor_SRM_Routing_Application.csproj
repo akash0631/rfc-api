@@ -217,10 +217,10 @@
     <Compile Include="Controllers\DcRouting\ZDC_ROUTING_SUB_RFCController.cs" />
     <Compile Include="Controllers\DcRouting\zwm_dc_routing_rfcController.cs" />
     <Compile Include="Controllers\DcRouting\ZWM_GATE_ENTRY_RFCController.cs" />
+    <Compile Include="Controllers\Finance\ZPO_COST_UPD_RFCController.cs" />
+    <Compile Include="Controllers\Finance\ZPO_QTY_UPD_RFCController.cs" />
     <Compile Include="Controllers\Finance\ZSALES_MOP_RFCController.cs" />
     <Compile Include="Controllers\Finance\ZRFC_CREDITORS_LOVABLController.cs" />
-    <Compile Include="Controllers\Finance\ZADVANCE_PAYMENT_RFCController.cs" />
-    <Compile Include="Controllers\Finance\ZFINANCE_DOCUMENT_RFCController.cs" />
     <Compile Include="Controllers\Finance\ZTEST_RFCController.cs" />
     <Compile Include="Controllers\Finance\ZPO_DD_UPD_RFCController.cs" />
     <Compile Include="Controllers\FMS_FABRIC_PUTWAY\FMSAutoUpdateController.cs" />

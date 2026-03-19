@@ -13,226 +13,90 @@ using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
 namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 {
-    public class ZAdvancePaymentRfcController : BaseController
+    public class ZADVANCE_PAYMENT_RFCController : BaseController
     {
         [HttpPost]
-        public async Task<IHttpActionResult> ExecuteAdvancePayment([FromBody] AdvancePaymentRequest request)
+        [Route("api/ZADVANCE_PAYMENT_RFC")]
+        public IHttpActionResult GetAdvancePaymentData(ZADVANCE_PAYMENT_RFC_Request request)
         {
             try
             {
-                if (request == null)
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZADVANCE_PAYMENT_RFC");
+
+                myfun.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
+                myfun.SetValue("I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW);
+                myfun.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
+
+                myfun.Invoke(dest);
+
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+                
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return Content(HttpStatusCode.BadRequest, new
+                    return Ok(new
                     {
-                        Status = "Error",
-                        Message = "Request cannot be null",
-                        Data = new { IT_CREDIT = new List<object>() }
+                        Status = "E",
+                        Message = EX_RETURN.GetString("MESSAGE"),
+                        Data = new { ET_ADVANCE_PAYMENT = new List<object>() }
                     });
                 }
 
-                // Validate required parameters
-                if (string.IsNullOrEmpty(request.I_COMPANY_CODE))
+                IRfcTable tbl = myfun.GetTable("ET_ADVANCE_PAYMENT");
+                var advancePaymentData = tbl.AsEnumerable().Select(row =>
                 {
-                    return Content(HttpStatusCode.BadRequest, new
+                    var record = new Dictionary<string, object>();
+                    for (int i = 0; i < row.Metadata.FieldCount; i++)
                     {
-                        Status = "Error",
-                        Message = "Company Code is required",
-                        Data = new { IT_CREDIT = new List<object>() }
-                    });
-                }
-
-                if (string.IsNullOrEmpty(request.I_POSTING_DATE_LOW))
-                {
-                    return Content(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "Error",
-                        Message = "Posting Date Low is required",
-                        Data = new { IT_CREDIT = new List<object>() }
-                    });
-                }
-
-                // Validate date format
-                DateTime postingDateLow;
-                if (!DateTime.TryParseExact(request.I_POSTING_DATE_LOW, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out postingDateLow))
-                {
-                    return Content(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "Error",
-                        Message = "Invalid Posting Date Low format. Expected: YYYYMMDD",
-                        Data = new { IT_CREDIT = new List<object>() }
-                    });
-                }
-
-                DateTime postingDateHigh = DateTime.Now;
-                if (!string.IsNullOrEmpty(request.I_POSTING_DATE_HIGH))
-                {
-                    if (!DateTime.TryParseExact(request.I_POSTING_DATE_HIGH, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out postingDateHigh))
-                    {
-                        return Content(HttpStatusCode.BadRequest, new
+                        var fieldMetadata = row.Metadata[i];
+                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
                         {
-                            Status = "Error",
-                            Message = "Invalid Posting Date High format. Expected: YYYYMMDD",
-                            Data = new { IT_CREDIT = new List<object>() }
-                        });
+                            record[fieldMetadata.Name] = row.GetString(fieldMetadata.Name);
+                        }
                     }
+                    return record;
+                }).ToList();
 
-                    // Validate date range
-                    if (postingDateHigh < postingDateLow)
-                    {
-                        return Content(HttpStatusCode.BadRequest, new
-                        {
-                            Status = "Error",
-                            Message = "Posting Date High cannot be earlier than Posting Date Low",
-                            Data = new { IT_CREDIT = new List<object>() }
-                        });
-                    }
-                }
-
-                // Execute RFC call
-                var rfcResult = await ExecuteRfcCall(request);
-
-                if (rfcResult.Status == "Error")
+                return Ok(new
                 {
-                    return Content(HttpStatusCode.InternalServerError, rfcResult);
-                }
-
-                return Ok(rfcResult);
-            }
-            catch (Exception ex)
-            {
-                return Content(HttpStatusCode.InternalServerError, new
-                {
-                    Status = "Error",
-                    Message = $"Internal server error: {ex.Message}",
-                    Data = new { IT_CREDIT = new List<object>() }
+                    Status = "S",
+                    Message = "Success",
+                    Data = new { ET_ADVANCE_PAYMENT = advancePaymentData }
                 });
             }
-        }
-
-        private async Task<object> ExecuteRfcCall(AdvancePaymentRequest request)
-        {
-            try
+            catch (RfcAbapException ex)
             {
-                var rfcConfigParameters = base.rfcConfigparameters();
-                
-                if (rfcConfigParameters == null)
+                return Ok(new
                 {
-                    return new
-                    {
-                        Status = "Error",
-                        Message = "RFC configuration parameters not available",
-                        Data = new { IT_CREDIT = new List<object>() }
-                    };
-                }
-
-                RfcDestination destination = RfcDestinationManager.GetDestination(rfcConfigParameters);
-                IRfcFunction function = destination.Repository.CreateFunction("ZADVANCE_PAYMENT_RFC");
-
-                if (function == null)
-                {
-                    return new
-                    {
-                        Status = "Error",
-                        Message = "RFC function ZADVANCE_PAYMENT_RFC not found",
-                        Data = new { IT_CREDIT = new List<object>() }
-                    };
-                }
-
-                // Set import parameters
-                function.SetValue("I_COMPANY_CODE", request.I_COMPANY_CODE);
-                function.SetValue("I_POSTING_DATE_LOW", request.I_POSTING_DATE_LOW);
-                
-                if (!string.IsNullOrEmpty(request.I_POSTING_DATE_HIGH))
-                {
-                    function.SetValue("I_POSTING_DATE_HIGH", request.I_POSTING_DATE_HIGH);
-                }
-
-                // Execute RFC function
-                function.Invoke(destination);
-
-                // Get table data
-                IRfcTable creditTable = function.GetTable("IT_CREDIT");
-                List<object> creditList = new List<object>();
-
-                if (creditTable != null && creditTable.RowCount > 0)
-                {
-                    foreach (IRfcStructure row in creditTable)
-                    {
-                        var creditItem = new Dictionary<string, object>();
-                        
-                        // Dynamic metadata loop - extract all available fields
-                        for (int i = 0; i < row.Metadata.FieldCount; i++)
-                        {
-                            var fieldMeta = row.Metadata[i];
-                            string fieldName = fieldMeta.Name;
-                            
-                            // Skip STRUCTURE/TABLE types as specified
-                            if (fieldMeta.DataType != RfcDataType.STRUCTURE && 
-                                fieldMeta.DataType != RfcDataType.TABLE)
-                            {
-                                try
-                                {
-                                    object fieldValue = row.GetValue(fieldName);
-                                    creditItem[fieldName] = fieldValue?.ToString() ?? string.Empty;
-                                }
-                                catch
-                                {
-                                    creditItem[fieldName] = string.Empty;
-                                }
-                            }
-                        }
-                        
-                        creditList.Add(creditItem);
-                    }
-                }
-
-                return new
-                {
-                    Status = "Success",
-                    Message = $"Successfully retrieved {creditList.Count} advance payment records",
-                    Data = new { IT_CREDIT = creditList }
-                };
+                    Status = "E",
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new List<object>() }
+                });
             }
-            catch (RfcCommunicationException rfcEx)
+            catch (RfcCommunicationException ex)
             {
-                return new
+                return Ok(new
                 {
-                    Status = "Error",
-                    Message = $"RFC Communication Error: {rfcEx.Message}",
-                    Data = new { IT_CREDIT = new List<object>() }
-                };
-            }
-            catch (RfcLogonException rfcEx)
-            {
-                return new
-                {
-                    Status = "Error",
-                    Message = $"RFC Logon Error: {rfcEx.Message}",
-                    Data = new { IT_CREDIT = new List<object>() }
-                };
-            }
-            catch (RfcAbapRuntimeException rfcEx)
-            {
-                return new
-                {
-                    Status = "Error",
-                    Message = $"RFC ABAP Runtime Error: {rfcEx.Message}",
-                    Data = new { IT_CREDIT = new List<object>() }
-                };
+                    Status = "E",
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new List<object>() }
+                });
             }
             catch (Exception ex)
             {
-                return new
+                return Ok(new
                 {
-                    Status = "Error",
-                    Message = $"Unexpected error during RFC execution: {ex.Message}",
-                    Data = new { IT_CREDIT = new List<object>() }
-                };
+                    Status = "E",
+                    Message = ex.Message,
+                    Data = new { ET_ADVANCE_PAYMENT = new List<object>() }
+                });
             }
         }
     }
 
-    public class AdvancePaymentRequest
+    public class ZADVANCE_PAYMENT_RFC_Request
     {
         public string I_COMPANY_CODE { get; set; }
         public string I_POSTING_DATE_LOW { get; set; }
