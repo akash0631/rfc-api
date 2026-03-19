@@ -193,7 +193,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 },
                 ["servers"] = new JArray
                 {
-                    new JObject { ["url"] = IIS_BASE, ["description"] = "IIS Primary (192.168.151.24)" },
+                    new JObject { ["url"] = IIS_BASE, ["description"] = "IIS Primary (192.168.151.36)" },
                     new JObject { ["url"] = "http://192.168.144.174:9005", ["description"] = "SAP Dev (Client 210)" }
                 },
                 ["tags"]  = new JArray(endpoints.Select(e => e.Group).Distinct()
@@ -229,11 +229,11 @@ namespace Vendor_SRM_Routing_Application.Controllers
         {
             return new List<RfcEndpoint>
             {
-                // ── Inbound: HU Scanning & Unloading ─────────────────────────
+                // ââ Inbound: HU Scanning & Unloading âââââââââââââââââââââââââ
                 new RfcEndpoint
                 {
                     Name = "ZVND_UNLOAD_HU_VALIDATE_RFC", Route = "api/ZVND_UNLOAD_HU_VALIDATE_RFC",
-                    Group = "Inbound — Unloading", SapRfc = "ZVND_UNLOAD_HU_VALIDATE_RFC",
+                    Group = "Inbound â Unloading", SapRfc = "ZVND_UNLOAD_HU_VALIDATE_RFC",
                     Description = "Validate scanned HU during vehicle unloading. Returns PO, invoice and vendor name.",
                     Parameters = new List<RfcParam>
                     {
@@ -247,7 +247,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 new RfcEndpoint
                 {
                     Name = "ZVND_UNLOAD_PALLATE_VALIDATION", Route = "api/ZVND_UNLOAD_PALLATE_VALIDATION",
-                    Group = "Inbound — Unloading", SapRfc = "ZVND_UNLOAD_PALLATE_VALIDATION",
+                    Group = "Inbound â Unloading", SapRfc = "ZVND_UNLOAD_PALLATE_VALIDATION",
                     Description = "Validate scanned Palette after HU validation. Confirms palette ready for putway.",
                     Parameters = new List<RfcParam>
                     {
@@ -262,7 +262,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 new RfcEndpoint
                 {
                     Name = "ZVND_UNLOAD_SAVE_RFC", Route = "api/ZVND_UNLOAD_SAVE_RFC",
-                    Group = "Inbound — Unloading", SapRfc = "ZVND_UNLOAD_SAVE_RFC",
+                    Group = "Inbound â Unloading", SapRfc = "ZVND_UNLOAD_SAVE_RFC",
                     Description = "Save unloading data to SAP after HU and Palette validated. Table: PLANT, VEHICLE, EXT_HU, PALETTE, PO_NO, BILL_NO.",
                     Parameters = new List<RfcParam>
                     {
@@ -274,11 +274,11 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     ResponseTables = new List<string> { "EX_RETURN (BAPIRET2)" },
                     FilePath = "Controllers/Inbound/ZVND_UNLOAD_SAVE_RFCController.cs"
                 },
-                // ── Inbound: Putway to Bin ────────────────────────────────────
+                // ââ Inbound: Putway to Bin ââââââââââââââââââââââââââââââââââââ
                 new RfcEndpoint
                 {
                     Name = "ZVND_PUTWAY_BIN_VAL_RFC", Route = "api/ZVND_PUTWAY_BIN_VAL_RFC",
-                    Group = "Inbound — Putway to Bin", SapRfc = "ZVND_PUTWAY_BIN_VAL_RFC",
+                    Group = "Inbound â Putway to Bin", SapRfc = "ZVND_PUTWAY_BIN_VAL_RFC",
                     Description = "Validate BIN location (LGPLA) for inbound putway. BIN shown greyed on device after success.",
                     Parameters = new List<RfcParam>
                     {
@@ -292,7 +292,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 new RfcEndpoint
                 {
                     Name = "ZVND_PUTWAY_PALETTE_VAL_RFC", Route = "api/ZVND_PUTWAY_PALETTE_VAL_RFC",
-                    Group = "Inbound — Putway to Bin", SapRfc = "ZVND_PUTWAY_PALETTE_VAL_RFC",
+                    Group = "Inbound â Putway to Bin", SapRfc = "ZVND_PUTWAY_PALETTE_VAL_RFC",
                     Description = "Validate Palette for inbound putway. Returns vendor info, PO, invoice and total box count on palette.",
                     Parameters = new List<RfcParam>
                     {
@@ -307,7 +307,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 new RfcEndpoint
                 {
                     Name = "ZVND_PUTWAY_SAVE_DATA_RFC", Route = "api/ZVND_PUTWAY_SAVE_DATA_RFC",
-                    Group = "Inbound — Putway to Bin", SapRfc = "ZVND_PUTWAY_SAVE_DATA_RFC",
+                    Group = "Inbound â Putway to Bin", SapRfc = "ZVND_PUTWAY_SAVE_DATA_RFC",
                     Description = "Save putway data after BIN+Palette validated. After save: palette+bin clear, PO/Vendor info persists.",
                     Parameters = new List<RfcParam>
                     {
@@ -319,7 +319,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     ResponseTables = new List<string> { "EX_RETURN (BAPIRET2)" },
                     FilePath = "Controllers/Inbound/ZVND_PUTWAY_SAVE_DATA_RFCController.cs"
                 },
-                // ── HU Creation ───────────────────────────────────────────────
+                // ââ HU Creation âââââââââââââââââââââââââââââââââââââââââââââââ
                 new RfcEndpoint
                 {
                     Name = "ZVND_HU_PUSH_API_POST", Route = "api/ZVND_HU_PUSH_API_POST",
@@ -357,7 +357,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     ResponseTables = new List<string> { "ET_STORES", "ET_EAN_DATA", "EX_RETURN (BAPIRET2)" },
                     FilePath = "Controllers/HU_Creation/ZVND_HU_VALIDATE_RFCController.cs"
                 },
-                // ── Finance ───────────────────────────────────────────────────
+                // ââ Finance âââââââââââââââââââââââââââââââââââââââââââââââââââ
                 new RfcEndpoint
                 {
                     Name = "ZADVANCE_PAYMENT_RFC", Route = "api/ZADVANCE_PAYMENT_RFC",
@@ -402,7 +402,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     DataLakeEndpoint = DAB_BASE + "/api/ET_SALES_MOP",
                     FilePath = "Controllers/Finance/ZSALES_MOP_RFCController.cs"
                 },
-                // ── Store Master ──────────────────────────────────────────────
+                // ââ Store Master ââââââââââââââââââââââââââââââââââââââââââââââ
                 new RfcEndpoint
                 {
                     Name = "ZGET_STORE_MASTER_RFC", Route = "api/ZGET_STORE_MASTER_RFC",
@@ -416,11 +416,11 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     DataLakeEndpoint = DAB_BASE + "/api/ET_ZGET_STORE_MASTER",
                     FilePath = "Controllers/Vendor_SRM_Routing/ZGET_STORE_MASTER_RFCController.cs"
                 },
-                // ── Vendor SRM ────────────────────────────────────────────────
+                // ââ Vendor SRM ââââââââââââââââââââââââââââââââââââââââââââââââ
                 new RfcEndpoint
                 {
                     Name = "PO_Detail", Route = "api/PO_Detail",
-                    Group = "Vendor SRM — Routing", SapRfc = "ZSRM_PO_DETAIL",
+                    Group = "Vendor SRM â Routing", SapRfc = "ZSRM_PO_DETAIL",
                     Description = "Get article-wise PO detail for a vendor.",
                     Parameters = new List<RfcParam>
                     {
@@ -433,7 +433,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 new RfcEndpoint
                 {
                     Name = "RoutingStatusList", Route = "api/RoutingStatusList",
-                    Group = "Vendor SRM — Routing", SapRfc = "ZSRM_PO_RFC_GET_ROUTING",
+                    Group = "Vendor SRM â Routing", SapRfc = "ZSRM_PO_RFC_GET_ROUTING",
                     Description = "Full routing milestone status list for PO/design.",
                     Parameters = new List<RfcParam>
                     {
@@ -448,7 +448,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 new RfcEndpoint
                 {
                     Name = "Update_Routing_Status", Route = "api/Update_Routing_Status",
-                    Group = "Vendor SRM — Routing", SapRfc = "ZSRM_ROUTING_POST",
+                    Group = "Vendor SRM â Routing", SapRfc = "ZSRM_ROUTING_POST",
                     Description = "Post routing confirmation for a PO design/article milestone.",
                     Parameters = new List<RfcParam>
                     {
@@ -462,7 +462,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     ResponseTables = new List<string> { "EX_DATA", "ES_RETURN (BAPIRET2)" },
                     FilePath = "Controllers/Vendor_SRM_Routing/Update_Routing_StatusController.cs"
                 },
-                // ── DC Routing ────────────────────────────────────────────────
+                // ââ DC Routing ââââââââââââââââââââââââââââââââââââââââââââââââ
                 new RfcEndpoint
                 {
                     Name = "ZWM_GATE_ENTRY_RFC", Route = "api/ZWM_GATE_ENTRY_RFC",
@@ -477,7 +477,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     ResponseTables = new List<string> { "ET_DATA", "EX_RETURN (BAPIRET2)" },
                     FilePath = "Controllers/DcRouting/ZWM_GATE_ENTRY_RFCController.cs"
                 },
-                // ── Paperless Picklist ────────────────────────────────────────
+                // ââ Paperless Picklist ââââââââââââââââââââââââââââââââââââââââ
                 new RfcEndpoint
                 {
                     Name = "GetPicklistData", Route = "api/GetPicklistData",
@@ -492,7 +492,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     ResponseTables = new List<string> { "ET_DATA", "ET_EAN_DATA", "EX_RETURN (BAPIRET2)" },
                     FilePath = "Controllers/PaperlessPicklist/GetPicklistDataController.cs"
                 },
-                // ── Vehicle Loading ────────────────────────────────────────────
+                // ââ Vehicle Loading ââââââââââââââââââââââââââââââââââââââââââââ
                                 // -- PO Update (Cost & Quantity) -----------------------------------
                 new RfcEndpoint
                 {
@@ -541,7 +541,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
         }
     }
 
-    // ── Model Classes ─────────────────────────────────────────────────────────
+    // ââ Model Classes âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
     public class RfcEndpoint
     {
         public string         Name             { get; set; }
