@@ -14,11 +14,11 @@ namespace Vendor_SRM_Routing_Application
         protected void Application_Start()
         {
             AreaRegistration.RegisterAllAreas();
+            SwaggerConfig.Register();  // Swagger must register before MVC routes
             GlobalConfiguration.Configure(WebApiConfig.Register);  // Registers Web API routes
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
-            RouteConfig.RegisterRoutes(RouteTable.Routes);  // Ensure routes don't block Swagger
+            RouteConfig.RegisterRoutes(RouteTable.Routes);
             BundleConfig.RegisterBundles(BundleTable.Bundles);
-            SwaggerConfig.Register();  // Swagger configuration
         }
 
     }

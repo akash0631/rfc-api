@@ -1,89 +1,57 @@
-name: Audit .46 — find everything live
+name: E2E pipeline test
 on:
   workflow_dispatch:
 jobs:
-  audit:
+  test:
     runs-on: [self-hosted, test-vm]
     steps:
-      - name: Full audit of .46 — IIS, SQL, SAP, services
+      - name: Check collector health and test IIS directly
         shell: powershell
         run: |
-          Import-Module WebAdministration -EA SilentlyContinue
-
-          Write-Host "========================================="
-          Write-Host "1. IIS SITES AND THEIR PHYSICAL PATHS"
-          Write-Host "========================================="
-          Get-Website | Select Name, State,
-            @{n='Port';e={($_.Bindings.Collection[0].bindingInformation -split ':')[1]}},
-            @{n='Path';e={$_.PhysicalPath}} | Format-Table -AutoSize
-
-          Write-Host "========================================="
-          Write-Host "2. DLL COUNT IN EACH IIS SITE"
-          Write-Host "========================================="
-          Get-Website | ForEach-Object {
-            $p = $_.PhysicalPath
-            $bin = "$p\bin"
-            $dlls = (Get-ChildItem $bin -Filter "*.dll" -EA SilentlyContinue).Count
-            $vendor = (Get-ChildItem $bin -Filter "Vendor*.dll" -EA SilentlyContinue).Count
-            $sap = (Get-ChildItem $bin -Filter "*sap*" -EA SilentlyContinue).Count
-            Write-Host "$($_.Name) ($p): $dlls DLLs total, $vendor Vendor, $sap SAP"
-          }
-
-          Write-Host "========================================="
-          Write-Host "3. TEST EVERY IIS ROUTE ON .46"
-          Write-Host "========================================="
-          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
-          $ports = @(80, 8080, 8888, 9000)
-          $routes = @(
-            "/api/ZAdvancePaymentRfc/Execute",
-            "/api/ZADVANCE_PAYMENT_RFC",
-            "/api/ZadvancePaymentRfc/Execute",
-            "/swagger",
-            "/"
-          )
-          foreach ($port in $ports) {
-            foreach ($route in $routes) {
-              try {
-                $m = if ($route -like "*/Execute" -or $route -like "*/RFC") {"POST"} else {"GET"}
-                $b = if ($m -eq "POST") {$body} else {$null}
-                $r = Invoke-WebRequest "http://localhost:$port$route" -Method $m -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 5
-                Write-Host "✅ :$port$route HTTP $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(120,$r.Content.Length)))"
-              } catch {
-                $code = $_.Exception.Response.StatusCode.value__ 2>$null
-                if ($code -and $code -ne 404) {
-                  Write-Host "⚠️  :$port$route HTTP $code"
-                }
-              }
+          # Check health
+          $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8
+          Write-Host "HEALTH: $($h.Content)"
+          
+          # Check what URL it would build
+          Write-Host "Route test: ZADVANCE_PAYMENT_RFC → parts = Z,ADVANCE,PAYMENT,RFC → ZAdvancePaymentRfc"
+          
+          # Test IIS :80 directly
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          
+          Write-Host "=== Testing IIS :80 routes ==="
+          foreach ($route in @("/api/ZAdvancePaymentRfc/Execute", "/api/ZAdvancePaymentRfc/Health", "/", "/swagger")) {
+            try {
+              $m = if ($route -like "*/Execute") {"POST"} else {"GET"}
+              $b = if ($m -eq "POST") {$body} else {$null}
+              $r = Invoke-WebRequest "http://localhost:80$route" -Method $m -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+              Write-Host "OK :80$route → $($r.StatusCode): $($r.Content)"
+            } catch {
+              Write-Host "FAIL :80$route → $($_.Exception.Message)"
             }
           }
 
-          Write-Host "========================================="
-          Write-Host "4. RFC COLLECTOR SERVICE + CONFIG"
-          Write-Host "========================================="
-          Get-Service RfcCollector -EA SilentlyContinue | Select Name, Status
-          Get-Content "C:\RfcCollector\appsettings.json" -EA SilentlyContinue
-          Write-Host "RfcCollector.exe modified: $((Get-Item C:\RfcCollector\RfcCollector.exe -EA SilentlyContinue).LastWriteTime)"
+      - name: Force correct registry + restart + test
+        shell: powershell
+        run: |
+          # Remove old env then set fresh
+          Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" -Name "Environment" -EA SilentlyContinue
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\RfcCollector" `
+            -Name "Environment" `
+            -Value @("IIS_HOST=127.0.0.1","IIS_PORT=80","SQL_SERVER=192.168.151.46","SQL_USER=sa","SQL_PASS=vrl@55555","SQL_DB=claudetestv2","ASPNETCORE_URLS=http://0.0.0.0:9090") `
+            -Type MultiString
+          Write-Host "Registry updated"
+          
+          Restart-Service RfcCollector -Force
+          Start-Sleep 15
+          $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 10
+          Write-Host "NEW HEALTH: $($h.Content)"
 
-          Write-Host "========================================="
-          Write-Host "5. TEST RFC COLLECTOR HEALTH + FETCH"
-          Write-Host "========================================="
-          try { $h = Invoke-WebRequest "http://localhost:9090/" -UseBasicParsing -TimeoutSec 8; Write-Host "Collector health: $($h.Content)" } catch { Write-Host "Health: $($_.Exception.Message)" }
-          $b2 = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":3}'
-          try { $r2 = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b2 -ContentType "application/json" -UseBasicParsing -TimeoutSec 45; Write-Host "Fetch: HTTP $($r2.StatusCode)"; Write-Host ($r2.Content.Substring(0,[Math]::Min(500,$r2.Content.Length))) } catch { Write-Host "Fetch error: $($_.Exception.Message)" }
-
-          Write-Host "========================================="
-          Write-Host "6. SQL claudetestv2 — existing tables"
-          Write-Host "========================================="
-          $cs = "Server=192.168.151.46,1433;Database=claudetestv2;User Id=sa;Password=vrl@55555;TrustServerCertificate=true;"
-          $conn = New-Object System.Data.SqlClient.SqlConnection($cs)
-          $conn.Open()
-          $cmd = $conn.CreateCommand()
-          $cmd.CommandText = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME"
-          $reader = $cmd.ExecuteReader()
-          while ($reader.Read()) { Write-Host "  $($reader[0])" }
-          $conn.Close()
-
-          Write-Host "========================================="
-          Write-Host "7. SAP NCo DLLs on .46"
-          Write-Host "========================================="
-          @("C:\Windows\System32\sapnco.dll","C:\Windows\System32\sapnco_utils.dll","C:\Windows\assembly\GAC_64\sapnco","C:\Windows\Microsoft.NET\assembly\GAC_64\sapnco") | ForEach-Object { Write-Host "$_ exists: $(Test-Path $_)" }
+      - name: Full pipeline test company 1100
+        shell: powershell
+        run: |
+          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":5}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "PIPELINE: HTTP $($r.StatusCode)"
+            Write-Host $r.Content
+          } catch { Write-Host "PIPELINE ERR: $($_.Exception.Message)" }

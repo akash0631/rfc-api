@@ -1,79 +1,95 @@
-name: Deploy Controllers to IIS (V2DC-ADDVERB)
-
+name: Build on GH Windows + Deploy to .46
 on:
+  workflow_dispatch:
   push:
-    branches: [master, main]
     paths:
       - 'Controllers/**'
       - 'Models/**'
-  workflow_dispatch:
-    inputs:
-      rfc_name:
-        description: 'RFC Name that was pushed'
-        required: false
-        default: 'manual'
 
 jobs:
-  deploy-iis:
-    name: Build & Deploy to V2DC-ADDVERB IIS
-    runs-on: self-hosted
-
+  build:
+    runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Restore NuGet packages
-        shell: cmd
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v1
+
+      - name: NuGet restore
+        run: nuget restore Vendor_SRM_Routing_Application.sln
+
+      - name: MSBuild Release
         run: |
-          if not exist "C:\nuget\nuget.exe" (
-            powershell -Command "New-Item -ItemType Directory -Force -Path C:\nuget; Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile C:\nuget\nuget.exe"
-          )
-          C:\nuget\nuget.exe restore Vendor_SRM_Routing_Application.sln -NonInteractive
+          $msbuild = &"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
+          if (-not $msbuild) { $msbuild = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe" }
+          Write-Host "MSBuild: $msbuild"
+          & $msbuild Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal
+          Write-Host "Build exit: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $dlls = (Get-ChildItem bin\Release -Filter "*.dll").Count
+          Write-Host "DLLs built: $dlls"
+          Get-ChildItem bin\Release -Filter "Vendor*.dll" | Select Name
 
-      - name: Fix WebApplication targets path for build server
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfc-app-release
+          path: |
+            bin/Release/
+            Web.config
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rfc-app-release
+          path: C:\deploy-staging
+
+      - name: Deploy to Store Tracker IIS
         shell: powershell
         run: |
-          $csproj = "Vendor_SRM_Routing_Application.csproj"
-          $content = Get-Content $csproj -Raw
-          # Replace missing VS11 targets with the available MSBuild WebApplication targets
-          $fixed = $content -replace 'Microsoft\\VisualStudio\\v[0-9.]+\\WebApplications\\Microsoft\.WebApplication\.targets',
-            'MSBuildExtensionsPath32\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'
-          # Also try direct replacement with exists check
-          $fixed = $fixed -replace '<Import Project=\"\$\(MSBuildExtensionsPath32\)\\Microsoft\\VisualStudio\\v\$\(VisualStudioVersion\)\\WebApplications\\Microsoft.WebApplication.targets\" \/>',
-            '<Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets" Condition="Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" /><Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" Condition="!Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" />'
-          # Simpler: just make the import conditional so it doesnt fail if missing
-          $fixed2 = (Get-Content $csproj -Raw) -replace '(<Import Project=\".*WebApplication\.targets\" )(/>)', '$1Condition="Exists(''$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WebApplications\Microsoft.WebApplication.targets'')" $2'
-          Set-Content $csproj $fixed2 -NoNewline
-          Write-Host "csproj patched"
+          Write-Host "=== Staged files ==="
+          (Get-ChildItem "C:\deploy-staging" -Recurse -Filter "*.dll").Count
+          Get-ChildItem "C:\deploy-staging" -Filter "Vendor*.dll" | Select Name
 
-      - name: Build (Release) with .NET Framework MSBuild
-        shell: cmd
-        run: |
-          set MSBUILD=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
-          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=bin\Release\ /m /nologo /verbosity:minimal /p:VisualStudioVersion=11.0
+          # Deploy to Store Tracker
+          $dst = "C:\inetpub\wwwroot\Store Tracker"
+          if (-not (Test-Path $dst)) { New-Item -ItemType Directory $dst -Force }
+          Copy-Item "C:\deploy-staging\*" $dst -Recurse -Force
+          Write-Host "Deployed DLLs: $((Get-ChildItem "$dst\bin" -Filter '*.dll' -EA SilentlyContinue).Count)"
+          Write-Host "Web.config: $(Test-Path "$dst\Web.config")"
 
-      - name: Copy new DLLs to IIS app (robocopy)
-        shell: cmd
-        run: |
-          robocopy bin\Release\ "C:\inetpub\wwwroot\Store Tracker\bin\" *.dll *.pdb /XO /NJH /NJS
-          if %ERRORLEVEL% LEQ 7 exit /b 0
+          # Recycle app pool and restart RFC Collector
+          Import-Module WebAdministration
+          Restart-WebAppPool "StoreTracker" -ErrorAction SilentlyContinue
+          Restart-WebAppPool "DefaultAppPool" -ErrorAction SilentlyContinue
+          Start-Sleep 8
+          Get-Website | Select Name, State | Format-Table
 
-      - name: Recycle IIS App Pool
+          # Ensure RFC Collector points to :80
+          $cfg = Get-Content "C:\RfcCollector\appsettings.json" | ConvertFrom-Json
+          $cfg.IIS_HOST = "127.0.0.1"; $cfg.IIS_PORT = "80"
+          $cfg | ConvertTo-Json -Depth 10 | Set-Content "C:\RfcCollector\appsettings.json"
+          Restart-Service RfcCollector -Force
+          Start-Sleep 12
+          Write-Host "RfcCollector: $((Get-Service RfcCollector).Status)"
+
+      - name: Smoke test
         shell: powershell
         run: |
-          Import-Module WebAdministration -ErrorAction SilentlyContinue
-          $pool = Get-WebConfiguration system.applicationHost/applicationPools/add | Where-Object { $_.name -like "*Store*" -or $_.name -like "*Tracker*" -or $_.name -like "*rfc*" }
-          if ($pool) {
-            Restart-WebAppPool $pool.name
-            Write-Host "Recycled pool: $($pool.name)"
-          } else {
-            & "$env:windir\System32\inetsrv\appcmd.exe" list apppool
-            Write-Host "Recycled all pools"
-          }
+          $body = '{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:80/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            Write-Host "IIS :80 → HTTP $($r.StatusCode) | $($r.Content.Substring(0,[Math]::Min(300,$r.Content.Length)))"
+          } catch { Write-Host "IIS :80 → $($_.Exception.Message)" }
 
-      - name: Wait 5s then trigger SAP sync
-        shell: cmd
-        run: |
-          timeout /t 5 /nobreak > nul
-          curl -s -X POST http://localhost/api/Sync/run-all -H "Content-Type: application/json"
-          echo Sync triggered - SAP data flowing to DataV2
+          $b = '{"rfc":"ZADVANCE_PAYMENT_RFC","params":{"I_COMPANY_CODE":"1000","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"},"targetTable":"ET_ZADVANCE_PAYMENT","targetDb":"claudetestv2","maxRows":3}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9090/fetch" -Method POST -Body $b -ContentType "application/json" -UseBasicParsing -TimeoutSec 60
+            Write-Host "FETCH → HTTP $($r.StatusCode)"
+            Write-Host ($r.Content.Substring(0,[Math]::Min(600,$r.Content.Length)))
+          } catch { Write-Host "FETCH → $($_.Exception.Message)" }

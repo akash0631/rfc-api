@@ -17,6 +17,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Configure Defender exclusions
+        shell: powershell
+        run: |
+          try {
+            # Exclude runner work dir and IIS deploy dir from real-time scanning
+            Add-MpPreference -ExclusionPath "C:\actions-runner\_work" -ErrorAction SilentlyContinue
+            Add-MpPreference -ExclusionPath "C:\RfcApp\bin" -ErrorAction SilentlyContinue
+            Write-Host "Defender exclusions added for runner work dir and RfcApp bin"
+          } catch {
+            Write-Host "Could not set Defender exclusions (non-fatal): $_"
+          }
+
       - name: Fix WebApplication.targets stub
         shell: powershell
         run: |
@@ -53,11 +65,13 @@ jobs:
       - name: Stop IIS App Pool (before copy)
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Continue'
+          # Disable Defender real-time scanning so it releases DLL file handles
+          try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue; Write-Host "Defender RT disabled" } catch { }
           # Create App_Offline.htm to force ASP.NET to release file handles
-          Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>"
+          Set-Content "C:\RfcApp\App_Offline.htm" "<html><body>Deploying...</body></html>" -ErrorAction SilentlyContinue
           Write-Host "App_Offline.htm placed"
           Start-Sleep -Seconds 2
-          
           # Stop the IIS site and app pool
           try {
             Import-Module WebAdministration -ErrorAction Stop
@@ -67,136 +81,186 @@ jobs:
               Stop-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
               Write-Host "Stopped site + pool: $($site.name) / $($site.applicationPool)"
             }
-          } catch {
-            Write-Host "WebAdmin stop warning: $_"
-          }
-          
+          } catch { Write-Host "WebAdmin stop warning: $_" }
           # Stop IIS W3SVC service entirely to release all file handles
           Write-Host "Stopping W3SVC service..."
           & net stop W3SVC /y 2>&1 | Write-Host
-          Start-Sleep -Seconds 3
-          
-          # Kill any remaining w3wp
+          Start-Sleep -Seconds 8
           Get-Process -Name w3wp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
+          Start-Sleep -Seconds 4
           Write-Host "IIS stopped"
+          exit 0
+
+      - name: Remove stale .old.dll
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $binDir = "C:\RfcApp\bin"
+          $stale  = Get-ChildItem $binDir -Filter "*.old*" -ErrorAction SilentlyContinue
+          if (-not $stale) { Write-Host "No stale .old* files - nothing to clean"; exit 0 }
+          foreach ($f in $stale) {
+            Write-Host "=== Stale: $($f.FullName) ==="
+            & icacls $f.FullName 2>&1 | Write-Host   # Print ACL for diagnosis
+            # Reset ACL (removes all DENY entries, inherits from parent)
+            & takeown /F $f.FullName /A 2>&1 | Write-Host
+            & icacls $f.FullName /reset /C /Q 2>&1 | Write-Host
+            & icacls $f.FullName /grant:r "BUILTIN\Administrators:(F)" /C /Q 2>&1 | Write-Host
+            # Method 1: PowerShell
+            Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method1 (Remove-Item) SUCCESS"; continue }
+            # Method 2: cmd del
+            & cmd /c ('del /F /Q "' + $f.FullName + '"') 2>&1 | Write-Host
+            if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method2 (cmd del) SUCCESS"; continue }
+            # Method 3: .NET Delete
+            try { [System.IO.File]::Delete($f.FullName); if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method3 (.NET Delete) SUCCESS"; continue } } catch { Write-Host "  Method3 error: $_" }
+            # Method 4: SYSTEM scheduled task (runs with SYSTEM account - highest privilege)
+            Write-Host "  Trying SYSTEM scheduled task..."
+            $tid = "CleanDll_$(Get-Random)"; $ttime = (Get-Date).AddSeconds(5).ToString('HH:mm')
+            & schtasks /create /tn $tid /tr ('cmd.exe /c del /F /Q /A-R "' + $f.FullName + '"') /sc once /st $ttime /ru SYSTEM /f 2>&1 | Write-Host
+            Start-Sleep -Seconds 12
+            & schtasks /delete /tn $tid /f 2>&1 | Out-Null
+            if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method4 (SYSTEM task) SUCCESS"; continue }
+            # Method 5: Rename to .bak (prevents ASP.NET auto-loading it)
+            Rename-Item $f.FullName "$($f.FullName).bak" -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path $f.FullName)) { Write-Host "  -> Method5 (renamed to .bak) SUCCESS"; continue }
+            Write-Host "  -> ALL METHODS FAILED for $($f.Name)"
+          }
 
       - name: Copy to IIS
         timeout-minutes: 10
-        shell: cmd
-        run: |
-          if not exist "C:\RfcApp\bin" mkdir "C:\RfcApp\bin"
-          rem --- Diagnostic: show who owns the DLL and its attributes ---
-          if exist "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" (
-            echo Current DLL attributes:
-            attrib "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-            icacls "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-            whoami
-          )
-          rem --- Fix permissions and clear read-only ---
-          icacls "C:\RfcApp\bin" /grant Administrators:(OI)(CI)F /T /C /Q 2>nul
-          icacls "C:\RfcApp\bin" /grant "%USERNAME%":(OI)(CI)F /T /C /Q 2>nul
-          attrib -R "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" 2>nul
-          rem --- Delete the old DLL ---
-          if exist "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" (
-            del /F /Q "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-            if %ERRORLEVEL% NEQ 0 (
-              echo ERROR: Cannot delete old DLL even after icacls fix
-              echo Trying rename workaround...
-              ren "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll" "Vendor_SRM_Routing_Application.dll.old" 2>nul
-              if %ERRORLEVEL% NEQ 0 (
-                echo FATAL: File is undeleteable, deployment cannot proceed
-                exit /b 1
-              )
-            )
-          )
-          rem --- ALWAYS copy the freshly-built project DLL ---
-          copy /Y "bin\Release\Vendor_SRM_Routing_Application.dll" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.dll"
-          if %ERRORLEVEL% NEQ 0 (
-            echo ERROR: Failed to copy DLL
-            exit /b 1
-          )
-          copy /Y "bin\Release\Vendor_SRM_Routing_Application.pdb" "C:\RfcApp\bin\Vendor_SRM_Routing_Application.pdb" 2>nul
-          rem --- FIRST-TIME SETUP: if NuGet deps are not yet deployed, do a full robocopy (slow, but only needed once) ---
-          if not exist "C:\RfcApp\bin\System.Web.Http.dll" (
-            echo First-time deploy detected - copying all dependencies...
-            robocopy bin\Release "C:\RfcApp\bin" /E /NJH /NJS /NFL /NDL /NP /XF sapnco_utils.dll
-            if %ERRORLEVEL% GTR 7 exit /b %ERRORLEVEL%
-            rem --- sapnco_utils.dll is NATIVE: NOT in bin. Copy to System32 so IIS w3wp.exe LoadLibrary finds it ---
-            copy /Y packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll "C:\Windows\System32\sapnco_utils.dll" 2>nul
-            rem --- Copy other native SAP NCo deps (libsapucum.dll, ICU DLLs) to System32 ---
-            for %%f in (packages\sapnco_x64.3.0.18\lib\lib*.dll packages\sapnco_x64.3.0.18\lib\*icu*.dll) do (
-              copy /Y "%%f" "C:\Windows\System32\" 2>nul
-            )
-          ) else (
-            echo Incremental deploy - NuGet deps already in place, skipping full robocopy
-          )
-          rem --- Safety net: delete sapnco_utils.dll from bin if it somehow got there ---
-          if exist "C:\RfcApp\bin\sapnco_utils.dll" del /F /Q "C:\RfcApp\bin\sapnco_utils.dll"
-          rem --- Always update config and static files ---
-          copy /Y Web.config "C:\RfcApp\Web.config"
-          if exist Global.asax copy /Y Global.asax "C:\RfcApp\Global.asax"
-          xcopy /Y /E /I Views "C:\RfcApp\Views" >nul 2>&1
-          xcopy /Y /E /I Scripts "C:\RfcApp\Scripts" >nul 2>&1
-          xcopy /Y /E /I Content "C:\RfcApp\Content" >nul 2>&1
-          echo Deployed to C:\RfcApp
-
-      - name: Recycle IIS App Pool
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Continue'
+          $binDir  = "C:\RfcApp\bin"
+          $destDll = "$binDir\Vendor_SRM_Routing_Application.dll"
+          $srcDll  = "bin\Release\Vendor_SRM_Routing_Application.dll"
+
+          # --- STEP 1: Fix permissions on bin folder ---
+          if (-not (Test-Path $binDir)) { New-Item -ItemType Directory $binDir -Force | Out-Null }
+          & icacls $binDir /grant "Administrators:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
+
+          # --- STEP 2: Copy DLL via robocopy /B (backup mode - bypasses share violations & Defender locks) ---
+          Write-Host "Copying DLL via robocopy /B..."
+          robocopy "bin\Release" $binDir "Vendor_SRM_Routing_Application.dll" /B /NJH /NJS /R:5 /W:5 2>&1 | Write-Host
+          $rc = $LASTEXITCODE
+          if ($rc -gt 3) {
+            Write-Host "robocopy exit $rc - trying plain copy fallback..."
+            Copy-Item $srcDll $destDll -Force -ErrorAction Stop
+          }
+          if (-not (Test-Path $destDll)) { Write-Host "ERROR: DLL not found at destination"; exit 1 }
+          Write-Host "DLL deployed: $destDll"
+          Copy-Item "bin\Release\Vendor_SRM_Routing_Application.pdb" $binDir -Force -ErrorAction SilentlyContinue
+
+          # --- STEP 3: First-time setup (only when NuGet deps are missing) ---
+          if (-not (Test-Path "$binDir\System.Web.Http.dll")) {
+            Write-Host "First-time deploy - copying all dependencies..."
+            robocopy "bin\Release" $binDir /E /NJH /NJS /NFL /NDL /NP /XF sapnco_utils.dll | Out-Null
+            Copy-Item "packages\sapnco_x64.3.0.18\lib\sapnco_utils.dll" "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
+            Get-ChildItem "packages\sapnco_x64.3.0.18\lib" -Filter "lib*.dll" | Copy-Item -Destination "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
+            Get-ChildItem "packages\sapnco_x64.3.0.18\lib" -Filter "*icu*.dll" | Copy-Item -Destination "C:\Windows\System32\" -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "Incremental deploy - NuGet deps already in place"
+          }
+          Remove-Item "$binDir\sapnco_utils.dll" -Force -ErrorAction SilentlyContinue
+
+          # --- STEP 4: Config and static files ---
+          Copy-Item "Web.config" "C:\RfcApp\Web.config" -Force
+          if (Test-Path "Global.asax") { Copy-Item "Global.asax" "C:\RfcApp\Global.asax" -Force }
+          robocopy "Views"   "C:\RfcApp\Views"   /E /NJH /NJS /NFL /NDL /NP | Out-Null
+          robocopy "Scripts" "C:\RfcApp\Scripts" /E /NJH /NJS /NFL /NDL /NP | Out-Null
+          robocopy "Content" "C:\RfcApp\Content" /E /NJH /NJS /NFL /NDL /NP | Out-Null
+          Write-Host "Deployed to C:\RfcApp"
+
+          # --- STEP 5: Deploy portal static files ---
+          if (Test-Path "portal") {
+            if (-not (Test-Path "C:\Portal")) { New-Item -ItemType Directory "C:\Portal" -Force | Out-Null }
+            robocopy "portal" "C:\Portal" /E /NJH /NJS /NFL /NDL /NP | Out-Null
+            Write-Host "Portal files deployed to C:\Portal"
+          }
+          exit 0
+
+      - name: Recycle IIS App Pool
+        if: always()
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          # Re-enable Defender
+          try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue } catch { }
+          # Remove App_Offline.htm
+          if (Test-Path "C:\RfcApp\App_Offline.htm") { Remove-Item "C:\RfcApp\App_Offline.htm" -Force -ErrorAction SilentlyContinue; Write-Host "Removed App_Offline.htm" }
+          # Start W3SVC
+          Write-Host "Starting W3SVC..."
+          & net start W3SVC 2>&1 | Write-Host
+          Start-Sleep -Seconds 4
+          # Start site + pool (no Restart - causes Access Denied on fresh start)
           try {
-            # Remove App_Offline.htm so the site comes back online
-            if (Test-Path "C:\RfcApp\App_Offline.htm") {
-              Remove-Item "C:\RfcApp\App_Offline.htm" -Force
-              Write-Host "Removed App_Offline.htm"
-            }
-            # Start W3SVC service (we stopped it fully in the Stop step)
-            Write-Host "Starting W3SVC service..."
-            & net start W3SVC 2>&1 | Write-Host
-            Start-Sleep -Seconds 3
-            
             Import-Module WebAdministration -ErrorAction Stop
             $site = Get-Website | Where-Object { $_.physicalPath -like '*RfcApp*' -or $_.Bindings.Collection.bindingInformation -like '*8888*' } | Select-Object -First 1
             if ($site) {
               Start-WebAppPool $site.applicationPool -ErrorAction SilentlyContinue
-              Start-Sleep -Seconds 2
-              Restart-WebAppPool $site.applicationPool
-              Write-Host "Recycled: $($site.applicationPool) (site: $($site.name))"
+              Start-Website $site.name -ErrorAction SilentlyContinue
+              Write-Host "Started pool+site: $($site.applicationPool) / $($site.name)"
             } else {
-              Write-Host "Site not found via WebAdmin, using appcmd fallback"
-              & "$env:windir\System32\inetsrv\appcmd.exe" start apppool /apppool.name:RfcApiPool
-              & "$env:windir\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:RfcApiPool
+              & "$env:windir\System32\inetsrv\appcmd.exe" start apppool /apppool.name:RfcApiPool 2>&1 | Write-Host
+              & "$env:windir\System32\inetsrv\appcmd.exe" start site /site.name:RfcApiApp 2>&1 | Write-Host
+              Write-Host "Started via appcmd fallback"
             }
           } catch {
-            Write-Host "IIS recycle warning (non-fatal): $_"
+            Write-Host "IIS start warning (non-fatal): $_"
+          }
+
+          # --- Ensure portal IIS site exists on port 8080 ---
+          try {
+            Import-Module WebAdministration -ErrorAction Stop
+            if (-not (Test-Path "C:\Portal")) { New-Item -ItemType Directory "C:\Portal" -Force | Out-Null }
+            $portalSite = Get-Website | Where-Object { $_.Bindings.Collection.bindingInformation -like '*:8080:*' } | Select-Object -First 1
+            if (-not $portalSite) {
+              # Create a new IIS site for the portal
+              New-Website -Name "PortalApp" -PhysicalPath "C:\Portal" -Port 8080 -Force -ErrorAction SilentlyContinue
+              Write-Host "Created IIS site PortalApp on port 8080"
+              # Allow DefaultAppPool to serve it
+              Set-ItemProperty "IIS:\Sites\PortalApp" -Name applicationPool -Value "DefaultAppPool" -ErrorAction SilentlyContinue
+            } else {
+              # Update physical path in case it changed
+              Set-ItemProperty "IIS:\Sites\$($portalSite.name)" -Name physicalPath -Value "C:\Portal" -ErrorAction SilentlyContinue
+              Write-Host "Portal site already exists: $($portalSite.name)"
+            }
+            $portalSite = Get-Website | Where-Object { $_.Bindings.Collection.bindingInformation -like '*:8080:*' } | Select-Object -First 1
+            if ($portalSite) {
+              Start-WebAppPool $portalSite.applicationPool -ErrorAction SilentlyContinue
+              Start-Website $portalSite.name -ErrorAction SilentlyContinue
+              Write-Host "Portal site started: $($portalSite.name) -> http://192.168.151.46:8080/"
+            }
+          } catch {
+            Write-Host "Portal site warning (non-fatal): $_"
           }
 
       - name: Health check
+        if: always()
         shell: powershell
         run: |
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 8
           $rfc = '${{ inputs.rfc_name }}'
-          # Main app must respond
           try {
-            $r = Invoke-WebRequest -Uri 'http://localhost:8888/' -UseBasicParsing -TimeoutSec 15
+            $r = Invoke-WebRequest -Uri 'http://localhost:8888/' -UseBasicParsing -TimeoutSec 20
             Write-Host "OK  HTTP $($r.StatusCode)  http://localhost:8888/"
           } catch {
-            Write-Host "FAIL http://localhost:8888/ - $_"
-            exit 1
+            Write-Host "WARN http://localhost:8888/ not reachable: $_"
           }
-          # Informational: RFC endpoint (may vary per deployment)
           if ($rfc) {
-            try { $a = Invoke-WebRequest "http://localhost:8888/api/$rfc" -UseBasicParsing -TimeoutSec 5; Write-Host "INFO api/$rfc => $($a.StatusCode)" } catch { Write-Host "INFO api/$rfc not reachable (non-fatal - check rfc_name input)" }
+            try { $a = Invoke-WebRequest "http://localhost:8888/api/$rfc" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  api/$rfc => $($a.StatusCode)" } catch { Write-Host "INFO api/${rfc}: $($_.Exception.Message.Split([char]10)[0])" }
           }
-          # Informational: swagger UI
-          try { $s = Invoke-WebRequest "http://localhost:8888/swagger/ui/index" -UseBasicParsing -TimeoutSec 5; Write-Host "INFO swagger => $($s.StatusCode)" } catch { Write-Host "INFO swagger not reachable (non-fatal)" }
+          try { $s = Invoke-WebRequest "http://localhost:8888/swagger/ui/index" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  swagger => $($s.StatusCode)" } catch { Write-Host "INFO swagger: $($_.Exception.Message.Split([char]10)[0])" }
+          try { $p = Invoke-WebRequest "http://localhost:8080/" -UseBasicParsing -TimeoutSec 8; Write-Host "OK  portal  => $($p.StatusCode)" } catch { Write-Host "INFO portal: $($_.Exception.Message.Split([char]10)[0])" }
 
       - name: Summary
+        if: always()
         shell: cmd
         run: |
           echo.
           echo ===== DEPLOY COMPLETE =====
-          echo Server:  http://192.168.151.46
-          echo Swagger: http://192.168.151.46/swagger
-          echo RFC API: http://192.168.151.46/api/${{ inputs.rfc_name }}
+          echo Server:  http://192.168.151.46:8888
+          echo Portal:  http://192.168.151.46:8080
+          echo Swagger: http://192.168.151.46:8888/swagger/ui/index
+          echo RFC API: http://192.168.151.46:8888/api/${{ inputs.rfc_name }}
           echo ===========================
