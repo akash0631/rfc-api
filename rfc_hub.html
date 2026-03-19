@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V2 RFC API Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #1a1e26;
+    --border: #252a35;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --success: #00e676;
+    --warning: #ffb300;
+    --error: #ff1744;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #0d1117 0%, #161b27 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-badge {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #000; font-family: var(--mono); font-weight: 600;
+    font-size: 11px; padding: 4px 8px; border-radius: 4px; letter-spacing: 1px;
+  }
+  .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .logo-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .header-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--success); font-family: var(--mono); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+  /* Layout */
+  .container { max-width: 1400px; margin: 0 auto; padding: 32px 40px; display: grid; grid-template-columns: 260px 1fr; gap: 32px; }
+
+  /* Sidebar */
+  .sidebar { position: sticky; top: 80px; height: calc(100vh - 100px); overflow-y: auto; }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .sidebar-section { margin-bottom: 24px; }
+  .sidebar-label { font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; font-family: var(--mono); }
+  .sidebar-item {
+    display: flex; align-items: center; gap-10px; padding: 8px 12px; border-radius: 6px;
+    font-size: 13px; cursor: pointer; color: var(--muted); transition: all 0.15s;
+    border: 1px solid transparent; margin-bottom: 2px; gap: 10px;
+  }
+  .sidebar-item:hover { background: var(--surface2); color: var(--text); }
+  .sidebar-item.active { background: rgba(0,212,255,0.08); color: var(--accent); border-color: rgba(0,212,255,0.2); }
+  .sidebar-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; font-family: var(--mono); margin-left: auto; }
+  .tag-post { background: rgba(0,214,255,0.15); color: var(--accent); }
+  .tag-get { background: rgba(0,230,118,0.15); color: var(--success); }
+
+  /* Main content */
+  .main { min-height: 100vh; }
+
+  /* Hero stats */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px;
+    position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .stat-value { font-size: 32px; font-weight: 700; font-family: var(--mono); color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* API Cards */
+  .section-title { font-size: 14px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-family: var(--mono); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .api-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 16px; overflow: hidden; transition: border-color 0.2s;
+  }
+  .api-card:hover { border-color: rgba(0,212,255,0.3); }
+  .api-card.active { border-color: var(--accent); }
+
+  .api-header {
+    padding: 16px 20px; cursor: pointer; display: flex; align-items: center; gap: 12px;
+    background: var(--surface);
+  }
+  .method-badge {
+    font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 3px 8px;
+    border-radius: 4px; letter-spacing: 0.5px; min-width: 44px; text-align: center;
+  }
+  .method-post { background: rgba(0,212,255,0.15); color: var(--accent); border: 1px solid rgba(0,212,255,0.3); }
+  .method-get { background: rgba(0,230,118,0.15); color: var(--success); border: 1px solid rgba(0,230,118,0.3); }
+  .api-name { font-family: var(--mono); font-size: 14px; font-weight: 500; flex: 1; }
+  .api-desc { font-size: 12px; color: var(--muted); }
+  .api-chevron { color: var(--muted); transition: transform 0.2s; font-size: 12px; }
+  .api-card.open .api-chevron { transform: rotate(180deg); }
+
+  .api-body { display: none; border-top: 1px solid var(--border); padding: 20px; background: var(--surface2); }
+  .api-card.open .api-body { display: block; }
+
+  /* URL bar */
+  .url-bar {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font-family: var(--mono); font-size: 12px; color: var(--accent);
+    margin-bottom: 16px; display: flex; align-items: center; gap: 8px; overflow-x: auto; white-space: nowrap;
+  }
+  .url-method { color: var(--accent2); font-weight: 600; }
+  .copy-btn {
+    margin-left: auto; background: transparent; border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-family: var(--mono);
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .copy-btn:hover { background: var(--surface); color: var(--text); }
+
+  /* Params table */
+  .params-label { font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-family: var(--mono); margin-bottom: 8px; }
+  .params-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  .params-table th { font-size: 11px; text-align: left; padding: 6px 10px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); }
+  .params-table td { font-size: 12px; padding: 8px 10px; border-bottom: 1px solid rgba(37,42,53,0.5); font-family: var(--mono); }
+  .params-table td:first-child { color: var(--accent); }
+  .params-table td:nth-child(2) { color: var(--warning); }
+  .params-table td:nth-child(3) { color: var(--muted); font-family: var(--sans); font-size: 11px; }
+
+  /* Try it */
+  .try-section { margin-top: 16px; }
+  .try-grid { display: grid; gap: 10px; margin-bottom: 12px; }
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
+  .field-label { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .field-input {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px;
+    transition: border-color 0.15s; outline: none;
+  }
+  .field-input:focus { border-color: var(--accent); }
+
+  .execute-btn {
+    background: linear-gradient(135deg, var(--accent), #0099bb); color: #000;
+    border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600;
+    font-size: 13px; cursor: pointer; font-family: var(--sans); transition: all 0.15s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .execute-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,212,255,0.3); }
+  .execute-btn:active { transform: translateY(0); }
+  .execute-btn.loading { opacity: 0.7; cursor: not-allowed; }
+
+  .response-box {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px; font-family: var(--mono); font-size: 12px; margin-top: 12px;
+    max-height: 300px; overflow-y: auto; display: none; white-space: pre-wrap; line-height: 1.6;
+  }
+  .response-box.visible { display: block; }
+  .response-box.success { border-color: var(--success); }
+  .response-box.error { border-color: var(--error); color: var(--error); }
+  .response-status { font-size: 11px; font-family: var(--mono); margin-bottom: 8px; }
+  .status-ok { color: var(--success); }
+  .status-err { color: var(--error); }
+
+  /* Curl block */
+  .curl-block {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px; font-family: var(--mono); font-size: 11px; color: #a8c4d4;
+    margin-top: 12px; overflow-x: auto; white-space: pre; line-height: 1.7;
+    position: relative;
+  }
+  .curl-copy { position: absolute; top: 8px; right: 8px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 8px 16px; font-size: 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; font-family: var(--mono); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Pipeline section */
+  .pipeline-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+  .pipeline-flow { display: flex; align-items: center; gap: 0; margin: 20px 0; flex-wrap: wrap; }
+  .pipeline-step { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 12px; text-align: center; min-width: 120px; }
+  .pipeline-step .step-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+  .pipeline-step .step-name { font-weight: 600; font-size: 12px; }
+  .pipeline-step .step-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+  .pipeline-arrow { font-size: 20px; color: var(--accent); padding: 0 8px; }
+
+  /* Search */
+  .search-bar {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font-family: var(--mono); font-size: 13px; color: var(--text);
+    width: 100%; margin-bottom: 20px; outline: none; transition: border-color 0.15s;
+  }
+  .search-bar:focus { border-color: var(--accent); }
+  .search-bar::placeholder { color: var(--muted); }
+
+  /* Badge new */
+  .badge-new { font-size: 9px; background: var(--accent); color: #000; padding: 1px 5px; border-radius: 3px; font-family: var(--mono); font-weight: 700; margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">
+    <span class="logo-badge">V2 RFC</span>
+    <div>
+      <div class="logo-text">SAP RFC API Hub</div>
+      <div class="logo-sub">192.168.151.36:9292 — SAP Dev ECC</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <span class="dot"></span>
+    <span id="server-status">Checking server...</span>
+  </div>
+</header>
+
+<div class="container">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Navigation</div>
+      <div class="sidebar-item active" onclick="showSection('overview')">📊 Overview</div>
+      <div class="sidebar-item" onclick="showSection('pipeline')">⚡ Pipeline</div>
+      <div class="sidebar-item" onclick="showSection('apis')">🔌 All APIs</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Finance RFCs <span class="badge-new">NEW</span></div>
+      <div class="sidebar-item" onclick="showSection('apis'); scrollTo('ZPO_DD_UPD')">
+        <span>ZPO_DD_UPD_RFC</span><span class="sidebar-tag tag-post">POST</span>
+      </div>
+      <div class="sidebar-item" onclick="showSection('apis'); scrollTo('ZPO_MOD')">
+        <span>ZPO_MODIFICATION</span><span class="sidebar-tag tag-post">POST</span>
+      </div>
+      <div class="sidebar-item" onclick="showSection('apis'); scrollTo('ZADVANCE')">
+        <span>ZADVANCE_PAYMENT</span><span class="sidebar-tag tag-post">POST</span>
+      </div>
+      <div class="sidebar-item" onclick="showSection('apis'); scrollTo('ZFINANCE')">
+        <span>ZFINANCE_DOCUMENT</span><span class="sidebar-tag tag-post">POST</span>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Quick Links</div>
+      <div class="sidebar-item" onclick="window.open('https://v2-rfc-portal.pages.dev/rfc_explorer.html')">🌐 RFC Explorer</div>
+      <div class="sidebar-item" onclick="window.open('https://github.com/akash0631/rfc-api')">📦 GitHub Repo</div>
+      <div class="sidebar-item" onclick="window.open('https://v2-rfc-pipeline.akash-bab.workers.dev/explore')">☁️ CF Worker</div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Overview -->
+    <div id="section-overview">
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-value">123</div>
+          <div class="stat-label">Total Controllers</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--success)">LIVE</div>
+          <div class="stat-label">192.168.151.36:9292</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--accent2)">82</div>
+          <div class="stat-label">Azure DAB Tables</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--warning)">SAP Dev</div>
+          <div class="stat-label">192.168.144.174</div>
+        </div>
+      </div>
+
+      <div class="section-title">Server Info</div>
+      <div class="pipeline-card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <div class="params-label">IIS Endpoint</div>
+            <div class="url-bar"><span class="url-method">BASE</span> http://192.168.151.36:9292</div>
+            <div class="params-label">Cloudflare Worker</div>
+            <div class="url-bar"><span class="url-method">CF</span> https://v2-rfc-pipeline.akash-bab.workers.dev</div>
+          </div>
+          <div>
+            <div class="params-label">Azure DAB</div>
+            <div class="url-bar"><span class="url-method">AZURE</span> https://my-dab-app.azurewebsites.net</div>
+            <div class="params-label">RFC Explorer Portal</div>
+            <div class="url-bar"><span class="url-method">UI</span> https://v2-rfc-portal.pages.dev</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pipeline -->
+    <div id="section-pipeline" style="display:none">
+      <div class="section-title">Deploy Pipeline</div>
+      <div class="pipeline-card">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Push RFC controller to GitHub → auto-builds on .36 → deploys to IIS → live API</div>
+        <div class="pipeline-flow">
+          <div class="pipeline-step">
+            <span class="step-icon">📄</span>
+            <div class="step-name">RFC Doc</div>
+            <div class="step-sub">Upload .docx</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step" style="border-color:var(--accent2)">
+            <span class="step-icon">🤖</span>
+            <div class="step-name">Claude</div>
+            <div class="step-sub">Generates .cs</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step">
+            <span class="step-icon">📦</span>
+            <div class="step-name">GitHub</div>
+            <div class="step-sub">akash0631/rfc-api</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step" style="border-color:var(--success)">
+            <span class="step-icon">⚙️</span>
+            <div class="step-name">Actions</div>
+            <div class="step-sub">Build + Deploy</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step" style="border-color:var(--accent)">
+            <span class="step-icon">🌐</span>
+            <div class="step-name">IIS .36</div>
+            <div class="step-sub">Port 9292</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step" style="border-color:var(--warning)">
+            <span class="step-icon">☁️</span>
+            <div class="step-name">CF Worker</div>
+            <div class="step-sub">Public API</div>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <div class="params-label">Phase 2 Pipeline</div>
+          <div class="pipeline-flow">
+            <div class="pipeline-step" style="border-color:var(--accent)">
+              <span class="step-icon">🔌</span>
+              <div class="step-name">SAP RFC</div>
+              <div class="step-sub">Data Pull</div>
+            </div>
+            <div class="pipeline-arrow">→</div>
+            <div class="pipeline-step">
+              <span class="step-icon">🗄️</span>
+              <div class="step-name">SQL .28</div>
+              <div class="step-sub">Data Lake</div>
+            </div>
+            <div class="pipeline-arrow">→</div>
+            <div class="pipeline-step" style="border-color:var(--accent2)">
+              <span class="step-icon">☁️</span>
+              <div class="step-name">Azure DAB</div>
+              <div class="step-sub">REST API</div>
+            </div>
+            <div class="pipeline-arrow">→</div>
+            <div class="pipeline-step" style="border-color:var(--success)">
+              <span class="step-icon">📊</span>
+              <div class="step-name">Dashboard</div>
+              <div class="step-sub">Any frontend</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APIs -->
+    <div id="section-apis" style="display:none">
+      <input class="search-bar" placeholder="Search APIs..." oninput="filterApis(this.value)" />
+
+      <div class="section-title">Finance RFCs — New</div>
+
+      <!-- ZPO_DD_UPD_RFC -->
+      <div class="api-card" id="ZPO_DD_UPD">
+        <div class="api-header" onclick="toggleCard(this)">
+          <span class="method-badge method-post">POST</span>
+          <span class="api-name">/api/ZPO_DD_UPD_RFC/Post</span>
+          <span class="api-desc">Update PO Delivery Date</span>
+          <span class="api-chevron">▼</span>
+        </div>
+        <div class="api-body">
+          <div class="url-bar">
+            <span class="url-method">POST</span>
+            <span id="url-zpoddup">http://192.168.151.36:9292/api/ZPO_DD_UPD_RFC/Post</span>
+            <button class="copy-btn" onclick="copyUrl('url-zpoddup')">Copy URL</button>
+          </div>
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab(this,'params-zpoddup')">Parameters</div>
+            <div class="tab" onclick="switchTab(this,'try-zpoddup')">Try It</div>
+            <div class="tab" onclick="switchTab(this,'curl-zpoddup')">cURL</div>
+          </div>
+          <div id="params-zpoddup">
+            <table class="params-table">
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><td>PO_NO</td><td>EBELN/CHAR10</td><td>Purchasing Document Number</td></tr>
+              <tr><td>DELV_DATE</td><td>CHAR10</td><td>New Delivery Date (YYYYMMDD or DD.MM.YYYY)</td></tr>
+            </table>
+            <div class="params-label">Response</div>
+            <table class="params-table">
+              <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+              <tr><td>Status</td><td>bool</td><td>true=success, false=error</td></tr>
+              <tr><td>MSG_TYPE</td><td>CHAR1</td><td>S=Success, E=Error, W=Warning</td></tr>
+              <tr><td>MESSAGE</td><td>CHAR100</td><td>SAP response message</td></tr>
+            </table>
+          </div>
+          <div id="try-zpoddup" style="display:none">
+            <div class="try-grid" style="grid-template-columns:1fr 1fr">
+              <div class="field-group">
+                <label class="field-label">PO_NO</label>
+                <input class="field-input" id="zpoddup_pono" placeholder="e.g. 4500001234">
+              </div>
+              <div class="field-group">
+                <label class="field-label">DELV_DATE</label>
+                <input class="field-input" id="zpoddup_date" placeholder="e.g. 20260401">
+              </div>
+            </div>
+            <button class="execute-btn" onclick="executeApi('zpoddup')">▶ Execute</button>
+            <div class="response-box" id="resp-zpoddup"></div>
+          </div>
+          <div id="curl-zpoddup" style="display:none">
+<div class="curl-block">curl -X POST "http://192.168.151.36:9292/api/ZPO_DD_UPD_RFC/Post" \
+  -H "Content-Type: application/json" \
+  -d '{"PO_NO":"4500001234","DELV_DATE":"20260401"}'</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ZPO_MODIFICATION -->
+      <div class="api-card" id="ZPO_MOD">
+        <div class="api-header" onclick="toggleCard(this)">
+          <span class="method-badge method-post">POST</span>
+          <span class="api-name">/api/ZPO_MODIFICATION/Execute</span>
+          <span class="api-desc">PO Modification History</span>
+          <span class="api-chevron">▼</span>
+        </div>
+        <div class="api-body">
+          <div class="url-bar">
+            <span class="url-method">POST</span>
+            <span id="url-zpomod">http://192.168.151.36:9292/api/ZPO_MODIFICATION/Execute</span>
+            <button class="copy-btn" onclick="copyUrl('url-zpomod')">Copy URL</button>
+          </div>
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab(this,'params-zpomod')">Parameters</div>
+            <div class="tab" onclick="switchTab(this,'try-zpomod')">Try It</div>
+            <div class="tab" onclick="switchTab(this,'curl-zpomod')">cURL</div>
+          </div>
+          <div id="params-zpomod">
+            <table class="params-table">
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><td>IM_PO_NO</td><td>EBELN</td><td>Purchasing Document Number (optional)</td></tr>
+              <tr><td>IM_PO_DEL_DATE</td><td>EINDT</td><td>Item delivery date filter</td></tr>
+              <tr><td>IM_DEL_CHG_DATE_LOW</td><td>ERDAT</td><td>Date range — from (YYYYMMDD)</td></tr>
+              <tr><td>IM_DEL_CHG_DATE_HIGH</td><td>ERDAT</td><td>Date range — to (YYYYMMDD)</td></tr>
+            </table>
+            <div class="params-label">Response — ET_PO_OUTPUT rows</div>
+            <table class="params-table">
+              <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+              <tr><td>EBELN</td><td>CHAR10</td><td>Purchasing Document Number</td></tr>
+              <tr><td>ORIGNAL_DEL_DATE</td><td>CHAR50</td><td>Original Delivery Date</td></tr>
+              <tr><td>CHNG_NO</td><td>CHAR10</td><td>Change Number</td></tr>
+              <tr><td>CURRENT_DEL_DATE</td><td>DATS8</td><td>Current Delivery Date</td></tr>
+              <tr><td>DEL_EXT_DATE</td><td>CHAR10</td><td>Delivery Extension Date</td></tr>
+              <tr><td>DELAYED_BY</td><td>CHAR10</td><td>Days Delayed</td></tr>
+              <tr><td>REASON</td><td>CHAR100</td><td>Reason for delay</td></tr>
+            </table>
+          </div>
+          <div id="try-zpomod" style="display:none">
+            <div class="try-grid" style="grid-template-columns:1fr 1fr">
+              <div class="field-group">
+                <label class="field-label">IM_PO_NO (optional)</label>
+                <input class="field-input" id="zpomod_pono" placeholder="e.g. 4500001234">
+              </div>
+              <div class="field-group">
+                <label class="field-label">IM_DEL_CHG_DATE_LOW</label>
+                <input class="field-input" id="zpomod_low" placeholder="e.g. 20260101">
+              </div>
+              <div class="field-group">
+                <label class="field-label">IM_DEL_CHG_DATE_HIGH</label>
+                <input class="field-input" id="zpomod_high" placeholder="e.g. 20260319">
+              </div>
+            </div>
+            <button class="execute-btn" onclick="executeApi('zpomod')">▶ Execute</button>
+            <div class="response-box" id="resp-zpomod"></div>
+          </div>
+          <div id="curl-zpomod" style="display:none">
+<div class="curl-block">curl -X POST "http://192.168.151.36:9292/api/ZPO_MODIFICATION/Execute" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "IM_PO_NO": "",
+    "IM_DEL_CHG_DATE_LOW": "20260101",
+    "IM_DEL_CHG_DATE_HIGH": "20260319"
+  }'</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ZADVANCE_PAYMENT -->
+      <div class="api-card" id="ZADVANCE">
+        <div class="api-header" onclick="toggleCard(this)">
+          <span class="method-badge method-post">POST</span>
+          <span class="api-name">/api/ZAdvancePaymentRfc/Execute</span>
+          <span class="api-desc">Advance Payment RFC</span>
+          <span class="api-chevron">▼</span>
+        </div>
+        <div class="api-body">
+          <div class="url-bar">
+            <span class="url-method">POST</span>
+            <span id="url-zadv">http://192.168.151.36:9292/api/ZAdvancePaymentRfc/Execute</span>
+            <button class="copy-btn" onclick="copyUrl('url-zadv')">Copy URL</button>
+          </div>
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab(this,'params-zadv')">Parameters</div>
+            <div class="tab" onclick="switchTab(this,'try-zadv')">Try It</div>
+            <div class="tab" onclick="switchTab(this,'curl-zadv')">cURL</div>
+          </div>
+          <div id="params-zadv">
+            <table class="params-table">
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><td>I_COMPANY_CODE</td><td>CHAR4</td><td>Company Code (e.g. 1100)</td></tr>
+              <tr><td>I_POSTING_DATE_LOW</td><td>DATS</td><td>Posting date from (YYYYMMDD)</td></tr>
+              <tr><td>I_POSTING_DATE_HIGH</td><td>DATS</td><td>Posting date to (YYYYMMDD)</td></tr>
+            </table>
+          </div>
+          <div id="try-zadv" style="display:none">
+            <div class="try-grid" style="grid-template-columns:1fr 1fr 1fr">
+              <div class="field-group">
+                <label class="field-label">I_COMPANY_CODE</label>
+                <input class="field-input" id="zadv_co" value="1100">
+              </div>
+              <div class="field-group">
+                <label class="field-label">I_POSTING_DATE_LOW</label>
+                <input class="field-input" id="zadv_low" placeholder="20260101">
+              </div>
+              <div class="field-group">
+                <label class="field-label">I_POSTING_DATE_HIGH</label>
+                <input class="field-input" id="zadv_high" placeholder="20260319">
+              </div>
+            </div>
+            <button class="execute-btn" onclick="executeApi('zadv')">▶ Execute</button>
+            <div class="response-box" id="resp-zadv"></div>
+          </div>
+          <div id="curl-zadv" style="display:none">
+<div class="curl-block">curl -X POST "http://192.168.151.36:9292/api/ZAdvancePaymentRfc/Execute" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "I_COMPANY_CODE": "1100",
+    "I_POSTING_DATE_LOW": "20260101",
+    "I_POSTING_DATE_HIGH": "20260319"
+  }'</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ZFINANCE_DOCUMENT -->
+      <div class="api-card" id="ZFINANCE">
+        <div class="api-header" onclick="toggleCard(this)">
+          <span class="method-badge method-post">POST</span>
+          <span class="api-name">/api/ZfinanceDocumentRfc/Execute</span>
+          <span class="api-desc">Finance Document RFC</span>
+          <span class="api-chevron">▼</span>
+        </div>
+        <div class="api-body">
+          <div class="url-bar">
+            <span class="url-method">POST</span>
+            <span id="url-zfin">http://192.168.151.36:9292/api/ZfinanceDocumentRfc/Execute</span>
+            <button class="copy-btn" onclick="copyUrl('url-zfin')">Copy URL</button>
+          </div>
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab(this,'params-zfin')">Parameters</div>
+            <div class="tab" onclick="switchTab(this,'curl-zfin')">cURL</div>
+          </div>
+          <div id="params-zfin">
+            <div style="color:var(--muted);font-size:13px">Check RFC documentation for parameters.</div>
+          </div>
+          <div id="curl-zfin" style="display:none">
+<div class="curl-block">curl -X POST "http://192.168.151.36:9292/api/ZfinanceDocumentRfc/Execute" \
+  -H "Content-Type: application/json" \
+  -d '{}'</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /section-apis -->
+  </div><!-- /main -->
+</div><!-- /container -->
+
+<script>
+const BASE = 'http://192.168.151.36:9292';
+
+// Section switching
+function showSection(name) {
+  ['overview','pipeline','apis'].forEach(s => {
+    document.getElementById('section-'+s).style.display = s===name ? 'block' : 'none';
+  });
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  event.target.closest('.sidebar-item').classList.add('active');
+}
+
+// Card toggle
+function toggleCard(header) {
+  const card = header.closest('.api-card');
+  card.classList.toggle('open');
+}
+
+// Tab switching
+function switchTab(tab, contentId) {
+  const body = tab.closest('.api-body');
+  body.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  // Hide all tab contents
+  const allIds = Array.from(body.querySelectorAll('[id]')).map(el => el.id);
+  const tabPrefixes = ['params-','try-','curl-'];
+  allIds.filter(id => tabPrefixes.some(p => id.startsWith(p))).forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = 'none';
+  });
+  document.getElementById(contentId).style.display = 'block';
+}
+
+// Copy URL
+function copyUrl(id) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text);
+  event.target.textContent = 'Copied!';
+  setTimeout(() => event.target.textContent = 'Copy URL', 1500);
+}
+
+// Execute API
+async function executeApi(key) {
+  const btn = event.target;
+  const resp = document.getElementById('resp-'+key);
+  btn.classList.add('loading');
+  btn.textContent = '⏳ Running...';
+  resp.className = 'response-box visible';
+  resp.textContent = 'Connecting to SAP...';
+
+  let url, body;
+  if(key === 'zpoddup') {
+    url = BASE+'/api/ZPO_DD_UPD_RFC/Post';
+    body = { PO_NO: document.getElementById('zpoddup_pono').value, DELV_DATE: document.getElementById('zpoddup_date').value };
+  } else if(key === 'zpomod') {
+    url = BASE+'/api/ZPO_MODIFICATION/Execute';
+    body = { IM_PO_NO: document.getElementById('zpomod_pono').value, IM_DEL_CHG_DATE_LOW: document.getElementById('zpomod_low').value, IM_DEL_CHG_DATE_HIGH: document.getElementById('zpomod_high').value };
+  } else if(key === 'zadv') {
+    url = BASE+'/api/ZAdvancePaymentRfc/Execute';
+    body = { I_COMPANY_CODE: document.getElementById('zadv_co').value, I_POSTING_DATE_LOW: document.getElementById('zadv_low').value, I_POSTING_DATE_HIGH: document.getElementById('zadv_high').value };
+  }
+
+  try {
+    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await r.json();
+    resp.className = 'response-box visible ' + (r.ok ? 'success' : 'error');
+    resp.textContent = `// HTTP ${r.status}\n` + JSON.stringify(data, null, 2);
+  } catch(e) {
+    resp.className = 'response-box visible error';
+    resp.textContent = 'Error: ' + e.message + '\n\nNote: This UI must be opened from within the V2 network to reach 192.168.151.36:9292';
+  }
+  btn.classList.remove('loading');
+  btn.textContent = '▶ Execute';
+}
+
+// Filter APIs
+function filterApis(val) {
+  document.querySelectorAll('.api-card').forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = text.includes(val.toLowerCase()) ? 'block' : 'none';
+  });
+}
+
+// Server status check
+async function checkServer() {
+  try {
+    const r = await fetch(BASE+'/api/ZPO_DD_UPD_RFC/Post', {method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(3000)});
+    document.getElementById('server-status').textContent = '192.168.151.36:9292 — Online';
+  } catch(e) {
+    document.getElementById('server-status').textContent = '192.168.151.36:9292 — Check network';
+    document.getElementById('server-status').style.color = '#ffb300';
+  }
+}
+checkServer();
+
+// Show overview by default
+document.getElementById('section-overview').style.display = 'block';
+document.getElementById('section-pipeline').style.display = 'none';
+document.getElementById('section-apis').style.display = 'none';
+</script>
+</body>
+</html>
