@@ -19,7 +19,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 try {
                     if (request==null||request.IM_DATA==null||request.IM_DATA.Count==0)
                         return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status=false, Message="IM_DATA required." });
-                    RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                    RfcConfigParameters rfcPar = BaseController.rfcConfigparametersquality();
                     RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                     IRfcFunction myfun = dest.Repository.CreateFunction("ZPO_DD_UPD_RFC");
                     IRfcTable imData = myfun.GetTable("IM_DATA");
