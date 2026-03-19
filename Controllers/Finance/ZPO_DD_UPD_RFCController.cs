@@ -16,26 +16,22 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
         {
             return await Task.Run(() =>
             {
-                try
-                {
+                try {
                     if (request==null||request.IM_DATA==null||request.IM_DATA.Count==0)
                         return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status=false, Message="IM_DATA required." });
-                    RfcConfigParameters rfcPar=BaseController.rfcConfigparameters();
-                    RfcDestination dest=RfcDestinationManager.GetDestination(rfcPar);
-                    IRfcFunction myfun=dest.Repository.CreateFunction("ZPO_DD_UPD_RFC");
-                    IRfcTable imData=myfun.GetTable("IM_DATA");
-                    foreach(var row in request.IM_DATA){imData.Append();foreach(var kv in row)imData.SetValue(kv.Key,kv.Value??string.Empty);}
+                    RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                    RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                    IRfcFunction myfun = dest.Repository.CreateFunction("ZPO_DD_UPD_RFC");
+                    IRfcTable imData = myfun.GetTable("IM_DATA");
+                    foreach (var row in request.IM_DATA) { imData.Append(); foreach (var kv in row) imData.SetValue(kv.Key, kv.Value??string.Empty); }
                     myfun.Invoke(dest);
-                    string msgType=myfun.GetValue("MSG_TYPE")?.ToString()??string.Empty;
-                    string message=myfun.GetValue("MESSAGE")?.ToString()??string.Empty;
-                    if(msgType=="E")return Request.CreateResponse(HttpStatusCode.BadRequest,new{Status=false,MsgType=msgType,Message=message});
-                    return Request.CreateResponse(HttpStatusCode.OK,new{Status=true,MsgType=msgType,Message=message});
-                }catch(RfcCommunicationException ex){return Request.CreateResponse(HttpStatusCode.ServiceUnavailable,new{Status=false,Message="RFC error: "+ex.Message});}
-                catch(RfcLogonException ex){return Request.CreateResponse(HttpStatusCode.Unauthorized,new{Status=false,Message="Logon failed: "+ex.Message});}
-                catch(RfcAbapException ex){return Request.CreateResponse(HttpStatusCode.BadRequest,new{Status=false,Message="ABAP: "+ex.Message});}
-                catch(Exception ex){return Request.CreateResponse(HttpStatusCode.InternalServerError,new{Status=false,Message=ex.Message});}
+                    string msgType = myfun.GetValue("MSG_TYPE")?.ToString()??string.Empty;
+                    string message = myfun.GetValue("MESSAGE")?.ToString()??string.Empty;
+                    if (msgType=="E") return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status=false, MsgType=msgType, Message=message });
+                    return Request.CreateResponse(HttpStatusCode.OK, new { Status=true, MsgType=msgType, Message=message });
+                } catch (Exception ex) { return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status=false, Message=ex.Message }); }
             });
         }
     }
-    public class ZPO_DD_UPD_RFCRequest{public List<Dictionary<string,string>> IM_DATA{get;set;}}
+    public class ZPO_DD_UPD_RFCRequest { public List<Dictionary<string,string>> IM_DATA { get; set; } }
 }
