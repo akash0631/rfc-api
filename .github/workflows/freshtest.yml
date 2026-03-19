@@ -8,33 +8,24 @@ jobs:
   setup:
     runs-on: [self-hosted, Windows, X64, iis]
     steps:
-      - name: Copy ALL bin DLLs from VS project output to C:\V2RfcTest
+      - name: Copy Web.config from VS project and check 500 error
         shell: cmd
         run: |
           set VSPROJ=D:\V2 Projects\Vendor_SRM_Routing_Application
-          set OUT=C:\V2RfcTest
 
-          echo === VS project bin contents ===
-          dir "%VSPROJ%\bin" /B 2>nul | find /c ".dll"
-          dir "%VSPROJ%\bin\Vendor*.dll" /B 2>nul
+          echo === Copy Web.config from VS project directly (no modification) ===
+          copy /Y "%VSPROJ%\Web.config" C:\V2RfcTest\Web.config
+          echo Copied
 
-          echo === Robocopy ALL bin files from VS project to C:\V2RfcTest\bin ===
-          robocopy "%VSPROJ%\bin" "%OUT%\bin" /E /IS /IT /NFL /NDL
-          echo ROBOCOPY: %ERRORLEVEL%
-
-          echo === Also copy Content and Views if needed ===
-          if exist "%VSPROJ%\Content" robocopy "%VSPROJ%\Content" "%OUT%\Content" /E /IS /IT /NFL /NDL
-
-          echo === DLL count ===
-          dir "%OUT%\bin\*.dll" /B 2>nul | find /c ".dll"
-          dir "%OUT%\bin\Vendor*.dll" /B 2>nul
-          dir "%OUT%\bin\System.Web.Http.dll" 2>nul && echo WebApi DLL present || echo WebApi DLL MISSING
-          dir "%OUT%\bin\Newtonsoft.Json.dll" 2>nul && echo Newtonsoft present || echo Newtonsoft MISSING
+          echo === Show connection strings in Web.config ===
+          findstr /I "connectionString\|AppServerHost\|Client" C:\V2RfcTest\Web.config | findstr /V "<!--"
 
           echo === Recycle pool ===
           C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
           timeout /t 15 /nobreak
 
-          echo === Test ===
-          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9292/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{Write-Host 'HEALTH_ERR:' $_.Exception.Message}"
-          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9292/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode;Write-Host $r.Content}catch{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}"
+          echo === Test with customErrors off enabled ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9292/' -UseBasicParsing -TimeoutSec 10;Write-Host 'ROOT:' $r.StatusCode}catch{if($_.Exception.Response){$s=New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream());$b=$s.ReadToEnd();Write-Host 'ERROR:' $b.Substring(0,[Math]::Min(800,$b.Length))}else{Write-Host 'ERR:' $_.Exception.Message}}"
+
+          echo === Windows event log last error ===
+          powershell -NoProfile -Command "Get-EventLog -LogName Application -EntryType Error -Newest 2 -EA SilentlyContinue | ForEach-Object { Write-Host $_.TimeGenerated $_.Source; Write-Host $_.Message.Substring(0,[Math]::Min(300,$_.Message.Length)) }"
