@@ -122,3 +122,4 @@ jobs:
             $r2 = Invoke-WebRequest "http://localhost:9292/api/ZpoModificationRfc/Health" -UseBasicParsing -TimeoutSec 10
             Write-Host "ZpoModificationRfc: $($r2.StatusCode) $($r2.Content)"
           } catch { Write-Host "ZpoModificationRfc ERR: $($_.Exception.Message)" }
+# trigger
