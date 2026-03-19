@@ -1,0 +1,79 @@
+name: Bootstrap
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bootstrap.yml'
+jobs:
+  bootstrap:
+    runs-on: [self-hosted, Windows, X64, iis]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.V2_GH_PAT }}
+          fetch-depth: 0
+
+      - name: Copy packages from local VS project to repo
+        shell: cmd
+        run: |
+          set VSPROJ=D:\V2 Projects\Vendor_SRM_Routing_Application
+          set REPO=C:\actions-runner\_work\rfc-api\rfc-api
+
+          echo === Check local packages folder ===
+          dir "%VSPROJ%\packages" /B 2>nul | find /c ""
+
+          echo === Copy packages to repo ===
+          robocopy "%VSPROJ%\packages" "%REPO%\packages" /E /IS /IT /NFL /NDL
+          echo ROBOCOPY: %ERRORLEVEL%
+
+          echo === Package count in repo ===
+          dir "%REPO%\packages" /B 2>nul | find /c ""
+
+      - name: Commit and push packages to GitHub
+        shell: powershell
+        env:
+          V2_PAT: ${{ secrets.V2_GH_PAT }}
+        run: |
+          cd C:\actions-runner\_work\rfc-api\rfc-api
+          
+          # Configure git
+          git config user.email "runner@v2retail.com"
+          git config user.name "V2 Runner"
+          
+          # Remove packages from .gitignore if present
+          $gi = Get-Content .gitignore -EA SilentlyContinue
+          if ($gi -match 'packages') {
+            $gi = $gi | Where-Object {$_ -notmatch '^\s*packages\s*$'}
+            $gi | Set-Content .gitignore
+            Write-Host "Removed packages from .gitignore"
+          }
+          
+          # Add packages
+          git add packages/ .gitignore
+          $status = git status --short
+          Write-Host "Status: $status"
+          
+          if ($status) {
+            git commit -m "build: add NuGet packages folder for CI build on .36 runner"
+            git push "https://$env:V2_PAT@github.com/akash0631/rfc-api.git" master
+            Write-Host "Packages pushed to GitHub ✅"
+          } else {
+            Write-Host "No changes to commit"
+          }
+
+      - name: Verify build now works from repo
+        shell: cmd
+        run: |
+          set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
+
+          echo === Stub VS17 targets ===
+          if not exist "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications" mkdir "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          echo ^<?xml version="1.0"?^><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/></Project> > "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+
+          echo === Build from GitHub repo ===
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=C:\V2RfcTest\bin\ /p:VisualStudioVersion=17.0 /nologo /verbosity:minimal
+          echo BUILD: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 exit /b 1
+
+          echo BUILD SUCCEEDED - fully automated from GitHub
+          dir C:\V2RfcTest\bin\Vendor*.dll /B 2>nul
