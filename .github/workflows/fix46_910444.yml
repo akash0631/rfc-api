@@ -1,0 +1,58 @@
+name: Fix46_910444
+on:
+  push:
+    paths:
+      - '.github/workflows/fix46_910444.yml'
+jobs:
+  run:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Run commands on .36 via PowerShell remoting
+        shell: powershell
+        run: |
+          Write-Host "=== Running on .46, connecting to .36 ==="
+          
+          $cred = New-Object System.Management.Automation.PSCredential(
+            "V2DC-ADDVERB\Administrator",
+            (ConvertTo-SecureString "vrl@55555" -AsPlainText -Force)
+          )
+          
+          $session = New-PSSession -ComputerName "192.168.151.36" -Credential $cred -EA SilentlyContinue
+          
+          if ($session) {
+            Write-Host "Connected to .36"
+            
+            $result = Invoke-Command -Session $session -ScriptBlock {
+              $LIVE = "D:\V2 Published\FMS_PUTWAY\bin"
+              $OUT  = "C:\V2RfcTest"
+              $VSPROJ = "D:\V2 Projects\Vendor_SRM_Routing_Application"
+              $MSBUILD = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+
+              Write-Host "=== Copy DLLs from FMS_PUTWAY ==="
+              $count = 0
+              Get-ChildItem $LIVE -Filter "*.dll" | Where {$_.Name -ne "Vendor_SRM_Routing_Application.dll"} | ForEach {
+                Copy-Item $_.FullName "$OUT\bin\" -Force; $count++
+              }
+              Write-Host "Copied: $count DLLs"
+
+              Write-Host "=== Copy Global.asax ==="
+              Copy-Item "$VSPROJ\Global.asax" "$OUT\" -Force
+
+              Write-Host "=== Recycle pool ==="
+              Import-Module WebAdministration -EA SilentlyContinue
+              Restart-WebAppPool "V2RfcTestPool" -EA SilentlyContinue
+              Start-Sleep 10
+
+              Write-Host "=== Test ==="
+              try {
+                $r = Invoke-WebRequest "http://localhost:9292/api/ZpoDdUpdRfc/Health" -UseBasicParsing -TimeoutSec 10
+                Write-Host "SUCCESS: $($r.StatusCode) $($r.Content)"
+              } catch { Write-Host "FAIL: $($_.Exception.Message)" }
+            }
+            
+            Remove-PSSession $session
+          } else {
+            Write-Host "Cannot connect to .36 — trying net use approach"
+            net use \\192.168.151.36\C$ /user:V2DC-ADDVERB\Administrator vrl@55555
+            Write-Host "Net use: $LASTEXITCODE"
+          }
