@@ -30,8 +30,8 @@ jobs:
           echo "Portal files:"
           ls portal/
 
-      - name: Deploy to Cloudflare Pages via Wrangler
+      - name: Deploy to Cloudflare Pages
         run: wrangler pages deploy portal --project-name=v2-rfc-portal --branch=master
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 33b6cfffad5dd935e73e9061a56f1506
+          CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
