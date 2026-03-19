@@ -1,5 +1,6 @@
 using SAP.Middleware.Connector;
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -10,11 +11,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 {
     /// <summary>
     /// RFC: ZPO_DD_UPD_RFC
-    /// Purpose: Update Delivery Date on a Purchase Order in SAP.
-    /// IMPORT:  PO_NO     TYPE EBELN  - Purchase Order Number (Pass by Reference)
-    ///          DELV_DATE TYPE CHAR10  - New Delivery Date (Pass by Reference)
-    /// EXPORT:  MSG_TYPE  TYPE CHAR1  - Message type: S=Success, E=Error, W=Warning
-    ///          MESSAGE   TYPE CHAR100 - Message text
+    /// Purpose: Update Delivery Date in SAP for one or more PO line items.
+    /// IMPORT:  IM_DATA TYPE ZTT_PO_DD_IMP (Pass by Reference)
+    ///          Table structure ZST_PO_DD_IMP:
+    ///            EBELN      CHAR10  - Purchasing Document Number
+    ///            PO_ITEM    NUMC5   - Item Number of Purchasing Document
+    ///            MATNR      CHAR40  - Material Number
+    ///            DELIV_DATE DATS8   - New Delivery Date (YYYYMMDD)
+    /// EXPORT:  MSG_TYPE  CHAR1   - Message type (S=Success, E=Error, W=Warning)
+    ///          MESSAGE   CHAR100 - Message text
     /// </summary>
     public class ZPO_DD_UPD_RFCController : BaseController
     {
@@ -25,41 +30,63 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
             {
                 try
                 {
-                    if (request == null)
+                    if (request == null || request.IM_DATA == null || request.IM_DATA.Count == 0)
                     {
                         return Request.CreateResponse(HttpStatusCode.BadRequest, new
                         {
                             Status  = false,
-                            Message = "Request body is required."
+                            Message = "IM_DATA table is required and must contain at least one row."
                         });
                     }
 
-                    if (string.IsNullOrWhiteSpace(request.PO_NO))
+                    foreach (var row in request.IM_DATA)
                     {
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                        if (string.IsNullOrWhiteSpace(row.EBELN))
                         {
-                            Status  = false,
-                            Message = "PO_NO is required."
-                        });
-                    }
+                            return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                            {
+                                Status  = false,
+                                Message = "EBELN is required for every row."
+                            });
+                        }
 
-                    if (string.IsNullOrWhiteSpace(request.DELV_DATE))
-                    {
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                        if (string.IsNullOrWhiteSpace(row.PO_ITEM))
                         {
-                            Status  = false,
-                            Message = "DELV_DATE is required."
-                        });
+                            return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                            {
+                                Status  = false,
+                                Message = string.Format("PO_ITEM is required for EBELN {0}.", row.EBELN)
+                            });
+                        }
+
+                        DateTime dummy;
+                        if (string.IsNullOrWhiteSpace(row.DELIV_DATE) ||
+                            !DateTime.TryParseExact(row.DELIV_DATE, "yyyyMMdd",
+                                System.Globalization.CultureInfo.InvariantCulture,
+                                System.Globalization.DateTimeStyles.None, out dummy))
+                        {
+                            return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                            {
+                                Status  = false,
+                                Message = string.Format("DELIV_DATE for EBELN {0} must be YYYYMMDD.", row.EBELN)
+                            });
+                        }
                     }
 
                     RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                     RfcDestination      dest   = RfcDestinationManager.GetDestination(rfcPar);
                     RfcRepository       rfcrep = dest.Repository;
-
                     IRfcFunction myfun = rfcrep.CreateFunction("ZPO_DD_UPD_RFC");
 
-                    myfun.SetValue("PO_NO",     request.PO_NO.Trim());
-                    myfun.SetValue("DELV_DATE", request.DELV_DATE.Trim());
+                    IRfcTable imData = myfun.GetTable("IM_DATA");
+                    foreach (var row in request.IM_DATA)
+                    {
+                        imData.Append();
+                        imData.SetValue("EBELN",      row.EBELN      ?? string.Empty);
+                        imData.SetValue("PO_ITEM",    row.PO_ITEM    ?? string.Empty);
+                        imData.SetValue("MATNR",      row.MATNR      ?? string.Empty);
+                        imData.SetValue("DELIV_DATE", row.DELIV_DATE ?? string.Empty);
+                    }
 
                     myfun.Invoke(dest);
 
@@ -67,40 +94,28 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                     string message = myfun.GetValue("MESSAGE")?.ToString()  ?? string.Empty;
 
                     if (msgType == "E")
-                    {
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                        {
-                            Status   = false,
-                            MsgType  = msgType,
-                            Message  = message
-                        });
-                    }
+                        return Request.CreateResponse(HttpStatusCode.BadRequest,  new { Status = false, MsgType = msgType, Message = message });
 
-                    return Request.CreateResponse(HttpStatusCode.OK, new
-                    {
-                        Status   = true,
-                        MsgType  = msgType,
-                        Message  = message
-                    });
+                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = true, MsgType = msgType, Message = message });
                 }
-                catch (Exception ex)
-                {
-                    return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                    {
-                        Status  = false,
-                        Message = ex.Message
-                    });
-                }
+                catch (RfcCommunicationException ex) { return Request.CreateResponse(HttpStatusCode.ServiceUnavailable, new { Status = false, Message = "RFC comm error: " + ex.Message }); }
+                catch (RfcLogonException ex)         { return Request.CreateResponse(HttpStatusCode.Unauthorized,        new { Status = false, Message = "SAP logon failed: " + ex.Message }); }
+                catch (RfcAbapException ex)          { return Request.CreateResponse(HttpStatusCode.BadRequest,          new { Status = false, Message = "ABAP exception: " + ex.Message }); }
+                catch (Exception ex)                 { return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = false, Message = ex.Message }); }
             });
         }
     }
 
     public class ZPO_DD_UPD_RFCRequest
     {
-        /// <summary>EBELN - Purchase Order Number</summary>
-        public string PO_NO     { get; set; }
+        public List<ZST_PO_DD_IMP_Row> IM_DATA { get; set; }
+    }
 
-        /// <summary>CHAR10 - New Delivery Date (format: YYYYMMDD)</summary>
-        public string DELV_DATE { get; set; }
+    public class ZST_PO_DD_IMP_Row
+    {
+        public string EBELN      { get; set; }
+        public string PO_ITEM    { get; set; }
+        public string MATNR      { get; set; }
+        public string DELIV_DATE { get; set; }
     }
 }

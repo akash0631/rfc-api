@@ -1,0 +1,76 @@
+name: Deploy to .36
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Controllers/**'
+      - 'Models/**'
+      - '.github/workflows/deploy_36.yml'
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: [self-hosted, Windows, X64, iis]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync controllers + build + deploy to C:\V2RfcTest
+        shell: cmd
+        run: |
+          set VSPROJ=D:\V2 Projects\Vendor_SRM_Routing_Application
+          set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
+
+          echo === Sync controllers from GitHub to local VS project ===
+          robocopy "%REPO%\Controllers" "%VSPROJ%\Controllers" /E /IS /IT /NFL /NDL
+          robocopy "%REPO%\Models" "%VSPROJ%\Models" /E /IS /IT /NFL /NDL 2>nul
+
+          echo === Build using VS2022 ===
+          if not exist C:\V2RfcTest\bin mkdir C:\V2RfcTest\bin
+          "%MSBUILD%" "%VSPROJ%\Vendor_SRM_Routing_Application.csproj" /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=C:\V2RfcTest\bin\ /p:VisualStudioVersion=17.0 /nologo /verbosity:minimal
+          if %ERRORLEVEL% NEQ 0 (echo BUILD FAILED && exit /b 1)
+          echo BUILD SUCCESS
+
+          echo === Copy all dependency DLLs ===
+          robocopy "%VSPROJ%\bin" C:\V2RfcTest\bin /E /IS /IT /NFL /NDL /XF Vendor_SRM_Routing_Application.dll
+          if %ERRORLEVEL% GEQ 8 (echo COPY FAILED && exit /b 1)
+          echo DEPS COPIED
+
+          dir C:\V2RfcTest\bin\*.dll /B 2>nul | find /c ".dll"
+          dir C:\V2RfcTest\bin\Vendor*.dll /B 2>nul
+
+          echo === Write Web.config (SAP Dev) ===
+          (echo ^<?xml version="1.0" encoding="utf-8"?^>) > C:\V2RfcTest\Web.config
+          (echo ^<configuration^>) >> C:\V2RfcTest\Web.config
+          (echo   ^<appSettings^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="webpages:Version" value="3.0.0.0"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="webpages:Enabled" value="false"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="ClientValidationEnabled" value="true"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="UnobtrusiveJavaScriptEnabled" value="true"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="Name" value="V2Dev"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="AppServerHost" value="192.168.144.174"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="Client" value="210"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="User" value="POWERBI"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="Password" value="India@123456"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="SystemNumber" value="00"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<add key="Language" value="EN"/^>) >> C:\V2RfcTest\Web.config
+          (echo   ^</appSettings^>) >> C:\V2RfcTest\Web.config
+          (echo   ^<system.web^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<compilation debug="false" targetFramework="4.8"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<httpRuntime targetFramework="4.8" maxRequestLength="2147483647"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<customErrors mode="Off"/^>) >> C:\V2RfcTest\Web.config
+          (echo   ^</system.web^>) >> C:\V2RfcTest\Web.config
+          (echo   ^<system.webServer^>) >> C:\V2RfcTest\Web.config
+          (echo     ^<handlers^>) >> C:\V2RfcTest\Web.config
+          (echo       ^<remove name="ExtensionlessUrlHandler-Integrated-4.0"/^>) >> C:\V2RfcTest\Web.config
+          (echo       ^<add name="ExtensionlessUrlHandler-Integrated-4.0" path="*." verb="*" type="System.Web.Handlers.TransferRequestHandler" preCondition="integratedMode,runtimeVersionv4.0"/^>) >> C:\V2RfcTest\Web.config
+          (echo     ^</handlers^>) >> C:\V2RfcTest\Web.config
+          (echo   ^</system.webServer^>) >> C:\V2RfcTest\Web.config
+          (echo ^</configuration^>) >> C:\V2RfcTest\Web.config
+          echo Web.config written
+
+          echo === Recycle V2RfcTestPool only ===
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
+          timeout /t 15 /nobreak
+
+          echo === TEST ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9292/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{Write-Host 'HEALTH_ERR:' $_.Exception.Message}"
+          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9292/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode;Write-Host $r.Content}catch{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}"

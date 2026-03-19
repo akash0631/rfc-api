@@ -1,0 +1,63 @@
+name: Bootstrap
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bootstrap.yml'
+jobs:
+  bootstrap:
+    runs-on: [self-hosted, Windows, X64, iis]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.V2_GH_PAT }}
+          fetch-depth: 0
+
+      - name: Find NuGet cache and restore packages
+        shell: cmd
+        run: |
+          echo === NuGet global cache ===
+          dir "%USERPROFILE%\.nuget\packages" /B 2>nul | find /c ""
+
+          echo === NuGet restore using global cache ===
+          nuget restore Vendor_SRM_Routing_Application.sln -NonInteractive 2>&1
+          echo NUGET: %ERRORLEVEL%
+
+          if %ERRORLEVEL% NEQ 0 (
+            echo === Try dotnet restore ===
+            dotnet restore Vendor_SRM_Routing_Application.sln 2>&1
+            echo DOTNET: %ERRORLEVEL%
+          )
+
+          echo === Check packages ===
+          dir packages /B 2>nul | find /c ""
+
+      - name: Build from repo and deploy to C:\V2RfcTest
+        shell: cmd
+        run: |
+          set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
+
+          if not exist "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications" mkdir "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          echo ^<?xml version="1.0"?^><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/></Project> > "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications\Microsoft.WebApplication.targets"
+
+          if not exist C:\V2RfcTest\bin mkdir C:\V2RfcTest\bin
+
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj ^
+            /p:Configuration=Release /p:Platform=AnyCPU ^
+            /p:OutputPath=C:\V2RfcTest\bin\ ^
+            /p:VisualStudioVersion=17.0 ^
+            /nologo /verbosity:minimal
+          echo BUILD: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 exit /b 1
+
+          echo === Copy dependency DLLs from local VS bin ===
+          robocopy "D:\V2 Projects\Vendor_SRM_Routing_Application\bin" C:\V2RfcTest\bin /E /IS /IT /NFL /NDL /XF Vendor_SRM_Routing_Application.dll
+          echo Deps copied
+
+          echo === Recycle pool ===
+          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
+          timeout /t 15 /nobreak
+
+          echo === TEST ===
+          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9292/api/ZAdvancePaymentRfc/Health' -UseBasicParsing -TimeoutSec 10;Write-Host 'HEALTH:' $r.StatusCode $r.Content}catch{Write-Host 'HEALTH_ERR:' $_.Exception.Message}"
+          powershell -NoProfile -Command "$b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}';try{$r=Invoke-WebRequest 'http://localhost:9292/api/ZAdvancePaymentRfc/Execute' -Method POST -Body $b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 30;Write-Host 'EXECUTE:' $r.StatusCode;Write-Host $r.Content}catch{Write-Host 'EXECUTE_ERR:' $_.Exception.Message}"
