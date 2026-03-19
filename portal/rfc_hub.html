@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>V2 Retail — SAP API Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.css"/>
+<style>
+/* ── V2 Retail Design System (from v2retail_swagger.html) ── */
+:root {
+  --v2-navy:   #1A3C6E;
+  --v2-red:    #E8401C;
+  --v2-bg:     #F4F7FB;
+  --v2-white:  #FFFFFF;
+  --v2-border: #DDE3EE;
+  --v2-text:   #0F172A;
+  --v2-muted:  #64748B;
+  --v2-green:  #059669;
+  --v2-amber:  #D97706;
+  --v2-blue:   #1D4ED8;
+  --v2-mono:   'IBM Plex Mono', monospace;
+  --v2-sans:   'Inter', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--v2-bg); color: var(--v2-text); font-family: var(--v2-sans); min-height: 100vh; padding-bottom: 60px; }
+
+/* ── Topbar (from v2retail_swagger.html) ── */
+#topbar {
+  background: var(--v2-navy);
+  padding: 14px 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  position: sticky; top: 0; z-index: 200;
+}
+#topbar .logo { display: flex; align-items: center; gap: 14px; }
+#topbar .logo-text { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: 0.3px; }
+#topbar .logo-sub  { color: #a8c4e8; font-size: 11px; margin-top: 2px; }
+.live-badge {
+  background: rgba(5,150,105,0.2); border: 1px solid rgba(5,150,105,0.5);
+  color: #6ee7b7; padding: 5px 12px; border-radius: 20px; font-size: 11px;
+  font-weight: 600; display: flex; align-items: center; gap: 6px;
+}
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: #6ee7b7; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+.topbar-links { display: flex; gap: 4px; }
+.tl { color: #a8c4e8; font-size: 12px; text-decoration: none; padding: 5px 10px; border-radius: 5px; transition: all 0.15s; }
+.tl:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+/* ── Spec switcher tabs (from v2retail_swagger.html) ── */
+#nav-tabs {
+  background: var(--v2-white); border-bottom: 1px solid var(--v2-border);
+  padding: 0 28px; display: flex; gap: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.spec-tab {
+  padding: 13px 20px; cursor: pointer; font-size: 13px; font-weight: 500;
+  color: var(--v2-muted); border-bottom: 3px solid transparent; margin-bottom: -1px;
+  transition: all 0.2s; user-select: none; display: flex; align-items: center; gap: 7px;
+  white-space: nowrap;
+}
+.spec-tab:hover { color: var(--v2-navy); }
+.spec-tab.active { color: var(--v2-navy); border-bottom-color: var(--v2-red); font-weight: 600; }
+.spec-tab .sdot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; display: inline-block; }
+.spec-tab.active .sdot { background: #22c55e; }
+.tab-chip { background: #EDF2FB; color: var(--v2-navy); padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+.tab-new  { background: var(--v2-red); color: #fff; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 700; }
+
+/* ── Info bar (from v2retail_swagger.html) ── */
+.info-bar {
+  background: #EDF2FB; border-left: 4px solid var(--v2-navy);
+  margin: 14px 28px; padding: 10px 16px; border-radius: 0 6px 6px 0;
+  font-size: 13px; color: #374151;
+}
+.info-bar strong { color: var(--v2-navy); }
+.info-bar code { background: #fff; border: 1px solid var(--v2-border); padding: 1px 5px; border-radius: 3px; font-family: var(--v2-mono); font-size: 11px; color: var(--v2-navy); }
+
+/* ── Sections ── */
+.section { display: none; }
+.section.active { display: block; }
+
+/* ── Base URL bar (from v2_sap_api_explorer.html) ── */
+.base-url-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--v2-white); border: 1px solid var(--v2-border); border-radius: 8px;
+  padding: 8px 14px; margin: 0 28px 16px;
+}
+.base-url-bar label { font-family: var(--v2-mono); font-size: 11px; color: var(--v2-muted); white-space: nowrap; font-weight: 600; }
+.base-url-bar input {
+  background: transparent; border: none; outline: none;
+  color: var(--v2-blue); font-family: var(--v2-mono); font-size: 12px; flex: 1;
+}
+
+/* ── Group labels (from v2_sap_api_explorer.html pattern) ── */
+.group-label {
+  display: flex; align-items: center; gap: 12px; margin: 24px 28px 12px;
+}
+.group-label h2 { font-size: 11px; font-family: var(--v2-mono); color: var(--v2-muted); letter-spacing: 1.5px; text-transform: uppercase; white-space: nowrap; }
+.group-label::after { content: ''; flex: 1; height: 1px; background: var(--v2-border); }
+
+/* ── Endpoint cards (from v2_sap_api_explorer.html, white bg) ── */
+.endpoint {
+  background: var(--v2-white); border: 1px solid var(--v2-border); border-radius: 12px;
+  margin: 0 28px 12px; overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s;
+}
+.endpoint:hover { border-color: #b8c9e8; box-shadow: 0 2px 10px rgba(26,60,110,0.08); }
+.endpoint.open { border-color: var(--v2-navy); }
+.endpoint-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 15px 22px; cursor: pointer; user-select: none;
+}
+.method-badge {
+  font-family: var(--v2-mono); font-size: 11px; font-weight: 700;
+  padding: 3px 10px; border-radius: 5px;
+  background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE;
+}
+.method-badge.get { background: #F0FDF4; color: #15803D; border-color: #86EFAC; }
+.endpoint-path { font-family: var(--v2-mono); font-size: 13px; flex: 1; color: var(--v2-navy); font-weight: 500; }
+.endpoint-desc { font-size: 12px; color: var(--v2-muted); }
+.chevron { color: var(--v2-muted); transition: transform 0.22s; font-size: 12px; }
+.endpoint.open .chevron { transform: rotate(180deg); }
+.endpoint-body { display: none; border-top: 1px solid var(--v2-border); }
+.endpoint.open .endpoint-body { display: block; }
+
+/* ── Tabs (from v2_sap_api_explorer.html) ── */
+.tabs { display: flex; border-bottom: 1px solid var(--v2-border); padding: 0 22px; background: #FAFBFD; }
+.tab {
+  padding: 10px 16px; font-size: 12px; font-family: var(--v2-mono); font-weight: 500;
+  color: var(--v2-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s;
+}
+.tab.active { color: var(--v2-navy); border-bottom-color: var(--v2-red); }
+.tab-panel { display: none; padding: 20px 22px; }
+.tab-panel.active { display: block; }
+
+/* ── Tables (from v2_sap_api_explorer.html, white) ── */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; font-family: var(--v2-mono); font-size: 10px; letter-spacing: 1px;
+  color: var(--v2-muted); text-transform: uppercase; padding: 0 0 10px;
+  border-bottom: 1.5px solid var(--v2-border);
+}
+td { padding: 9px 0; border-bottom: 1px solid #F1F5F9; vertical-align: top; }
+td:not(:last-child) { padding-right: 18px; }
+.param-name { font-family: var(--v2-mono); font-size: 12px; color: var(--v2-navy); font-weight: 600; }
+.param-type { font-family: var(--v2-mono); font-size: 11px; color: var(--v2-amber); }
+.param-sap  { font-family: var(--v2-mono); font-size: 11px; color: var(--v2-muted); }
+.required   { color: var(--v2-red); font-size: 10px; font-family: var(--v2-mono); font-weight: 700; }
+.optional   { color: var(--v2-muted); font-size: 10px; font-family: var(--v2-mono); }
+.param-desc { font-size: 12px; color: var(--v2-muted); }
+
+/* ── Code block (from v2_sap_api_explorer.html) ── */
+.code-block {
+  background: #0F172A; border: 1px solid #1E293B;
+  border-radius: 8px; padding: 16px 18px; font-family: var(--v2-mono); font-size: 12px;
+  line-height: 1.7; overflow-x: auto; white-space: pre; color: #94A3B8; position: relative;
+}
+.copy-btn {
+  position: absolute; top: 10px; right: 10px;
+  background: #1E293B; border: none; border-radius: 5px;
+  color: #64748B; font-family: var(--v2-mono); font-size: 10px;
+  padding: 4px 10px; cursor: pointer; transition: all .15s;
+}
+.copy-btn:hover { background: var(--v2-navy); color: #fff; }
+.ck { color: #7DD3FC; } /* keyword */
+.cs { color: #86EFAC; } /* string */
+.cc { color: #64748B; } /* comment */
+
+/* ── Schema block (from v2_sap_api_explorer.html, white themed) ── */
+.schema-block {
+  background: #0F172A; border: 1px solid #1E293B; border-radius: 8px;
+  padding: 14px 18px; font-family: var(--v2-mono); font-size: 12px; line-height: 1.7; color: #94A3B8;
+}
+.key   { color: #7DD3FC; }
+.val-s { color: #86EFAC; }
+.val-b { color: #FCD34D; }
+.cmt   { color: #475569; }
+
+/* ── Field chips (from v2_sap_api_explorer.html) ── */
+.field-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.field-chip {
+  background: var(--v2-bg); border: 1px solid var(--v2-border); border-radius: 5px;
+  padding: 4px 10px; font-family: var(--v2-mono); font-size: 11px; color: var(--v2-text);
+}
+.field-chip span { color: var(--v2-muted); font-size: 10px; margin-left: 5px; }
+
+/* ── Try it (from v2_sap_api_explorer.html) ── */
+.try-section label { display: block; font-size: 11px; font-family: var(--v2-mono); color: var(--v2-muted); margin-bottom: 6px; font-weight: 600; }
+.try-section textarea {
+  width: 100%; background: #0F172A; border: 1px solid #1E293B;
+  border-radius: 8px; color: #E2E8F0; font-family: var(--v2-mono);
+  font-size: 12px; padding: 12px 14px; resize: vertical; min-height: 130px;
+  outline: none; line-height: 1.6; transition: border-color .15s;
+}
+.try-section textarea:focus { border-color: var(--v2-navy); }
+.execute-btn {
+  margin-top: 10px; background: var(--v2-navy); color: #fff;
+  border: none; border-radius: 7px; padding: 9px 22px;
+  font-family: var(--v2-sans); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 7px;
+}
+.execute-btn:hover { background: #122d57; transform: translateY(-1px); box-shadow: 0 3px 10px rgba(26,60,110,0.3); }
+.response-box { margin-top: 14px; display: none; }
+.response-box.show { display: block; }
+.response-status { font-family: var(--v2-mono); font-size: 11px; margin-bottom: 8px; }
+.status-ok  { color: var(--v2-green); }
+.status-err { color: var(--v2-red); }
+
+/* ── Stats row ── */
+.stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin: 20px 28px; }
+.stat-card { background: var(--v2-white); border: 1px solid var(--v2-border); border-radius: 10px; padding: 18px; position: relative; overflow: hidden; }
+.stat-card::before { content:''; position:absolute; top:0;left:0;right:0;height:3px; background: var(--v2-navy); }
+.stat-card.red::before { background: var(--v2-red); }
+.stat-card.green::before { background: var(--v2-green); }
+.stat-value { font-size: 26px; font-weight: 700; color: var(--v2-navy); font-family: var(--v2-mono); }
+.stat-label { font-size: 11px; color: var(--v2-muted); margin-top: 4px; }
+
+/* ── Pipeline (from SAPtoAPI_Portal.jsx) ── */
+.pipeline-wrap { max-width: 900px; margin: 16px auto; padding: 0 28px; }
+.pipeline-card { background: var(--v2-white); border: 1px solid var(--v2-border); border-radius: 12px; padding: 22px; margin-bottom: 16px; }
+.pipeline-title { font-size: 14px; font-weight: 700; color: var(--v2-navy); margin-bottom: 4px; }
+.pipeline-sub { font-size: 12px; color: var(--v2-muted); margin-bottom: 18px; }
+.pipeline-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
+.p-step {
+  background: var(--v2-bg); border: 1.5px solid var(--v2-border); border-radius: 10px;
+  padding: 12px 14px; text-align: center; min-width: 105px; transition: all 0.2s;
+}
+.p-step.done  { border-color: var(--v2-green); background: #F0FDF4; }
+.p-step.hl    { border-color: var(--v2-navy); background: #EDF2FB; }
+.p-step-icon { font-size: 22px; display: block; margin-bottom: 4px; }
+.p-step-name { font-size: 12px; font-weight: 600; color: var(--v2-text); }
+.p-step-sub  { font-size: 10px; color: var(--v2-muted); font-family: var(--v2-mono); margin-top: 2px; }
+.p-arrow { font-size: 18px; color: var(--v2-navy); padding: 0 5px; }
+
+/* ── Swagger overrides (from v2retail_swagger.html) ── */
+.swagger-ui .topbar { display: none !important; }
+.swagger-ui .info .title { color: var(--v2-navy) !important; }
+.swagger-ui .opblock.opblock-post .opblock-summary { border-color: #BFDBFE !important; }
+.swagger-ui .opblock.opblock-post .opblock-summary-method { background: #1D4ED8 !important; }
+.swagger-ui .btn.execute { background: var(--v2-navy) !important; border-color: var(--v2-navy) !important; }
+.swagger-ui section.models { display: none; }
+.swagger-ui .wrapper { padding: 0 !important; max-width: 100% !important; }
+#swagger-ui-container { padding: 0 16px 40px; background: var(--v2-bg); }
+
+/* ── DAB section ── */
+.dab-wrap { max-width: 900px; margin: 0 auto; padding: 16px 28px; }
+.dab-wrap .code-block { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<!-- ══ TOPBAR (from v2retail_swagger.html) ══ -->
+<div id="topbar">
+  <div class="logo">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+      <rect width="36" height="36" rx="8" fill="#E8401C"/>
+      <text x="18" y="25" text-anchor="middle" font-family="Arial" font-weight="900" font-size="17" fill="white">V2</text>
+    </svg>
+    <div>
+      <div class="logo-text">V2 Retail — SAP API Portal</div>
+      <div class="logo-sub">RFC Integration · Azure DAB · Cloudflare Workers</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="live-badge"><span class="live-dot"></span>192.168.151.36:9292 Live</div>
+    <div class="topbar-links">
+      <a class="tl" href="https://github.com/akash0631/rfc-api" target="_blank">GitHub ↗</a>
+      <a class="tl" href="https://my-dab-app.azurewebsites.net/swagger" target="_blank">Azure DAB ↗</a>
+      <a class="tl" href="https://v2-rfc-portal.pages.dev" target="_blank">Explorer ↗</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SPEC SWITCHER (from v2retail_swagger.html) ══ -->
+<div id="nav-tabs">
+  <div class="spec-tab active" onclick="switchSection('overview',this)"><span class="sdot"></span>Overview</div>
+  <div class="spec-tab" onclick="switchSection('explorer',this)"><span class="sdot"></span>RFC Explorer <span class="tab-chip">3</span><span class="tab-new">NEW</span></div>
+  <div class="spec-tab" onclick="switchSection('swagger',this)"><span class="sdot"></span>Swagger UI</div>
+  <div class="spec-tab" onclick="switchSection('pipeline',this)"><span class="sdot"></span>Pipeline</div>
+  <div class="spec-tab" onclick="switchSection('dab',this)"><span class="sdot"></span>Azure DAB</div>
+</div>
+
+<!-- ══════════════════════════════════
+     OVERVIEW
+══════════════════════════════════ -->
+<div id="section-overview" class="section active">
+  <div class="info-bar">
+    <strong>V2 Retail SAP API Portal</strong> — All new Finance RFC APIs live at
+    <code>http://192.168.151.36:9292</code>. Public access via Cloudflare Worker at
+    <code>v2-rfc-pipeline.akash-bab.workers.dev</code>.
+  </div>
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-value">123</div>
+      <div class="stat-label">Total Controllers</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-value" style="color:var(--v2-green);font-size:20px">LIVE</div>
+      <div class="stat-label">IIS .36 — Port 9292</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">82</div>
+      <div class="stat-label">Azure DAB Tables</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-value" style="font-size:17px;color:var(--v2-red)">SAP Dev</div>
+      <div class="stat-label">192.168.144.174 / Client 210</div>
+    </div>
+  </div>
+
+  <div class="group-label" style="margin-top:4px"><h2>Live APIs — Quick Reference</h2></div>
+  <div style="margin:0 28px">
+    <div class="pipeline-card">
+      <table>
+        <tr><th>RFC Name</th><th>Route</th><th>Method</th><th>Description</th></tr>
+        <tr>
+          <td><span class="param-name">ZPO_DD_UPD_RFC</span></td>
+          <td><span class="param-sap">/api/ZPO_DD_UPD_RFC/Post</span></td>
+          <td><span class="method-badge">POST</span></td>
+          <td class="param-desc">Update PO Delivery Date in SAP ECC</td>
+        </tr>
+        <tr>
+          <td><span class="param-name">ZPO_MODIFICATION</span></td>
+          <td><span class="param-sap">/api/ZPO_MODIFICATION/Execute</span></td>
+          <td><span class="method-badge">POST</span></td>
+          <td class="param-desc">PO Modification History — date range filter</td>
+        </tr>
+        <tr>
+          <td><span class="param-name">ZADVANCE_PAYMENT_RFC</span></td>
+          <td><span class="param-sap">/api/ZADVANCE_PAYMENT_RFC/Post</span></td>
+          <td><span class="method-badge">POST</span></td>
+          <td class="param-desc">Advance payment FI documents by company code</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="group-label"><h2>Endpoint URLs</h2></div>
+  <div style="margin:0 28px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div class="pipeline-card" style="padding:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--v2-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">Internal IIS</div>
+      <div style="font-family:var(--v2-mono);font-size:12px;color:var(--v2-blue);background:var(--v2-bg);padding:8px 12px;border-radius:6px;border:1px solid var(--v2-border)">http://192.168.151.36:9292</div>
+    </div>
+    <div class="pipeline-card" style="padding:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--v2-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">Cloudflare Worker (Public)</div>
+      <div style="font-family:var(--v2-mono);font-size:12px;color:var(--v2-blue);background:var(--v2-bg);padding:8px 12px;border-radius:6px;border:1px solid var(--v2-border)">https://v2-rfc-pipeline.akash-bab.workers.dev</div>
+    </div>
+    <div class="pipeline-card" style="padding:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--v2-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">Azure DAB (Data Lake)</div>
+      <div style="font-family:var(--v2-mono);font-size:12px;color:var(--v2-blue);background:var(--v2-bg);padding:8px 12px;border-radius:6px;border:1px solid var(--v2-border)">https://my-dab-app.azurewebsites.net/api</div>
+    </div>
+    <div class="pipeline-card" style="padding:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--v2-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">GitHub Repo</div>
+      <div style="font-family:var(--v2-mono);font-size:12px;color:var(--v2-blue);background:var(--v2-bg);padding:8px 12px;border-radius:6px;border:1px solid var(--v2-border)">github.com/akash0631/rfc-api</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     RFC EXPLORER (from v2_sap_api_explorer.html)
+══════════════════════════════════ -->
+<div id="section-explorer" class="section">
+  <div class="info-bar">
+    <strong>RFC API Explorer</strong> — 3 new Finance controllers. Set Base URL below to run Try-It.
+    Must be on V2 internal network to reach <code>192.168.151.36:9292</code>.
+  </div>
+
+  <div class="base-url-bar">
+    <label>BASE URL</label>
+    <input id="baseUrl" value="http://192.168.151.36:9292/api" placeholder="http://192.168.151.36:9292/api"/>
+  </div>
+
+  <!-- ═══ GROUP: Finance ═══ -->
+  <div class="group-label"><h2>Finance RFCs</h2></div>
+
+  <!-- EP1: ZPO_DD_UPD_RFC -->
+  <div class="endpoint" id="ep1">
+    <div class="endpoint-header" onclick="toggle('ep1')">
+      <span class="method-badge">POST</span>
+      <span class="endpoint-path">/ZPO_DD_UPD_RFC/Post</span>
+      <span class="endpoint-desc">Update PO Delivery Date</span>
+      <span class="chevron">▾</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('ep1','params',this)">Parameters</div>
+        <div class="tab" onclick="switchTab('ep1','curl',this)">cURL</div>
+        <div class="tab" onclick="switchTab('ep1','response',this)">Response Schema</div>
+        <div class="tab" onclick="switchTab('ep1','try',this)">Try It</div>
+      </div>
+
+      <div class="tab-panel active" id="ep1-params">
+        <p style="font-size:12px;color:var(--v2-muted);margin-bottom:14px">Updates the delivery date on a Purchase Order in SAP ECC 6.0. Writes directly to SAP — confirm PO number before calling.</p>
+        <table>
+          <tr><th>Name</th><th>SAP Type</th><th>Required</th><th>Description</th></tr>
+          <tr>
+            <td><span class="param-name">PO_NO</span></td>
+            <td><span class="param-sap">EBELN</span></td>
+            <td><span class="required">required</span></td>
+            <td class="param-desc">Purchase Order number — 10 digits</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">DELV_DATE</span></td>
+            <td><span class="param-sap">CHAR10</span></td>
+            <td><span class="required">required</span></td>
+            <td class="param-desc">New delivery date — format <code style="font-family:var(--v2-mono);font-size:11px;color:var(--v2-amber)">YYYYMMDD</code> or <code style="font-family:var(--v2-mono);font-size:11px;color:var(--v2-amber)">DD.MM.YYYY</code></td>
+          </tr>
+        </table>
+        <p style="font-size:11px;color:var(--v2-muted);margin:16px 0 8px;font-family:var(--v2-mono);letter-spacing:0.5px;font-weight:600">EXPORT FIELDS</p>
+        <table>
+          <tr><th>Name</th><th>SAP Type</th><th>Description</th></tr>
+          <tr><td><span class="param-name">MSG_TYPE</span></td><td><span class="param-sap">CHAR1</span></td><td class="param-desc">S = Success, E = Error, W = Warning</td></tr>
+          <tr><td><span class="param-name">MESSAGE</span></td><td><span class="param-sap">CHAR100</span></td><td class="param-desc">Human-readable SAP response message</td></tr>
+        </table>
+      </div>
+
+      <div class="tab-panel" id="ep1-curl">
+        <div class="code-block" id="ep1-curl-code"><span class="ck">curl</span> -s -X POST "<span class="bup"></span>/ZPO_DD_UPD_RFC/Post" \
+  -H <span class="cs">"Content-Type: application/json"</span> \
+  -d <span class="cs">'{
+    "PO_NO":     "4500001234",
+    "DELV_DATE": "20260401"
+  }'</span>
+
+<span class="cc"># PowerShell (from .36 server)</span>
+$body = <span class="cs">'{"PO_NO":"4500001234","DELV_DATE":"20260401"}'</span>
+Invoke-WebRequest <span class="cs">"http://192.168.151.36:9292/api/ZPO_DD_UPD_RFC/Post"</span> `
+  -Method POST -Body $body -ContentType <span class="cs">"application/json"</span> -UseBasicParsing<button class="copy-btn" onclick="copyCode('ep1-curl-code')">copy</button></div>
+      </div>
+
+      <div class="tab-panel" id="ep1-response">
+        <p style="font-size:12px;color:var(--v2-muted);margin-bottom:10px">Success — delivery date updated in SAP</p>
+        <div class="schema-block">{
+  <span class="key">"Status"</span>:   <span class="val-b">true</span>,
+  <span class="key">"MSG_TYPE"</span>: <span class="val-s">"S"</span>,
+  <span class="key">"MESSAGE"</span>:  <span class="val-s">"Delivery date updated for PO 4500001234"</span>
+}</div>
+        <p style="font-size:12px;color:var(--v2-muted);margin:12px 0 8px">SAP Business Error (PO not found)</p>
+        <div class="schema-block">{
+  <span class="key">"Status"</span>:   <span class="val-b">false</span>,
+  <span class="key">"MSG_TYPE"</span>: <span class="val-s">"E"</span>,
+  <span class="key">"MESSAGE"</span>:  <span class="val-s">"This line is not contained in the table."</span>
+}</div>
+      </div>
+
+      <div class="tab-panel try-section" id="ep1-try">
+        <label>Request Body (JSON)</label>
+        <textarea id="ep1-body">{
+  "PO_NO":     "4500001234",
+  "DELV_DATE": "20260401"
+}</textarea>
+        <button class="execute-btn" onclick="execute('ep1','ZPO_DD_UPD_RFC/Post')">▶ Execute</button>
+        <div class="response-box" id="ep1-resp">
+          <div class="response-status" id="ep1-resp-status"></div>
+          <div class="code-block" id="ep1-resp-body"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EP2: ZPO_MODIFICATION -->
+  <div class="endpoint" id="ep2">
+    <div class="endpoint-header" onclick="toggle('ep2')">
+      <span class="method-badge">POST</span>
+      <span class="endpoint-path">/ZPO_MODIFICATION/Execute</span>
+      <span class="endpoint-desc">PO Modification History</span>
+      <span class="chevron">▾</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('ep2','params',this)">Parameters</div>
+        <div class="tab" onclick="switchTab('ep2','curl',this)">cURL</div>
+        <div class="tab" onclick="switchTab('ep2','response',this)">Response Schema</div>
+        <div class="tab" onclick="switchTab('ep2','try',this)">Try It</div>
+      </div>
+
+      <div class="tab-panel active" id="ep2-params">
+        <p style="font-size:12px;color:var(--v2-muted);margin-bottom:14px">Returns PO modification history within a date range. All parameters optional — use date range to filter by change date.</p>
+        <p style="font-size:11px;color:var(--v2-muted);margin-bottom:8px;font-family:var(--v2-mono);font-weight:600;letter-spacing:0.5px">IMPORT PARAMETERS</p>
+        <table>
+          <tr><th>Name</th><th>SAP Type</th><th>Required</th><th>Description</th></tr>
+          <tr><td><span class="param-name">IM_PO_NO</span></td><td><span class="param-sap">EBELN</span></td><td><span class="optional">optional</span></td><td class="param-desc">Filter by specific PO number</td></tr>
+          <tr><td><span class="param-name">IM_PO_DEL_DATE</span></td><td><span class="param-sap">EINDT</span></td><td><span class="optional">optional</span></td><td class="param-desc">Filter by delivery date on PO item</td></tr>
+          <tr><td><span class="param-name">IM_DEL_CHG_DATE_LOW</span></td><td><span class="param-sap">ERDAT</span></td><td><span class="optional">optional</span></td><td class="param-desc">Date range — from (YYYYMMDD)</td></tr>
+          <tr><td><span class="param-name">IM_DEL_CHG_DATE_HIGH</span></td><td><span class="param-sap">ERDAT</span></td><td><span class="optional">optional</span></td><td class="param-desc">Date range — to (YYYYMMDD)</td></tr>
+        </table>
+        <p style="font-size:11px;color:var(--v2-muted);margin:16px 0 8px;font-family:var(--v2-mono);font-weight:600;letter-spacing:0.5px">ET_PO_OUTPUT TABLE (ZPO_MODIFICATION_TT)</p>
+        <div class="field-grid">
+          <div class="field-chip">EBELN <span>CHAR10 · PO Number</span></div>
+          <div class="field-chip">ORIGNAL_DEL_DATE <span>CHAR50</span></div>
+          <div class="field-chip">CHNG_NO <span>CHAR10 · Change No.</span></div>
+          <div class="field-chip">CURRENT_DEL_DATE <span>DATS8</span></div>
+          <div class="field-chip">DEL_EXT_DATE <span>CHAR10</span></div>
+          <div class="field-chip">DELAYED_BY <span>CHAR10 · Days</span></div>
+          <div class="field-chip">REASON <span>CHAR100</span></div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="ep2-curl">
+        <div class="code-block" id="ep2-curl-code"><span class="ck">curl</span> -s -X POST "<span class="bup"></span>/ZPO_MODIFICATION/Execute" \
+  -H <span class="cs">"Content-Type: application/json"</span> \
+  -d <span class="cs">'{
+    "IM_PO_NO":            "",
+    "IM_DEL_CHG_DATE_LOW": "20260101",
+    "IM_DEL_CHG_DATE_HIGH":"20260319"
+  }'</span><button class="copy-btn" onclick="copyCode('ep2-curl-code')">copy</button></div>
+      </div>
+
+      <div class="tab-panel" id="ep2-response">
+        <div class="schema-block">{
+  <span class="key">"Status"</span>: <span class="val-b">true</span>,
+  <span class="key">"Data"</span>: {
+    <span class="key">"ET_PO_OUTPUT"</span>: [
+      {
+        <span class="key">"EBELN"</span>:            <span class="val-s">"4500001234"</span>,
+        <span class="key">"ORIGNAL_DEL_DATE"</span>: <span class="val-s">"20260101"</span>,
+        <span class="key">"CHNG_NO"</span>:          <span class="val-s">"001"</span>,
+        <span class="key">"CURRENT_DEL_DATE"</span>: <span class="val-s">"20260315"</span>,
+        <span class="key">"DEL_EXT_DATE"</span>:     <span class="val-s">"20260315"</span>,
+        <span class="key">"DELAYED_BY"</span>:       <span class="val-s">"73"</span>,
+        <span class="key">"REASON"</span>:           <span class="val-s">"Production delay"</span>
+      }
+    ]
+  }
+}</div>
+      </div>
+
+      <div class="tab-panel try-section" id="ep2-try">
+        <label>Request Body (JSON)</label>
+        <textarea id="ep2-body">{
+  "IM_PO_NO":            "",
+  "IM_DEL_CHG_DATE_LOW": "20260101",
+  "IM_DEL_CHG_DATE_HIGH":"20260319"
+}</textarea>
+        <button class="execute-btn" onclick="execute('ep2','ZPO_MODIFICATION/Execute')">▶ Execute</button>
+        <div class="response-box" id="ep2-resp">
+          <div class="response-status" id="ep2-resp-status"></div>
+          <div class="code-block" id="ep2-resp-body"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EP3: ZADVANCE_PAYMENT_RFC (full detail from controller .cs) -->
+  <div class="endpoint" id="ep3">
+    <div class="endpoint-header" onclick="toggle('ep3')">
+      <span class="method-badge">POST</span>
+      <span class="endpoint-path">/ZADVANCE_PAYMENT_RFC/Post</span>
+      <span class="endpoint-desc">Advance Payment FI Documents</span>
+      <span class="chevron">▾</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('ep3','params',this)">Parameters</div>
+        <div class="tab" onclick="switchTab('ep3','curl',this)">cURL</div>
+        <div class="tab" onclick="switchTab('ep3','response',this)">Response Schema</div>
+        <div class="tab" onclick="switchTab('ep3','try',this)">Try It</div>
+      </div>
+
+      <div class="tab-panel active" id="ep3-params">
+        <p style="font-size:12px;color:var(--v2-muted);margin-bottom:14px">Fetches advance payment FI documents for a company code within a posting date range. Returns <code style="font-family:var(--v2-mono);font-size:11px">IT_FINAL</code> table of type <code style="font-family:var(--v2-mono);font-size:11px">ZADVANCE_TT</code> — 16 fields per row.</p>
+        <p style="font-size:11px;color:var(--v2-muted);margin-bottom:8px;font-family:var(--v2-mono);font-weight:600;letter-spacing:0.5px">IMPORT PARAMETERS</p>
+        <table>
+          <tr><th>Name</th><th>SAP Type</th><th>Required</th><th>Description</th></tr>
+          <tr>
+            <td><span class="param-name">I_COMPANY_CODE</span></td>
+            <td><span class="param-sap">BUKRS</span></td>
+            <td><span class="required">required</span></td>
+            <td class="param-desc">Company Code (e.g. <code style="font-family:var(--v2-mono);font-size:11px">1100</code>)</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">I_POSTING_DATE_LOW</span></td>
+            <td><span class="param-sap">BUDAT</span></td>
+            <td><span class="required">required</span></td>
+            <td class="param-desc">Posting Date From — format: <code style="font-family:var(--v2-mono);font-size:11px;color:var(--v2-amber)">YYYYMMDD</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">I_POSTING_DATE_HIGH</span></td>
+            <td><span class="param-sap">BUDAT</span></td>
+            <td><span class="required">required</span></td>
+            <td class="param-desc">Posting Date To — format: <code style="font-family:var(--v2-mono);font-size:11px;color:var(--v2-amber)">YYYYMMDD</code></td>
+          </tr>
+        </table>
+
+        <p style="font-size:11px;color:var(--v2-muted);margin:16px 0 8px;font-family:var(--v2-mono);font-weight:600;letter-spacing:0.5px">IT_FINAL OUTPUT FIELDS (ZADVANCE_ST structure — 16 fields)</p>
+        <div class="field-grid">
+          <div class="field-chip">DOCUMENT_TYPE <span>BLART · CHAR 2</span></div>
+          <div class="field-chip">COMPANY_CODE <span>BUKRS · CHAR 4</span></div>
+          <div class="field-chip">DOCUMENT_NUMBER <span>H_BELNR · CHAR 12</span></div>
+          <div class="field-chip">FISCAL_YEAR <span>GJAHR · NUMC 4</span></div>
+          <div class="field-chip">LINE_ITEM <span>BUZEI · NUMC 3</span></div>
+          <div class="field-chip">POSTING_KEY <span>BSCHL · CHAR 2</span></div>
+          <div class="field-chip">ACCOUNT_TYPE <span>KOART · CHAR 1</span></div>
+          <div class="field-chip">SPECIAL_G_L_IND <span>UMSKZ · CHAR 1</span></div>
+          <div class="field-chip">TRANSACT_TYPE <span>UMSKS · CHAR 1</span></div>
+          <div class="field-chip">DEBIT_CREDIT <span>SHKZG · CHAR 1</span></div>
+          <div class="field-chip">AMOUNT_IN_LC <span>DMBTR · CURR 23,2</span></div>
+          <div class="field-chip">AMOUNT <span>WRBTR · CURR 23,2</span></div>
+          <div class="field-chip">TEXT <span>SGTXT · CHAR 50</span></div>
+          <div class="field-chip">VENDOR <span>LIFNR · CHAR 10</span></div>
+          <div class="field-chip">PAYMENT_AMT <span>NEBTR · CURR 23,2</span></div>
+          <div class="field-chip">POSTING_DATE <span>BUDAT · DATS 8</span></div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="ep3-curl">
+        <div class="code-block" id="ep3-curl-code"><span class="ck">curl</span> -s -X POST "<span class="bup"></span>/ZADVANCE_PAYMENT_RFC/Post" \
+  -H <span class="cs">"Content-Type: application/json"</span> \
+  -d <span class="cs">'{
+    "I_COMPANY_CODE":      "1100",
+    "I_POSTING_DATE_LOW":  "20260101",
+    "I_POSTING_DATE_HIGH": "20260319"
+  }'</span> | python3 -m json.tool
+
+<span class="cc"># PowerShell</span>
+$body = <span class="cs">'{
+  "I_COMPANY_CODE":      "1100",
+  "I_POSTING_DATE_LOW":  "20260101",
+  "I_POSTING_DATE_HIGH": "20260319"
+}'</span>
+Invoke-WebRequest <span class="cs">"http://192.168.151.36:9292/api/ZADVANCE_PAYMENT_RFC/Post"</span> `
+  -Method POST -Body $body -ContentType <span class="cs">"application/json"</span> -UseBasicParsing<button class="copy-btn" onclick="copyCode('ep3-curl-code')">copy</button></div>
+      </div>
+
+      <div class="tab-panel" id="ep3-response">
+        <p style="font-size:12px;color:var(--v2-muted);margin-bottom:10px">Success — returns array of advance payment document lines</p>
+        <div class="schema-block">{
+  <span class="key">"Status"</span>:  <span class="val-b">true</span>,
+  <span class="key">"Message"</span>: <span class="val-s">""</span>,
+  <span class="key">"Data"</span>: {
+    <span class="key">"IT_FINAL"</span>: [
+      {
+        <span class="key">"DOCUMENT_TYPE"</span>:   <span class="val-s">"KZ"</span>,            <span class="cmt">// KZ = Vendor Payment</span>
+        <span class="key">"COMPANY_CODE"</span>:     <span class="val-s">"1100"</span>,
+        <span class="key">"DOCUMENT_NUMBER"</span>:  <span class="val-s">"1900000123"</span>,
+        <span class="key">"FISCAL_YEAR"</span>:      <span class="val-s">"2026"</span>,
+        <span class="key">"LINE_ITEM"</span>:        <span class="val-s">"001"</span>,
+        <span class="key">"POSTING_KEY"</span>:      <span class="val-s">"29"</span>,
+        <span class="key">"ACCOUNT_TYPE"</span>:     <span class="val-s">"K"</span>,             <span class="cmt">// K = Vendor</span>
+        <span class="key">"SPECIAL_G_L_IND"</span>:  <span class="val-s">"A"</span>,             <span class="cmt">// A = Down Payment</span>
+        <span class="key">"TRANSACT_TYPE"</span>:    <span class="val-s">"A"</span>,
+        <span class="key">"DEBIT_CREDIT"</span>:     <span class="val-s">"S"</span>,             <span class="cmt">// S=Debit H=Credit</span>
+        <span class="key">"AMOUNT_IN_LC"</span>:     <span class="val-s">"50000.00"</span>,
+        <span class="key">"AMOUNT"</span>:           <span class="val-s">"50000.00"</span>,
+        <span class="key">"TEXT"</span>:             <span class="val-s">"Advance payment Q1 2026"</span>,
+        <span class="key">"VENDOR"</span>:           <span class="val-s">"0000100123"</span>,
+        <span class="key">"PAYMENT_AMT"</span>:      <span class="val-s">"50000.00"</span>,
+        <span class="key">"POSTING_DATE"</span>:     <span class="val-s">"20260115"</span>
+      }
+    ]
+  }
+}
+</div>
+        <p style="font-size:12px;color:var(--v2-muted);margin:12px 0 8px">Error — missing company code</p>
+        <div class="schema-block">{
+  <span class="key">"Status"</span>:  <span class="val-b">false</span>,
+  <span class="key">"Message"</span>: <span class="val-s">"Request Not Valid — I_COMPANY_CODE is required"</span>
+}</div>
+      </div>
+
+      <div class="tab-panel try-section" id="ep3-try">
+        <label>Request Body (JSON)</label>
+        <textarea id="ep3-body">{
+  "I_COMPANY_CODE":      "1100",
+  "I_POSTING_DATE_LOW":  "20260101",
+  "I_POSTING_DATE_HIGH": "20260319"
+}</textarea>
+        <button class="execute-btn" onclick="execute('ep3','ZADVANCE_PAYMENT_RFC/Post')">▶ Execute</button>
+        <div class="response-box" id="ep3-resp">
+          <div class="response-status" id="ep3-resp-status"></div>
+          <div class="code-block" id="ep3-resp-body"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════
+     SWAGGER UI (from v2retail_swagger.html)
+══════════════════════════════════ -->
+<div id="section-swagger" class="section">
+  <div id="spec-switcher" style="background:#fff;border-bottom:1px solid var(--v2-border);padding:0 28px;display:flex;gap:4px">
+    <div class="spec-tab active" onclick="switchSpec('sap',this)" style="padding:10px 18px;font-size:12px">
+      <span class="sdot"></span>SAP RFC APIs
+    </div>
+    <div class="spec-tab" onclick="switchSpec('dab',this)" style="padding:10px 18px;font-size:12px">
+      <span class="sdot"></span>Azure DAB
+    </div>
+  </div>
+  <div id="sw-info-bar" class="info-bar">
+    <strong>SAP RFC APIs</strong> — Live at <code>http://192.168.151.36:9292</code>.
+    Use Try-It-Out from within the V2 internal network. Avg SAP round-trip: 1.6–1.8s.
+  </div>
+  <div id="swagger-ui-container">
+    <div id="swagger-ui"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     PIPELINE (from SAPtoAPI_Portal.jsx)
+══════════════════════════════════ -->
+<div id="section-pipeline" class="section">
+  <div class="pipeline-wrap">
+
+    <div class="pipeline-card">
+      <div class="pipeline-title">RFC → API Deploy Pipeline</div>
+      <div class="pipeline-sub">Upload RFC docx → Claude generates C# controller → GitHub push → GitHub Actions builds → IIS deploy on .36 → Live at :9292</div>
+      <div class="pipeline-flow">
+        <div class="p-step"><span class="p-step-icon">📄</span><div class="p-step-name">RFC Doc</div><div class="p-step-sub">.docx upload</div></div>
+        <div class="p-arrow">→</div>
+        <div class="p-step hl"><span class="p-step-icon">🤖</span><div class="p-step-name">Claude</div><div class="p-step-sub">Parses → .cs</div></div>
+        <div class="p-arrow">→</div>
+        <div class="p-step"><span class="p-step-icon">📦</span><div class="p-step-name">GitHub</div><div class="p-step-sub">akash0631/rfc-api</div></div>
+        <div class="p-arrow">→</div>
+        <div class="p-step"><span class="p-step-icon">⚙️</span><div class="p-step-name">Actions</div><div class="p-step-sub">MSBuild + IIS</div></div>
+        <div class="p-arrow">→</div>
+        <div class="p-step done"><span class="p-step-icon">🌐</span><div class="p-step-name">IIS .36</div><div class="p-step-sub">Port 9292</div></div>
+        <div class="p-arrow">→</div>
+        <div class="p-step"><span class="p-step-icon">☁️</span><div class="p-step-name">CF Worker</div><div class="p-step-sub">Public URL</div></div>
+      </div>
+    </div>
+
+    <div class="pipeline-card">
+      <div class="pipeline-title">Phase 2 — SAP → SQL Data Lake → Azure DAB</div>
+      <div class="pipeline-sub">Scheduled RFC pulls data to SQL .28, exposed via Azure Data API Builder with OData support</div>
+      <div class="pipeline-flow">
+        <div class="p-step done"><span class="p-step-icon">🔌</span><div class="p-step-name">SAP RFC</div><div class="p-step-sub">Data extract</div></div>
+        <div class="p-arrow">→</div>
+        <div class="p-step"><span class="p-step-icon">🗄️</span><div class="p-step-name">SQL .28</div><div class="p-step-sub">DataV2 DB</div></div>
+        <div class="p-arrow">→</div>
+        <div class="p-step hl"><span class="p-step-icon">☁️</span><div class="p-step-name">Azure DAB</div><div class="p-step-sub">my-dab-app</div></div>
+        <div class="p-arrow">→</div>
+        <div class="p-step"><span class="p-step-icon">📊</span><div class="p-step-name">Dashboard</div><div class="p-step-sub">Any frontend</div></div>
+      </div>
+    </div>
+
+    <!-- SAP Dev Instructions (from SAPtoAPI_Portal.jsx) -->
+    <div class="pipeline-card" style="background:#fffbeb;border-color:#fde68a">
+      <div class="pipeline-title" style="color:#92400e">SAP Dev Instructions — Activating a new RFC</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
+          <div style="width:32px;height:32px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700">1</div>
+          <div style="font-size:12px;color:#78350f;font-weight:600">Open SE37</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
+          <div style="width:32px;height:32px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700">2</div>
+          <div style="font-size:12px;color:#78350f;font-weight:600">Create FM</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
+          <div style="width:32px;height:32px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700">3</div>
+          <div style="font-size:12px;color:#78350f;font-weight:600">Paste ABAP</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
+          <div style="width:32px;height:32px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700">4</div>
+          <div style="font-size:12px;color:#78350f;font-weight:600">Set Remote-Enabled</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
+          <div style="width:32px;height:32px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700">5</div>
+          <div style="font-size:12px;color:#78350f;font-weight:600">Activate Ctrl+F3</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipeline-card">
+      <div class="pipeline-title">GitHub Actions Workflows</div>
+      <div class="pipeline-sub">All orchestration via master branch pushes</div>
+      <table>
+        <tr><th>Workflow</th><th>Trigger</th><th>Runner</th><th>Action</th></tr>
+        <tr><td><span class="param-sap">deploy_36.yml</span></td><td class="param-desc">Push to Controllers/**</td><td class="param-sap">V2DC-ADDVERB (iis)</td><td class="param-desc">Build + Deploy to :9292</td></tr>
+        <tr><td><span class="param-sap">deploy-worker.yml</span></td><td class="param-desc">Push to master</td><td class="param-sap">GitHub-hosted</td><td class="param-desc">Deploy Cloudflare Worker</td></tr>
+        <tr><td><span class="param-sap">deploy-portal.yml</span></td><td class="param-desc">Push to portal files</td><td class="param-sap">GitHub-hosted</td><td class="param-desc">Deploy CF Pages</td></tr>
+        <tr><td><span class="param-sap">p4_sync.yml</span></td><td class="param-desc">Daily 1:30 AM IST</td><td class="param-sap">V2DC-ADDVERB</td><td class="param-desc">SAP → SQL Data Lake</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     AZURE DAB
+══════════════════════════════════ -->
+<div id="section-dab" class="section">
+  <div class="info-bar">
+    <strong>Azure Data API Builder</strong> — Auto-generated OData REST APIs from V2 Data Lake.
+    Hosted at <code>my-dab-app.azurewebsites.net</code>. 82 tables exposed.
+  </div>
+  <div class="dab-wrap">
+    <div class="pipeline-card">
+      <div class="pipeline-title">Endpoints</div>
+      <table>
+        <tr><th>Type</th><th>URL</th></tr>
+        <tr><td class="param-sap">API Base</td><td><span class="param-name">https://my-dab-app.azurewebsites.net/api</span></td></tr>
+        <tr><td class="param-sap">Swagger</td><td><span class="param-name">https://my-dab-app.azurewebsites.net/swagger</span></td></tr>
+        <tr><td class="param-sap">Health</td><td><span class="param-name">https://my-dab-app.azurewebsites.net/health</span></td></tr>
+      </table>
+    </div>
+    <div class="pipeline-card">
+      <div class="pipeline-title">Sample OData Queries</div>
+      <div class="pipeline-sub" style="margin-bottom:12px">Supports $filter, $orderby, $first, $after</div>
+      <div class="code-block" style="white-space:pre-wrap"><span class="cc"># Get first 10 rows</span>
+<span class="ck">curl</span> <span class="cs">"https://my-dab-app.azurewebsites.net/api/INVT_ST_MJ_CAT_CLR_AKA?$first=10"</span>
+
+<span class="cc"># Filter by store</span>
+<span class="ck">curl</span> <span class="cs">"https://my-dab-app.azurewebsites.net/api/INVT_ST_MJ_CAT_CLR_AKA?\$filter=STORE-CODE eq 'MN80'&\$first=5"</span>
+
+<span class="cc"># Order by date descending</span>
+<span class="ck">curl</span> <span class="cs">"https://my-dab-app.azurewebsites.net/api/INVT_ST_MJ_CAT_CLR_AKA?\$orderby=LOG-DATE desc&\$first=20"</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Swagger JS (from v2retail_swagger.html) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-standalone-preset.js"></script>
+<script>
+// ── OpenAPI spec (from po_delivery_date_openapi.json + new controllers) ──
+const SAP_SPEC = {
+  openapi:"3.0.1",
+  info:{ title:"V2 Retail — SAP RFC APIs", version:"1.0.0",
+    description:"SAP ECC 6.0 RFC APIs via IIS middleware (192.168.151.36:9292).\n\n| Field | Value |\n|---|---|\n| IIS Server | 192.168.151.36:9292 |\n| SAP System | ECC 6.0 Dev (192.168.144.174) |\n| Client | 210 |\n| Avg Response | 1.6–1.8 seconds |",
+    contact:{ name:"V2 Retail Tech" }
+  },
+  servers:[{ url:"http://192.168.151.36:9292", description:"V2DC-ADDVERB IIS — Port 9292" }],
+  tags:[
+    { name:"Purchase Orders", description:"SAP PO management" },
+    { name:"Finance", description:"SAP FI/AP documents" }
+  ],
+  paths:{
+    "/api/ZPO_DD_UPD_RFC/Post":{ post:{ tags:["Purchase Orders"], summary:"Update PO Delivery Date", operationId:"updatePODeliveryDate",
+      description:"Updates delivery date on a Purchase Order in SAP ECC. **Writes directly to SAP** — confirm PO number before calling.",
+      requestBody:{ required:true, content:{ "application/json":{ schema:{ type:"object", required:["PO_NO","DELV_DATE"],
+        properties:{ PO_NO:{type:"string",description:"PO Number (EBELN)",example:"4500001234"},
+          DELV_DATE:{type:"string",description:"New delivery date — YYYYMMDD or DD.MM.YYYY",example:"20260401"} } } } } },
+      responses:{ "200":{ description:"SAP response", content:{ "application/json":{ schema:{ type:"object",
+        properties:{ Status:{type:"boolean"}, MSG_TYPE:{type:"string",description:"S=Success E=Error W=Warning"},
+          MESSAGE:{type:"string"} } },
+        examples:{ success:{summary:"Updated",value:{Status:true,MSG_TYPE:"S",MESSAGE:"Delivery date updated"}},
+          notfound:{summary:"PO not found",value:{Status:false,MSG_TYPE:"E",MESSAGE:"This line is not contained in the table."}} } } } } } } },
+    "/api/ZPO_MODIFICATION/Execute":{ post:{ tags:["Purchase Orders"], summary:"PO Modification History",
+      description:"Returns PO modification records. All params optional — use date range to filter by change date.",
+      requestBody:{ required:false, content:{ "application/json":{ schema:{ type:"object",
+        properties:{ IM_PO_NO:{type:"string",example:""},
+          IM_DEL_CHG_DATE_LOW:{type:"string",description:"Date from (YYYYMMDD)",example:"20260101"},
+          IM_DEL_CHG_DATE_HIGH:{type:"string",description:"Date to (YYYYMMDD)",example:"20260319"} } } } } },
+      responses:{ "200":{ description:"PO modification records",
+        content:{ "application/json":{ schema:{ type:"object" },
+          examples:{ data:{summary:"With results",value:{Status:true,Data:{ET_PO_OUTPUT:[{EBELN:"4500001234",ORIGNAL_DEL_DATE:"20260101",CHNG_NO:"001",CURRENT_DEL_DATE:"20260315",DELAYED_BY:"73",REASON:"Production delay"}]}}} } } } } } } },
+    "/api/ZADVANCE_PAYMENT_RFC/Post":{ post:{ tags:["Finance"], summary:"Advance Payment FI Documents",
+      description:"Fetches advance payment FI documents for a company code. Returns IT_FINAL table (ZADVANCE_ST — 16 fields).",
+      requestBody:{ required:true, content:{ "application/json":{ schema:{ type:"object", required:["I_COMPANY_CODE"],
+        properties:{ I_COMPANY_CODE:{type:"string",description:"Company Code (BUKRS)",example:"1100"},
+          I_POSTING_DATE_LOW:{type:"string",description:"Date from YYYYMMDD",example:"20260101"},
+          I_POSTING_DATE_HIGH:{type:"string",description:"Date to YYYYMMDD",example:"20260319"} } } } } },
+      responses:{ "200":{ description:"Advance payment documents",
+        content:{ "application/json":{ schema:{ type:"object",
+          properties:{ Status:{type:"boolean"}, Message:{type:"string"}, Data:{ type:"object",
+            properties:{ IT_FINAL:{ type:"array", items:{ type:"object",
+              properties:{ DOCUMENT_TYPE:{type:"string"}, COMPANY_CODE:{type:"string"}, DOCUMENT_NUMBER:{type:"string"},
+                FISCAL_YEAR:{type:"string"}, LINE_ITEM:{type:"string"}, POSTING_KEY:{type:"string"}, ACCOUNT_TYPE:{type:"string"},
+                SPECIAL_G_L_IND:{type:"string"}, TRANSACT_TYPE:{type:"string"}, DEBIT_CREDIT:{type:"string"},
+                AMOUNT_IN_LC:{type:"string"}, AMOUNT:{type:"string"}, TEXT:{type:"string"}, VENDOR:{type:"string"},
+                PAYMENT_AMT:{type:"string"}, POSTING_DATE:{type:"string"} } } } } } } } } } } } }
+  },
+  components:{ schemas:{
+    ErrorResponse:{ type:"object", properties:{ Status:{type:"boolean",example:false}, Message:{type:"string"} } }
+  },
+  securitySchemes:{ ApiKeyHeader:{type:"apiKey",in:"header",name:"X-API-KEY"} } }
+};
+
+const DAB_URL = "https://my-dab-app.azurewebsites.net/swagger/v1/swagger.json";
+const SW_INFO = {
+  sap:"<strong>SAP RFC APIs</strong> — Live at <code>http://192.168.151.36:9292</code>. Must be on V2 network for Try-It-Out. Avg SAP round-trip: 1.6–1.8s.",
+  dab:"<strong>Azure DAB</strong> — OData REST APIs from V2 Data Lake. Hosted at <code>my-dab-app.azurewebsites.net</code>. 82 tables."
+};
+
+let swUI = null;
+function initSwagger(spec) {
+  document.getElementById('swagger-ui').innerHTML = '';
+  swUI = SwaggerUIBundle({
+    spec: typeof spec === 'string' ? undefined : spec,
+    url:  typeof spec === 'string' ? spec : undefined,
+    dom_id:'#swagger-ui',
+    presets:[SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+    layout:"StandaloneLayout",
+    docExpansion:"list", tryItOutEnabled:true, defaultModelsExpandDepth:-1
+  });
+}
+window.addEventListener('load', () => initSwagger(SAP_SPEC));
+
+function switchSpec(name, el) {
+  document.querySelectorAll('#spec-switcher .spec-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('sw-info-bar').innerHTML = SW_INFO[name];
+  initSwagger(name === 'sap' ? SAP_SPEC : DAB_URL);
+}
+
+// ── Main section switching ──
+function switchSection(name, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-'+name).classList.add('active');
+  document.querySelectorAll('#nav-tabs .spec-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ── Explorer functions (from v2_sap_api_explorer.html) ──
+function toggle(id) { document.getElementById(id).classList.toggle('open'); }
+
+function switchTab(ep, panel, el) {
+  const body = document.getElementById(ep).querySelector('.endpoint-body');
+  body.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  body.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`${ep}-${panel}`).classList.add('active');
+}
+
+const baseInput = document.getElementById('baseUrl');
+function updateUrls() {
+  const val = (baseInput ? baseInput.value : 'http://192.168.151.36:9292/api').replace(/\/$/, '');
+  document.querySelectorAll('.bup').forEach(el => el.textContent = val);
+}
+if (baseInput) { baseInput.addEventListener('input', updateUrls); updateUrls(); }
+
+function copyCode(id) {
+  const el = document.getElementById(id);
+  const text = el.innerText.replace(/\ncopy$/, '').replace(/copy$/, '').trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = el.querySelector('.copy-btn');
+    const orig = btn.textContent;
+    btn.textContent = 'copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+}
+
+async function execute(ep, endpoint) {
+  const base    = baseInput ? baseInput.value.replace(/\/$/, '') : 'http://192.168.151.36:9292/api';
+  const bodyTxt = document.getElementById(`${ep}-body`).value;
+  const respBox = document.getElementById(`${ep}-resp`);
+  const respSt  = document.getElementById(`${ep}-resp-status`);
+  const respBdy = document.getElementById(`${ep}-resp-body`);
+  respBox.classList.add('show');
+  respSt.textContent = '⏳ Sending to SAP...';
+  respSt.className = 'response-status';
+  respBdy.textContent = '';
+  try {
+    const res  = await fetch(`${base}/${endpoint}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:bodyTxt });
+    const data = await res.json();
+    respSt.textContent = `HTTP ${res.status} ${res.ok ? '✓ OK' : '✗ Error'}`;
+    respSt.classList.add(res.ok ? 'status-ok' : 'status-err');
+    respBdy.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    respSt.textContent = '✗ Failed — check Base URL / CORS / network';
+    respSt.classList.add('status-err');
+    respBdy.textContent = err.toString()+'\n\nMust be on V2 internal network to reach 192.168.151.36';
+  }
+}
+</script>
+</body>
+</html>
