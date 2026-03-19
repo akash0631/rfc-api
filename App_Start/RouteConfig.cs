@@ -8,14 +8,14 @@ namespace Vendor_SRM_Routing_Application
         public static void RegisterRoutes(RouteCollection routes)
         {
             routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
-            routes.IgnoreRoute("swagger/{*pathInfo}"); // Let Swashbuckle handle all /swagger/* routes
+            routes.IgnoreRoute("swagger/{*pathInfo}");
 
             routes.MapRoute(
                 name: "Default",
                 url: "{controller}/{action}/{id}",
                 defaults: new
                 {
-                    controller = "RfcDocUpload1",  // Startup page: RFC Document Upload Portal
+                    controller = "RfcDocUpload",  // Startup page: RFC Document Upload Portal
                     action     = "Index",
                     id         = UrlParameter.Optional
                 }
