@@ -1,0 +1,106 @@
+@model IEnumerable<Vendor_SRM_Routing_Application.RfcEndpoint>
+@{
+    ViewBag.Title = "RFC API Explorer";
+    Layout = null;
+    var eps = Model?.ToList() ?? new List<Vendor_SRM_Routing_Application.RfcEndpoint>();
+}
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>V2 Retail - RFC API Explorer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f6fa;color:#1a2035;}
+header{background:#fff;border-bottom:1px solid #e2e6ef;padding:0 24px;height:52px;display:flex;align-items:center;gap:12px;}
+.logo{font-size:14px;font-weight:700;} .logo span{color:#2563eb;}
+.hdr-right{margin-left:auto;display:flex;gap:10px;align-items:center;}
+.hdr-link{font-size:12px;color:#8896ab;text-decoration:none;padding:5px 10px;border:1px solid #e2e6ef;border-radius:6px;}
+.hdr-link:hover{color:#2563eb;border-color:#2563eb;}
+.page{max-width:1100px;margin:24px auto;padding:0 16px 60px;}
+.stats{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;}
+.stat{background:#fff;border:1px solid #e2e6ef;border-radius:10px;padding:14px 20px;flex:1;min-width:140px;}
+.stat-num{font-size:24px;font-weight:700;color:#2563eb;}
+.stat-lbl{font-size:12px;color:#8896ab;margin-top:2px;}
+.search-bar{background:#fff;border:1.5px solid #e2e6ef;border-radius:9px;padding:10px 14px;font-size:14px;width:100%;margin-bottom:20px;outline:none;}
+.search-bar:focus{border-color:#2563eb;}
+.ep-card{background:#fff;border:1px solid #e2e6ef;border-radius:10px;margin-bottom:12px;overflow:hidden;}
+.ep-head{display:flex;align-items:center;gap:10px;padding:14px 18px;cursor:pointer;user-select:none;}
+.ep-head:hover{background:#f8f9fc;}
+.tag-post{background:#f0fdf4;border:1px solid #86efac;color:#16a34a;padding:3px 9px;border-radius:5px;font-size:11px;font-weight:700;font-family:Consolas,monospace;}
+.ep-path{font-size:14px;font-weight:700;font-family:Consolas,monospace;color:#1a2035;}
+.ep-desc{font-size:12px;color:#8896ab;margin-left:auto;}
+.ep-body{display:none;padding:16px 18px;border-top:1px solid #e2e6ef;background:#f8f9fc;}
+.ep-body.open{display:block;}
+.param-table{width:100%;border-collapse:collapse;font-size:12px;}
+.param-table th{padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8896ab;text-align:left;border-bottom:1px solid #e2e6ef;}
+.param-table td{padding:7px 10px;border-bottom:1px solid #e2e6ef;color:#4a5568;}
+.param-table tr:last-child td{border-bottom:none;}
+.pname{color:#2563eb;font-family:Consolas,monospace;}
+.group-title{font-size:13px;font-weight:700;color:#4a5568;text-transform:uppercase;letter-spacing:.7px;margin:20px 0 8px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">V2 Retail <span>RFC</span> Explorer</div>
+  <div class="hdr-right">
+    <a class="hdr-link" href="/RfcDocUpload">&larr; Upload Portal</a>
+    <a class="hdr-link" href="/RfcDeploy/SwaggerUI">Swagger UI</a>
+    <a class="hdr-link" href="/RfcDeploy/OpenApiJson" target="_blank">OpenAPI JSON</a>
+  </div>
+</header>
+
+<div class="page">
+  <div class="stats">
+    <div class="stat"><div class="stat-num">@ViewBag.TotalCount</div><div class="stat-lbl">Total Endpoints</div></div>
+    <div class="stat"><div class="stat-num">@ViewBag.GroupCount</div><div class="stat-lbl">Modules</div></div>
+    <div class="stat"><div class="stat-num">@ViewBag.ParamCount</div><div class="stat-lbl">Total Parameters</div></div>
+    <div class="stat"><div class="stat-num" style="color:#16a34a">Live</div><div class="stat-lbl">IIS Status</div></div>
+  </div>
+  <input class="search-bar" type="text" placeholder="Search endpoints, RFC names, descriptions..." id="searchBox" oninput="filterEps(this.value)">
+  <div id="epList">
+    @{var groups = eps.GroupBy(e => e.Group);}
+    @foreach(var grp in groups) {
+      <div class="group-title">@grp.Key</div>
+      foreach(var ep in grp) {
+        <div class="ep-card" data-search="@ep.Name.ToLower() @ep.Description?.ToLower() @ep.SapRfc?.ToLower()">
+          <div class="ep-head" onclick="this.nextElementSibling.classList.toggle('open')">
+            <span class="tag-post">POST</span>
+            <span class="ep-path">/api/@ep.Name</span>
+            <span class="ep-desc">@ep.Description</span>
+          </div>
+          <div class="ep-body">
+            <div style="font-size:11px;color:#8896ab;margin-bottom:10px">SAP RFC: <b style="color:#1a2035;font-family:Consolas,monospace">@ep.SapRfc</b> &nbsp;&middot;&nbsp; Host: <b style="color:#1a2035">@ep.SapHost</b> &nbsp;&middot;&nbsp; Client: <b style="color:#1a2035">@ep.Client</b></div>
+            <table class="param-table">
+              <thead><tr><th>Parameter</th><th>SAP Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                @if(ep.Parameters != null) {
+                  foreach(var p in ep.Parameters) {
+                    <tr>
+                      <td class="pname">@p.Name@(p.IsTable?"[]":"")</td>
+                      <td><code style="background:#f0f0f0;padding:1px 5px;border-radius:3px;font-size:11px">@p.SapType</code></td>
+                      <td><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:4px;background:@(p.Required?"#f0fdf4":"#f5f6fa");border:1px solid @(p.Required?"#86efac":"#e2e6ef");color:@(p.Required?"#16a34a":"#8896ab")">@(p.Required?"required":"optional")</span></td>
+                      <td>@(p.Description ?? p.Name)</td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+    }
+  </div>
+</div>
+
+<script>
+function filterEps(q) {
+    q = q.toLowerCase();
+    document.querySelectorAll('.ep-card').forEach(function(card) {
+        var s = card.getAttribute('data-search') || '';
+        card.style.display = s.includes(q) ? '' : 'none';
+    });
+}
+</script>
+</body>
+</html>
