@@ -1,0 +1,32 @@
+name: Fix46_911544
+on:
+  push:
+    paths:
+      - '.github/workflows/fix46_911544.yml'
+jobs:
+  run:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write fix script and run on .36
+        shell: cmd
+        run: |
+          echo $pkg = 'D:\V2 Projects\Vendor_SRM_Routing_Application\packages' > C:\fix36.ps1
+          echo $out = 'C:\V2RfcTest\bin' >> C:\fix36.ps1
+          echo Copy-Item "$pkg\Microsoft.AspNet.WebApi.Core.5.3.0\lib\net45\System.Web.Http.dll" $out -Force >> C:\fix36.ps1
+          echo Copy-Item "$pkg\Microsoft.AspNet.WebApi.WebHost.5.3.0\lib\net45\System.Web.Http.WebHost.dll" $out -Force >> C:\fix36.ps1
+          echo Copy-Item "$pkg\Microsoft.AspNet.WebApi.Client.5.3.0\lib\net45\System.Net.Http.Formatting.dll" $out -Force >> C:\fix36.ps1
+          echo Copy-Item "$pkg\Microsoft.Web.Infrastructure.2.0.1\lib\net40\Microsoft.Web.Infrastructure.dll" $out -Force >> C:\fix36.ps1
+          echo Write-Host DLLs_COPIED >> C:\fix36.ps1
+          echo [System.Reflection.AssemblyName]::GetAssemblyName("$out\System.Web.Http.dll").Version >> C:\fix36.ps1
+          echo Import-Module WebAdministration -EA SilentlyContinue >> C:\fix36.ps1
+          echo Restart-WebAppPool V2RfcTestPool -EA SilentlyContinue >> C:\fix36.ps1
+          echo Start-Sleep 15 >> C:\fix36.ps1
+          echo try { $r=Invoke-WebRequest 'http://localhost:9292/api/ZpoDdUpdRfc/Health' -UseBasicParsing -TimeoutSec 10; Write-Host SUCCESS $r.StatusCode $r.Content } catch { Write-Host FAIL $_.Exception.Message } >> C:\fix36.ps1
+
+          echo === Copy script to .36 and run it ===
+          net use \\192.168.151.36\C$ /user:V2DC-ADDVERB\Administrator vrl@55555
+          copy /Y C:\fix36.ps1 \\192.168.151.36\C$\fix36.ps1
+          powershell -NoProfile -Command "& {$cred=New-Object PSCredential('V2DC-ADDVERB\Administrator',(ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force));$s=New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop;Write-Host Connected;Invoke-Command -Session $s -ScriptBlock {& 'C:\fix36.ps1'};Remove-PSSession $s}"
+          echo Done: %ERRORLEVEL%
