@@ -1,31 +1,115 @@
-name: FreshTestSetup
+name: SyncBuildDeploy
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/freshtest.yml'
 jobs:
-  setup:
+  sync-source-to-github:
     runs-on: [self-hosted, Windows, X64, iis]
+    env:
+      V2_PAT: ${{ secrets.V2_GH_PAT }}
     steps:
-      - name: Copy Web.config from VS project and check 500 error
+      - name: Push full local VS project to GitHub source-sync branch
         shell: cmd
         run: |
           set VSPROJ=D:\V2 Projects\Vendor_SRM_Routing_Application
+          set WORKDIR=C:\v2_source_sync
 
-          echo === Copy Web.config from VS project directly (no modification) ===
-          copy /Y "%VSPROJ%\Web.config" C:\V2RfcTest\Web.config
-          echo Copied
+          echo === Setup workspace ===
+          if exist %WORKDIR% rmdir /s /q %WORKDIR%
+          mkdir %WORKDIR%
+          cd /d %WORKDIR%
+          git init
+          git remote add origin https://%V2_PAT%@github.com/akash0631/rfc-api.git
+          git fetch origin master --depth=1
+          git checkout -b source-sync
 
-          echo === Show connection strings in Web.config ===
-          findstr /I "connectionString\|AppServerHost\|Client" C:\V2RfcTest\Web.config | findstr /V "<!--"
+          echo === Copy full VS project (no bin/obj/git) ===
+          robocopy "%VSPROJ%" %WORKDIR% /E /NFL /NDL /XD .git obj .vs /XF *.user *.suo
+          echo Source: %ERRORLEVEL%
+          robocopy "%VSPROJ%\packages" %WORKDIR%\packages /E /NFL /NDL
+          echo Packages: %ERRORLEVEL%
 
-          echo === Recycle pool ===
-          C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
-          timeout /t 15 /nobreak
+          echo === Verify key files ===
+          dir %WORKDIR%\Vendor_SRM_Routing_Application.csproj /B 2>nul
+          dir %WORKDIR%\Controllers\Finance\ZADVANCE*.cs /B 2>nul
+          dir %WORKDIR%\packages /B 2>nul | find /c ""
 
-          echo === Test with customErrors off enabled ===
-          powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:9292/' -UseBasicParsing -TimeoutSec 10;Write-Host 'ROOT:' $r.StatusCode}catch{if($_.Exception.Response){$s=New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream());$b=$s.ReadToEnd();Write-Host 'ERROR:' $b.Substring(0,[Math]::Min(800,$b.Length))}else{Write-Host 'ERR:' $_.Exception.Message}}"
+          echo === Commit and push ===
+          git config user.email "runner@v2retail.com"
+          git config user.name "V2 Runner"
+          git add -A
+          git commit -m "sync: full VS project from .36 — packages included"
+          git push origin source-sync --force
+          echo PUSHED: %ERRORLEVEL%
 
-          echo === Windows event log last error ===
-          powershell -NoProfile -Command "Get-EventLog -LogName Application -EntryType Error -Newest 2 -EA SilentlyContinue | ForEach-Object { Write-Host $_.TimeGenerated $_.Source; Write-Host $_.Message.Substring(0,[Math]::Min(300,$_.Message.Length)) }"
+  build-and-deploy:
+    needs: sync-source-to-github
+    runs-on: [self-hosted, Windows, X64, iis]
+    steps:
+      - name: Checkout source-sync branch
+        uses: actions/checkout@v4
+        with:
+          ref: source-sync
+
+      - name: Stub VS17 targets
+        shell: powershell
+        run: |
+          $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
+          New-Item $d -ItemType Directory -Force | Out-Null
+          $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/><Target Name="Package"/></Project>'
+          [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets", $xml, [System.Text.Encoding]::UTF8)
+          Write-Host "Stubbed"
+
+      - name: Build to C:\V2RfcTest
+        shell: cmd
+        run: |
+          set OUT=C:\V2RfcTest
+          if not exist %OUT%\bin mkdir %OUT%\bin
+          set MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
+          "%MSBUILD%" Vendor_SRM_Routing_Application.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:OutputPath=%OUT%\bin\ /p:VisualStudioVersion=17.0 /nologo /verbosity:minimal
+          echo BUILD: %ERRORLEVEL%
+          if %ERRORLEVEL% NEQ 0 exit /b 1
+          copy /Y Web.config %OUT%\Web.config
+          dir %OUT%\bin\Vendor*.dll /B 2>nul
+          dir %OUT%\bin\*.dll /B 2>nul | find /c ".dll"
+
+      - name: Configure Web.config SAP Dev + recycle + test
+        shell: powershell
+        run: |
+          # Fix SAP host to Dev
+          $lines = Get-Content "C:\V2RfcTest\Web.config"
+          $hostFixed = $false; $clientFixed = $false
+          $out = $lines | ForEach-Object {
+            if (-not $hostFixed -and $_ -match 'key="AppServerHost"' -and $_ -notmatch '<!--') {
+              $_ = $_ -replace '"192\.168\.144\.\d+"','"192.168.144.174"'; $hostFixed = $true
+            }
+            if (-not $clientFixed -and $_ -match 'key="Client"' -and $_ -notmatch '<!--' -and $_ -notmatch 'Validation') {
+              $_ = $_ -replace 'value="\d+"','value="210"'; $clientFixed = $true
+            }
+            $_
+          }
+          $out | Set-Content "C:\V2RfcTest\Web.config" -Encoding UTF8
+          Write-Host "Web.config: SAP 192.168.144.174 / client 210"
+          Get-Content "C:\V2RfcTest\Web.config" | Select-String "AppServerHost|key.*Client" | Where-Object {$_ -notmatch "<!--"} | Select -First 4
+
+          # Ensure site exists
+          Import-Module WebAdministration -EA SilentlyContinue
+          if (-not (Get-Website "V2RfcTest" -EA SilentlyContinue)) {
+            New-WebAppPool "V2RfcTestPool" -EA SilentlyContinue
+            Set-ItemProperty "IIS:\AppPools\V2RfcTestPool" managedRuntimeVersion "v4.0"
+            New-Website -Name "V2RfcTest" -Port 9292 -PhysicalPath "C:\V2RfcTest" -ApplicationPool "V2RfcTestPool"
+          }
+          Restart-WebAppPool "V2RfcTestPool" -EA SilentlyContinue
+          Start-Sleep 15
+
+          $body = '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260301","I_POSTING_DATE_HIGH":"20260317"}'
+          try {
+            $r = Invoke-WebRequest "http://localhost:9292/api/ZAdvancePaymentRfc/Health" -UseBasicParsing -TimeoutSec 10
+            Write-Host "HEALTH: $($r.StatusCode) $($r.Content)"
+          } catch { Write-Host "HEALTH ERR: $($_.Exception.Message)" }
+          try {
+            $r2 = Invoke-WebRequest "http://localhost:9292/api/ZAdvancePaymentRfc/Execute" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
+            Write-Host "=== EXECUTE: $($r2.StatusCode) ==="; Write-Host $r2.Content
+          } catch { Write-Host "EXECUTE ERR: $($_.Exception.Message)" }
