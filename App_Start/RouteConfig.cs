@@ -15,7 +15,7 @@ namespace Vendor_SRM_Routing_Application
                 url: "{controller}/{action}/{id}",
                 defaults: new
                 {
-                    controller = "RfcDocUpload",  // Startup page: RFC Document Upload Portal
+                    controller = "RfcDeploy",   // Startup page: RFC Deploy Wizard
                     action     = "Index",
                     id         = UrlParameter.Optional
                 }
