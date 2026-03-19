@@ -9,39 +9,36 @@ jobs:
     runs-on: [self-hosted, Windows, X64, iis]
     env:
       V2_PAT: ${{ secrets.V2_GH_PAT }}
+      GIT_SSL_NO_VERIFY: "true"
     steps:
       - name: Push full local VS project to GitHub source-sync branch
         shell: cmd
         run: |
           set VSPROJ=D:\V2 Projects\Vendor_SRM_Routing_Application
           set WORKDIR=C:\v2_source_sync
+          set GIT_SSL_NO_VERIFY=true
 
-          echo === Setup workspace ===
           if exist %WORKDIR% rmdir /s /q %WORKDIR%
           mkdir %WORKDIR%
           cd /d %WORKDIR%
-          git init
-          git remote add origin https://%V2_PAT%@github.com/akash0631/rfc-api.git
-          git fetch origin master --depth=1
-          git checkout -b source-sync
+          git -c http.sslVerify=false init
+          git -c http.sslVerify=false remote add origin https://%V2_PAT%@github.com/akash0631/rfc-api.git
+          git -c http.sslVerify=false fetch origin master --depth=1
+          git -c http.sslVerify=false checkout -b source-sync
 
-          echo === Copy full VS project (no bin/obj/git) ===
           robocopy "%VSPROJ%" %WORKDIR% /E /NFL /NDL /XD .git obj .vs /XF *.user *.suo
-          echo Source: %ERRORLEVEL%
           robocopy "%VSPROJ%\packages" %WORKDIR%\packages /E /NFL /NDL
-          echo Packages: %ERRORLEVEL%
 
-          echo === Verify key files ===
           dir %WORKDIR%\Vendor_SRM_Routing_Application.csproj /B 2>nul
           dir %WORKDIR%\Controllers\Finance\ZADVANCE*.cs /B 2>nul
           dir %WORKDIR%\packages /B 2>nul | find /c ""
 
-          echo === Commit and push ===
           git config user.email "runner@v2retail.com"
           git config user.name "V2 Runner"
+          git config http.sslVerify false
           git add -A
           git commit -m "sync: full VS project from .36 — packages included"
-          git push origin source-sync --force
+          git -c http.sslVerify=false push origin source-sync --force
           echo PUSHED: %ERRORLEVEL%
 
   build-and-deploy:
@@ -58,8 +55,7 @@ jobs:
         run: |
           $d = "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WebApplications"
           New-Item $d -ItemType Directory -Force | Out-Null
-          $xml = '<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/><Target Name="Package"/></Project>'
-          [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets", $xml, [System.Text.Encoding]::UTF8)
+          [System.IO.File]::WriteAllText("$d\Microsoft.WebApplication.targets",'<?xml version="1.0" encoding="utf-8"?><Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="WebPublish"/><Target Name="Package"/></Project>',[System.Text.Encoding]::UTF8)
           Write-Host "Stubbed"
 
       - name: Build to C:\V2RfcTest
@@ -75,26 +71,24 @@ jobs:
           dir %OUT%\bin\Vendor*.dll /B 2>nul
           dir %OUT%\bin\*.dll /B 2>nul | find /c ".dll"
 
-      - name: Configure Web.config SAP Dev + recycle + test
+      - name: Configure Web.config + recycle + test
         shell: powershell
         run: |
-          # Fix SAP host to Dev
           $lines = Get-Content "C:\V2RfcTest\Web.config"
-          $hostFixed = $false; $clientFixed = $false
+          $hf = $false; $cf = $false
           $out = $lines | ForEach-Object {
-            if (-not $hostFixed -and $_ -match 'key="AppServerHost"' -and $_ -notmatch '<!--') {
-              $_ = $_ -replace '"192\.168\.144\.\d+"','"192.168.144.174"'; $hostFixed = $true
+            if (-not $hf -and $_ -match 'key="AppServerHost"' -and $_ -notmatch '<!--') {
+              $_ = $_ -replace '"192\.168\.144\.\d+"','"192.168.144.174"'; $hf = $true
             }
-            if (-not $clientFixed -and $_ -match 'key="Client"' -and $_ -notmatch '<!--' -and $_ -notmatch 'Validation') {
-              $_ = $_ -replace 'value="\d+"','value="210"'; $clientFixed = $true
+            if (-not $cf -and $_ -match 'key="Client"' -and $_ -notmatch '<!--' -and $_ -notmatch 'Validation') {
+              $_ = $_ -replace 'value="\d+"','value="210"'; $cf = $true
             }
             $_
           }
           $out | Set-Content "C:\V2RfcTest\Web.config" -Encoding UTF8
-          Write-Host "Web.config: SAP 192.168.144.174 / client 210"
+          Write-Host "SAP Dev 192.168.144.174 / client 210"
           Get-Content "C:\V2RfcTest\Web.config" | Select-String "AppServerHost|key.*Client" | Where-Object {$_ -notmatch "<!--"} | Select -First 4
 
-          # Ensure site exists
           Import-Module WebAdministration -EA SilentlyContinue
           if (-not (Get-Website "V2RfcTest" -EA SilentlyContinue)) {
             New-WebAppPool "V2RfcTestPool" -EA SilentlyContinue
