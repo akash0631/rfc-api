@@ -537,6 +537,8 @@ namespace Vendor_SRM_Routing_Application.Controllers
                     ResponseTables = new List<string> { "ET_HULIST", "ET_ERROR" },
                     FilePath = "Controllers/Vehicle_Loading/ZWM_HU_SELECTION_RFCController.cs"
                 }
+
+                new RfcEndpoint { Name = "ZPO_DD_UPD_RFC", Route = "api/ZPO_DD_UPD_RFC", Group = "Finance", SapRfc = "ZPO_DD_UPD_RFC", Description = "Update Delivery Date on PO in SAP", Parameters = new List<RfcParam> { new RfcParam { Name="IM_DATA", SapType="ZTT_IMP", IsTable=true } }, ResponseTables = new List<string> { "MSG_TYPE", "MESSAGE" }, FilePath = "Controllers/Finance/ZPO_DD_UPD_RFCController.cs" },
             };
         }
     }
