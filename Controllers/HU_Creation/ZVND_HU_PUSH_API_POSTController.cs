@@ -16,7 +16,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     public class ZVND_HU_PUSH_API_POSTController : BaseController
     {
         [HttpPost]
-        public async Task<HttpResponseMessage> Post([FromBody] List<ZVND_HU_PUSH_API_POSTRequest> request1)
+        public async Task<HttpResponseMessage> Post([FromBody] ZVND_HU_PUSH_API_POSTRequest request)
         {
             return await Task.Run(() =>
             {
@@ -34,8 +34,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                         myfun = rfcrep.CreateFunction("ZVND_HU_PUSH_API_POST");
 
                         IRfcStructure E_Data = myfun.GetStructure("EX_DATA");
-                    foreach (var request in request1)
-                    {
+                    //foreach (var request in request1)
+                    //{
                       
                         E_Data.SetValue("HU_NO", request.HU_NO);
                         E_Data.SetValue("PO_NO", request.PO_NO);
@@ -51,7 +51,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                         E_Data.SetValue("STATUS", request.STATUS);
                         E_Data.SetValue("INV_NO", request.INV_NO);
 
-                    }
+                    //}
 
 
 
