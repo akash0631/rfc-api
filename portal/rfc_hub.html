@@ -548,6 +548,21 @@ const RFCS = [
     sample: '{\n  "IM_DATA":[{"EBELN":"5100001680","MATNR":"1110002329002","COST":"500"}]\n}'
   },
   {
+    name: 'ZRFC_CREDITORS_LOVABL',
+    route: '/api/ZRFC_CREDITORS_LOVABL',
+    desc: 'Creditors / Vendors Outstanding Balance',
+    params: [
+      { name:'VENDOR', type:'CHAR10', desc:'Vendor number (e.g. 100001)' },
+      { name:'COMPANY_CODE', type:'CHAR4', desc:'Company Code (e.g. 1100)' },
+      { name:'POSTING_DATE', type:'CHAR8', desc:'Posting Date (YYYYMMDD)' }
+    ],
+    exports: [
+      { name:'LT_DATA', type:'TABLE', desc:'Creditor balance records' },
+      { name:'EX_RETURN', type:'BAPIRET2', desc:'Return message' }
+    ],
+    sample: '{\n  "VENDOR": "100001",\n  "COMPANY_CODE": "1100",\n  "POSTING_DATE": "20260320"\n}'
+  },
+    {
     name: 'ZTEST_RFC',
     route: '/api/ZTEST_RFC/Post',
     desc: 'Test RFC — connectivity check',
