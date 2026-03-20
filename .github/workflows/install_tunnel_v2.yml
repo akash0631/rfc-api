@@ -1,0 +1,80 @@
+name: INSTALL_TUNNEL_V2
+on:
+  push:
+    paths:
+      - '.github/workflows/install_tunnel_v2.yml'
+jobs:
+  install:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Install CF tunnel service
+        shell: powershell
+        run: |
+          $cfPath = "C:\cloudflared\cloudflared.exe"
+          $token = "eyJhIjoiYmFiMDZjOTNlMTdhZTcxY2FlM2MxMWI0Y2M0MDI0MGIiLCJ0IjoiN2U3M2NjNTEtOWIwYi00MDg0LThmN2ItNDRiYzljOGYzMWEzIiwicyI6Im5wZGd0TXIvRWdMcnhkemNNUUR2Q2x5S0NSZUVpbEVBaG9LdTFPTTdYOFI1eEtmRG9pakZmRnhsd0xod1VqK2ZYa2NnTFRhUWprUXJFT2lSU0R2N0JnPT0ifQ=="
+          $tunnelId = "7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3"
+          $tunnelUrl = "https://7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3.cfargotunnel.com"
+          
+          # Kill existing
+          Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep 2
+          
+          # Remove existing service
+          $svc = Get-Service "cloudflared" -ErrorAction SilentlyContinue
+          if ($svc) {
+            Stop-Service "cloudflared" -Force -ErrorAction SilentlyContinue
+            Start-Sleep 2
+            $null = & $cfPath service uninstall 2>&1
+            Start-Sleep 3
+          }
+          
+          Write-Host "=== Installing named tunnel service ==="
+          # Use cmd.exe to suppress stderr-as-error behavior
+          $installResult = cmd /c "`"$cfPath`" service install $token" 2>&1
+          Write-Host "Result: $installResult"
+          Write-Host "Exit: $LASTEXITCODE"
+          
+          Start-Sleep 3
+          
+          # Start service
+          try { Start-Service "cloudflared" -ErrorAction Stop } 
+          catch { Write-Host "Start warning: $_" }
+          Start-Sleep 10
+          
+          $svcStatus = (Get-Service "cloudflared" -ErrorAction SilentlyContinue).Status
+          Write-Host "=== Service status: $svcStatus ==="
+          
+          if ($svcStatus -eq "Running") {
+            Write-Host "✅ cloudflared service is RUNNING"
+            $tunnelUrl | Out-File "C:\cloudflared\tunnel_url.txt" -Force
+          } else {
+            Write-Host "Service not running, trying Start-Service again..."
+            Start-Service "cloudflared" -ErrorAction SilentlyContinue
+            Start-Sleep 5
+            $svcStatus = (Get-Service "cloudflared" -ErrorAction SilentlyContinue).Status
+            Write-Host "Status after retry: $svcStatus"
+          }
+          
+          # TEST SAP via tunnel
+          Write-Host "=== Testing SAP via tunnel ==="
+          Start-Sleep 8
+          try {
+            $r = Invoke-WebRequest "$tunnelUrl/api/ZPO_DD_UPD_RFC/Post" -Method POST `
+              -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' `
+              -ContentType "application/json" -UseBasicParsing -TimeoutSec 25
+            Write-Host "=== SAP RESPONSE: $($r.Content) ==="
+            Write-Host "=== HTTP: $($r.StatusCode) ==="
+          } catch {
+            Write-Host "SAP via tunnel: $_"
+          }
+          
+          # Test directly too
+          Write-Host "=== Testing SAP direct localhost ==="
+          try {
+            $r2 = Invoke-WebRequest "http://localhost:9292/api/ZPO_DD_UPD_RFC/Post" -Method POST `
+              -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' `
+              -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+            Write-Host "=== SAP direct: $($r2.Content) ==="
+          } catch { Write-Host "SAP direct: $_" }
+          
+          Write-Host "=== FINAL TUNNEL URL: $tunnelUrl ==="
