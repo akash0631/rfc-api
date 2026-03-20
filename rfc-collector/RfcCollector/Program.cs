@@ -6,31 +6,34 @@ using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService();
 
-// ── Config from env vars (set in IIS / Azure App Settings) ──────────────────
-var iisHost    = Environment.GetEnvironmentVariable("IIS_HOST")   ?? "192.168.151.36";
-var iisPort    = Environment.GetEnvironmentVariable("IIS_PORT")   ?? "80";
-var sqlServer  = Environment.GetEnvironmentVariable("SQL_SERVER") ?? "192.168.151.46";
+// ── Config from env vars ─────────────────────────────────────────────────────
+var iisHost    = Environment.GetEnvironmentVariable("IIS_HOST")   ?? "sap-api.v2retail.net";
+var iisPort    = Environment.GetEnvironmentVariable("IIS_PORT")   ?? "443";
+var sqlServer  = Environment.GetEnvironmentVariable("SQL_SERVER") ?? "192.168.151.28";
 var sqlUser    = Environment.GetEnvironmentVariable("SQL_USER")   ?? "sa";
 var sqlPass    = Environment.GetEnvironmentVariable("SQL_PASS")   ?? "vrl@55555";
-var sqlDb      = Environment.GetEnvironmentVariable("SQL_DB")     ?? "claudetestv2";
+var sqlDb      = Environment.GetEnvironmentVariable("SQL_DB")     ?? "DataV2";
 var listenPort = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "http://0.0.0.0:9090";
 
-builder.WebHost.UseUrls(listenPort);
+// Build IIS base URL — use https for domain names, http for IPs
+var iisScheme  = iisHost.StartsWith("192.") || iisHost.StartsWith("10.") ? "http" : "https";
+var iisPortStr = (iisScheme == "https" && iisPort == "443") || (iisScheme == "http" && iisPort == "80") ? "" : $":{iisPort}";
+var iisBase    = $"{iisScheme}://{iisHost}{iisPortStr}";
 
+builder.WebHost.UseUrls(listenPort);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c => {
-    c.SwaggerDoc("v1", new() { 
-        Title = "V2 Retail RFC Collector", 
+    c.SwaggerDoc("v1", new() {
+        Title = "V2 Retail RFC Collector",
         Version = "v1",
-        Description = $"SAP RFC → claudetestv2 @ {sqlServer} | Via IIS: {iisHost}:{iisPort}"
+        Description = $"SAP RFC → {sqlDb} @ {sqlServer} | Via: {iisBase}"
     });
 });
 builder.Services.AddHttpClient("iis", c => {
-    c.BaseAddress = new Uri($"http://{iisHost}:{iisPort}");
+    c.BaseAddress = new Uri(iisBase);
     c.Timeout = TimeSpan.FromSeconds(120);
 });
 
-// JSON options: return nulls, handle numbers as strings for SAP
 builder.Services.ConfigureHttpJsonOptions(o => {
     o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     o.SerializerOptions.NumberHandling = JsonNumberHandling.AllowReadingFromString;
@@ -55,33 +58,32 @@ SqlConnection GetConn(string? db = null) {
     return conn;
 }
 
-// ── GET / → health ──────────────────────────────────────────────────────────
+// ── GET / → health ───────────────────────────────────────────────────────────
 app.MapGet("/", () => new {
     status   = "ok",
-    version  = "v1",
-    iis      = $"http://{iisHost}:{iisPort}",
+    version  = "v2",
+    iis      = iisBase,
     sql      = sqlServer,
     database = sqlDb,
     swagger  = "/swagger"
 }).WithName("Health");
 
-// ── GET /tables → list tables in claudetestv2 ───────────────────────────────
-app.MapGet("/tables", () => {
-    using var conn = GetConn();
+// ── GET /tables → list tables ────────────────────────────────────────────────
+app.MapGet("/tables", (string? db) => {
+    using var conn = GetConn(db);
     using var cmd  = new SqlCommand(
-        "SELECT TABLE_NAME, (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_NAME = t.TABLE_NAME) AS col_count FROM INFORMATION_SCHEMA.TABLES t ORDER BY TABLE_NAME", conn);
+        "SELECT TABLE_NAME, (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_NAME = t.TABLE_NAME AND c.TABLE_SCHEMA = t.TABLE_SCHEMA) AS col_count FROM INFORMATION_SCHEMA.TABLES t WHERE TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME", conn);
     using var rdr = cmd.ExecuteReader();
     var tables = new List<object>();
     while (rdr.Read()) tables.Add(new { table = rdr.GetString(0), columns = rdr.GetInt32(1) });
     return tables;
 }).WithName("ListTables");
 
-// ── GET /tables/{name}/data → query a table ─────────────────────────────────
-app.MapGet("/tables/{name}/data", (string name, int top = 100, string? where = null) => {
-    // Basic SQL injection protection
+// ── GET /tables/{name}/data → query a table ──────────────────────────────────
+app.MapGet("/tables/{name}/data", (string name, int top = 100, string? where = null, string? db = null) => {
     if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^[A-Za-z0-9_]+$"))
         return Results.BadRequest(new { error = "Invalid table name" });
-    using var conn = GetConn();
+    using var conn = GetConn(db);
     var sql = $"SELECT TOP {Math.Min(top, 5000)} * FROM dbo.[{name}]";
     if (!string.IsNullOrWhiteSpace(where)) sql += $" WHERE {where}";
     using var cmd = new SqlCommand(sql, conn);
@@ -97,45 +99,38 @@ app.MapGet("/tables/{name}/data", (string name, int top = 100, string? where = n
     return Results.Ok(new { table = name, count = rows.Count, columns = cols, data = rows });
 }).WithName("QueryTable");
 
-// ── POST /fetch → call SAP via .36 IIS + store in SQL ──────────────────────
+// ── POST /fetch → call SAP via sap-api.v2retail.net + store in SQL ───────────
 app.MapPost("/fetch", async (FetchRequest req, IHttpClientFactory httpFactory) => {
-    // Validate
     if (string.IsNullOrWhiteSpace(req.Rfc))
         return Results.BadRequest(new { error = "rfc is required" });
 
     var http = httpFactory.CreateClient("iis");
 
-    // Call .36 IIS RFC endpoint
+    // Route: try /Post first, fall back to /Execute
+    var rfcRoute = req.Route ?? $"api/{req.Rfc}/Post";
     HttpResponseMessage? iisResp;
     try {
         var body = JsonSerializer.Serialize(req.Params ?? new());
-        // Map RFC name → IIS controller route
-    // ZADVANCE_PAYMENT_RFC → split on _ → each word Title Case → ZAdvancePaymentRfc → /api/ZAdvancePaymentRfc/Execute
-    var parts = req.Rfc.Split('_');
-    var pascal = string.Concat(parts.Select(p => p.Length > 0 
-        ? char.ToUpper(p[0]) + (p.Length > 1 ? p.Substring(1).ToLower() : "")
-        : ""));
-    var controllerRoute = $"/api/{pascal}/Execute";
-    iisResp = await http.PostAsync(controllerRoute, new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+        iisResp = await http.PostAsync(rfcRoute, new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+        // If 404 on /Post, try /Execute
+        if (iisResp.StatusCode == System.Net.HttpStatusCode.NotFound && rfcRoute.EndsWith("/Post")) {
+            rfcRoute = rfcRoute.Replace("/Post", "/Execute");
+            iisResp = await http.PostAsync(rfcRoute, new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+        }
     } catch (HttpRequestException ex) {
-        return Results.Problem($"Cannot reach IIS at {iisHost}:{iisPort} — {ex.Message}", statusCode: 503);
+        return Results.Problem($"Cannot reach SAP API at {iisBase} — {ex.Message}", statusCode: 503);
     } catch (TaskCanceledException) {
-        return Results.Problem($"IIS timeout (120s) calling /api/{req.Rfc}", statusCode: 504);
+        return Results.Problem($"SAP API timeout (120s) calling {rfcRoute}", statusCode: 504);
     }
 
     var raw = await iisResp.Content.ReadAsStringAsync();
     if (!iisResp.IsSuccessStatusCode)
-        return Results.Problem($"IIS returned HTTP {(int)iisResp.StatusCode}: {raw[..Math.Min(raw.Length,300)]}", statusCode: (int)iisResp.StatusCode);
+        return Results.Problem($"SAP API returned HTTP {(int)iisResp.StatusCode}: {raw[..Math.Min(raw.Length,300)]}", statusCode: (int)iisResp.StatusCode);
 
     using var doc   = JsonDocument.Parse(raw);
     var root        = doc.RootElement;
-    var sapStatus   = root.TryGetProperty("Status", out var st)  && st.GetBoolean();
-    var sapMessage  = root.TryGetProperty("Message", out var msg) ? msg.GetString() ?? "" : "";
 
-    if (!sapStatus)
-        return Results.BadRequest(new { error = "SAP returned failure", sapMessage, raw = raw[..Math.Min(raw.Length, 500)] });
-
-    // Extract table data — look for Data.{TableName} or Data.IT_FINAL etc.
+    // Extract table data — look for Data.{TableName} arrays
     var allRows = new List<Dictionary<string, object?>>();
     if (root.TryGetProperty("Data", out var data)) {
         foreach (var prop in data.EnumerateObject()) {
@@ -147,44 +142,42 @@ app.MapPost("/fetch", async (FetchRequest req, IHttpClientFactory httpFactory) =
                             row[f.Name] = f.Value.ValueKind == JsonValueKind.Null ? null : f.Value.ToString();
                     if (req.Columns?.Length > 0)
                         row = row.Where(kv => req.Columns.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
-                    // Inject params into every row
                     foreach (var p in req.Params ?? new())
                         row[p.Key] = p.Value;
                     row["FETCHED_AT"] = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
                     allRows.Add(row);
                 }
-                break; // take first table
+                break;
             }
         }
     }
 
-    var rows = allRows.Take(req.MaxRows ?? 5000).ToList();
-    if (rows.Count == 0)
-        return Results.Ok(new { success = true, fetched = 0, stored = 0, sapMessage, note = "SAP returned 0 rows" });
+    var sapStatus  = root.TryGetProperty("Status", out var st) ? (st.ValueKind == JsonValueKind.True ? true : (st.ValueKind == JsonValueKind.False ? false : st.GetString() != "E")) : true;
+    var sapMessage = root.TryGetProperty("Message", out var msg) ? msg.GetString() ?? "" : "";
 
-    // Auto-create table if needed, then insert
+    var rows = allRows.Take(req.MaxRows ?? 50000).ToList();
+    if (rows.Count == 0)
+        return Results.Ok(new { success = true, fetched = 0, stored = 0, sapStatus, sapMessage, raw = raw[..Math.Min(raw.Length, 300)], note = "No table data in SAP response (may be write RFC)" });
+
+    // Auto-create table + insert
     var tableName = req.TargetTable ?? $"ET_{req.Rfc.Replace("_RFC", "")}";
     if (!System.Text.RegularExpressions.Regex.IsMatch(tableName, @"^[A-Za-z0-9_]+$"))
         return Results.BadRequest(new { error = "Invalid target table name" });
 
     int stored = 0;
     var errors = new List<string>();
-
     using var conn = GetConn(req.TargetDb ?? sqlDb);
 
-    // Auto-create table if it doesn't exist
-    var allCols = rows.SelectMany(r => r.Keys).Distinct().ToList();
+    // Auto-create table if missing
+    var allCols    = rows.SelectMany(r => r.Keys).Distinct().ToList();
     var createCols = string.Join(",\n  ", allCols.Select(c => $"[{c}] NVARCHAR(500) NULL"));
-    var createSql  = $@"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='{tableName}')
-CREATE TABLE dbo.[{tableName}] (
-  [ID] INT IDENTITY(1,1) PRIMARY KEY,
-  {createCols}
-)";
-    using (var cmd = new SqlCommand(createSql, conn)) cmd.ExecuteNonQuery();
+    using (var cmd = new SqlCommand($@"IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='{tableName}')
+CREATE TABLE dbo.[{tableName}] ([ID] INT IDENTITY(1,1) PRIMARY KEY, {createCols})", conn))
+        cmd.ExecuteNonQuery();
 
-    // Auto-add any missing columns
+    // Auto-add missing columns
     using (var cmd = new SqlCommand($"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{tableName}'", conn)) {
-        using var rdr   = cmd.ExecuteReader();
+        using var rdr = cmd.ExecuteReader();
         var existingCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         while (rdr.Read()) existingCols.Add(rdr.GetString(0));
         rdr.Close();
@@ -200,31 +193,31 @@ CREATE TABLE dbo.[{tableName}] (
             var cols  = string.Join(",", row.Keys.Select(c => $"[{c}]"));
             var parms = string.Join(",", row.Keys.Select((c, i) => $"@p{i}"));
             using var cmd = new SqlCommand($"INSERT INTO dbo.[{tableName}] ({cols}) VALUES ({parms})", conn);
-            int i2 = 0;
-            foreach (var kv in row) cmd.Parameters.AddWithValue($"@p{i2++}", (object?)kv.Value ?? DBNull.Value);
+            int idx = 0;
+            foreach (var kv in row) cmd.Parameters.AddWithValue($"@p{idx++}", (object?)kv.Value ?? DBNull.Value);
             cmd.ExecuteNonQuery();
             stored++;
         } catch (Exception ex) { errors.Add(ex.Message[..Math.Min(ex.Message.Length, 150)]); }
     }
 
     return Results.Ok(new {
-        success      = true,
-        rfc          = req.Rfc,
-        table        = tableName,
-        fetched      = rows.Count,
+        success   = true,
+        rfc       = req.Rfc,
+        table     = tableName,
+        database  = req.TargetDb ?? sqlDb,
+        fetched   = rows.Count,
         stored,
-        totalSap     = allRows.Count,
-        truncated    = allRows.Count > rows.Count,
+        totalSap  = allRows.Count,
         sapMessage,
-        errors       = errors.Count > 0 ? errors.Take(3).ToArray() : null
+        errors    = errors.Count > 0 ? errors.Take(3).ToArray() : null
     });
 }).WithName("FetchRfc");
 
-// ── POST /sql → run a SELECT/CREATE/ALTER/DROP ──────────────────────────────
+// ── POST /sql → execute SQL on DataV2 ───────────────────────────────────────
 app.MapPost("/sql", (SqlRequest req) => {
     if (string.IsNullOrWhiteSpace(req.Sql)) return Results.BadRequest(new { error = "sql required" });
-    var first = req.Sql.TrimStart().Split(' ')[0].ToUpper();
-    if (!new[]{"SELECT","CREATE","ALTER","DROP","INSERT","IF"}.Contains(first))
+    var first = req.Sql.TrimStart().Split(new[]{' ','\n','\r'},StringSplitOptions.RemoveEmptyEntries)[0].ToUpper();
+    if (!new[]{"SELECT","CREATE","ALTER","DROP","INSERT","UPDATE","IF","EXEC","TRUNCATE"}.Contains(first))
         return Results.BadRequest(new { error = $"'{first}' not permitted" });
     using var conn = GetConn(req.Database);
     using var cmd  = new SqlCommand(req.Sql, conn) { CommandTimeout = 120 };
@@ -245,13 +238,14 @@ app.MapPost("/sql", (SqlRequest req) => {
 
 app.Run();
 
-// ── Request Models ───────────────────────────────────────────────────────────
+// ── Request Models ────────────────────────────────────────────────────────────
 record FetchRequest(
     string Rfc,
     Dictionary<string, string>? Params,
     string[]? Columns,
     int? MaxRows,
     string? TargetTable,
-    string? TargetDb
+    string? TargetDb,
+    string? Route
 );
 record SqlRequest(string Sql, string? Database);
