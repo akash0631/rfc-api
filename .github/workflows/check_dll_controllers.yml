@@ -1,0 +1,33 @@
+name: CHECK_DLL_CONTROLLERS
+on:
+  push:
+    paths:
+      - '.github/workflows/check_dll_controllers.yml'
+jobs:
+  check:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Check DLL for controllers + find source of compiled version
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          
+          # Load the DLL and inspect types
+          $dllPath = "C:\V2RfcTest\bin\Vendor_SRM_Routing_Application.dll"
+          Write-Host "=== Checking DLL for controllers ==="
+          try {
+            $asm = [System.Reflection.Assembly]::LoadFrom($dllPath)
+            $controllers = $asm.GetTypes() | Where-Object { $_.Name -like "*Controller*" } | Select-Object Name | Sort-Object Name
+            Write-Host "Controller count: $($controllers.Count)"
+            $controllers | Format-Table
+            $hasAdvance = $controllers | Where-Object { $_.Name -like "*ADVANCE*" }
+            Write-Host "Has ZADVANCE: $($hasAdvance -ne $null)"
+          } catch { Write-Host "Error loading DLL: $_" }
+          
+          # Find ALL Vendor_SRM DLLs on the system
+          Write-Host "=== All Vendor_SRM DLLs ==="
+          Get-ChildItem "D:\", "C:\" -Recurse -Filter "Vendor_SRM_Routing_Application.dll" -ErrorAction SilentlyContinue | 
+            Select FullName, @{n='KB';e={[Math]::Round($_.Length/1KB,0)}}, LastWriteTime |
+            Sort-Object LastWriteTime -Descending | Format-Table
+          
+          exit 0
