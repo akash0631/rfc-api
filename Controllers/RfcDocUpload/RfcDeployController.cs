@@ -16,6 +16,9 @@ namespace Vendor_SRM_Routing_Application
         public string SapHost { get; set; }
         public string Client { get; set; }
         public string FilePath { get; set; }
+        public string SampleRequest { get; set; }
+        public string SampleResponse { get; set; }
+        public string SampleError { get; set; }
         public List<RfcParam> Parameters { get; set; }
         public List<string> ResponseTables { get; set; }
     }
@@ -65,170 +68,1356 @@ namespace Vendor_SRM_Routing_Application.Controllers
         {
             return new List<RfcEndpoint>
             {
-                // ── Finance ──────────────────────────────────────────────
-                new RfcEndpoint { Name="ZADVANCE_PAYMENT_RFC", Route="api/ZADVANCE_PAYMENT_RFC", Group="Finance", SapRfc="ZADVANCE_PAYMENT_RFC", SapHost="192.168.144.170", Client="600",
-                    Description="Fetch advance payment documents from SAP",
+                new RfcEndpoint {
+                    Name="ZSRM_USER_VALIDATE", Route="api/ZSRM_USER_VALIDATE", Group="Authenticate_oldController.cs", SapRfc="ZSRM_USER_VALIDATE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM USER VALIDATE - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="I_COMPANY_CODE", SapType="BUKRS", IsTable=false},
-                        new RfcParam{Name="I_POSTING_DATE_LOW", SapType="DATUM", IsTable=false},
-                        new RfcParam{Name="I_POSTING_DATE_HIGH", SapType="DATUM", IsTable=false}},
-                    ResponseTables=new List<string>{"ET_ADVANCE_PAYMENT"} },
-
-                // ── DC Routing ────────────────────────────────────────────
-                new RfcEndpoint { Name="ZWM_DC_ROUTING_RFC", Route="api/ZWM_DC_ROUTING_RFC", Group="DC Routing", SapRfc="ZWM_DC_ROUTING_RFC", SapHost="192.168.144.170", Client="600",
-                    Description="DC Routing - fetch routing data for gate entry",
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PASSWORD",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PASSWORD\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_SUBDIV_USER_VALIDATE", Route="api/ZSRM_SUBDIV_USER_VALIDATE", Group="Authenticate_sub_oldController.cs", SapRfc="ZSRM_SUBDIV_USER_VALIDATE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM SUBDIV USER VALIDATE - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_GATE_ENTRY", SapType="string", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZWM_GATE_ENTRY_RFC", Route="api/ZWM_GATE_ENTRY_RFC", Group="DC Routing", SapRfc="ZWM_GATE_ENTRY_RFC", SapHost="192.168.144.170", Client="600",
-                    Description="Gate Entry RFC - validate and process gate entry PO",
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PASSWORD",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PASSWORD\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZDC_ROUTING_SUB_RFC", Route="api/ZDC_ROUTING_SUB_RFC", Group="DC Routing", SapRfc="ZDC_ROUTING_SUB_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZDC ROUTING SUB RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_EBELN", SapType="EBELN", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZWM_HU_STORE_POST_RFC", Route="api/ZWM_HU_STORE_TT_RFC", Group="DC Routing", SapRfc="ZWM_HU_STORE_POST_RFC", SapHost="192.168.144.170", Client="600",
-                    Description="HU Store TT - post HU storage data to SAP",
+                        new RfcParam{Name="IM_DC_ROUTING",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GATE_ENTRY",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_EBELN",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"LT_PROD","LT_DATA"},
+                    SampleRequest=@"{\"IM_DC_ROUTING\": \"VALUE\", \"IM_GATE_ENTRY\": \"GE0001\", \"IM_EBELN\": \"4500001234\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"LT_PROD\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"LT_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_ENTRY_RFC", Route="api/ZWM_GATE_ENTRY_RFC", Group="DC Routing", SapRfc="ZWM_GATE_ENTRY_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE ENTRY RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_EXIDV", SapType="EXIDV", IsTable=false},
-                        new RfcParam{Name="IM_SAPHU", SapType="string", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZDC_ROUTING_SUB_RFC", Route="api/ZDC_ROUTING_SUB_RFC", Group="DC Routing", SapRfc="ZDC_ROUTING_SUB_RFC", SapHost="192.168.144.170", Client="600",
-                    Description="DC Routing Sub RFC - submit full routing details with lot data",
+                        new RfcParam{Name="IM_EBELN",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_EBELN\": \"4500001234\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_HU_STORE_POST_RFC", Route="api/ZWM_HU_STORE_POST_RFC", Group="DC Routing", SapRfc="ZWM_HU_STORE_POST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM HU STORE POST RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_GATE_ENTRY", SapType="string", IsTable=false},
-                        new RfcParam{Name="IM_EBELN", SapType="EBELN", IsTable=false},
-                        new RfcParam{Name="IM_ROUTING_NO", SapType="string", IsTable=false},
-                        new RfcParam{Name="LS_GET_DATA", SapType="structure", IsTable=false},
-                        new RfcParam{Name="LS_OT_DETAILS", SapType="structure", IsTable=false},
-                        new RfcParam{Name="LT_PROD", SapType="table", IsTable=true},
-                        new RfcParam{Name="LS_COMP", SapType="structure", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                // ── FMS Fabric Putway ─────────────────────────────────────
-                new RfcEndpoint { Name="ZFMS_RFC_FABPUTWAYGRC_VALIDATE", Route="api/Validate_GRC", Group="FMS Fabric Putway", SapRfc="ZFMS_RFC_FABPUTWAYGRC_VALIDATE", SapHost="192.168.144.170", Client="600",
-                    Description="FMS - Validate GRC number for fabric putway",
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_EXIDV",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_SAPHU",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"LT_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_EXIDV\": \"VALUE\", \"IM_SAPHU\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"LT_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_DC_ROUTING_RFC", Route="api/ZWM_DC_ROUTING_RFC", Group="DC Routing", SapRfc="ZWM_DC_ROUTING_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM DC ROUTING RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_GRC", SapType="string", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZFMS_RFC_FABPUTWAYGRC_BIN_VALI", Route="api/Validation_BIN", Group="FMS Fabric Putway", SapRfc="ZFMS_RFC_FABPUTWAYGRC_BIN_VALI", SapHost="192.168.144.170", Client="600",
-                    Description="FMS - Validate BIN for fabric putway GRC",
+                        new RfcParam{Name="IM_GATE_ENTRY",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"LT_DATA"},
+                    SampleRequest=@"{\"IM_GATE_ENTRY\": \"GE0001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"LT_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZFMS_RFC_FABPUTWAYGRC_POST", Route="api/ZFMS_RFC_FABPUTWAYGRC_POST", Group="FMS Fabric Putway", SapRfc="ZFMS_RFC_FABPUTWAYGRC_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZFMS RFC FABPUTWAYGRC POST - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_SITE", SapType="WERKS_D", IsTable=false},
-                        new RfcParam{Name="IM_BIN", SapType="LGPLA", IsTable=false},
-                        new RfcParam{Name="IM_LGTYP", SapType="LGTYP", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZFMS_RFC_FABPUTWAYGRC_POST", Route="api/Post_FABPUTWAYGRC", Group="FMS Fabric Putway", SapRfc="ZFMS_RFC_FABPUTWAYGRC_POST", SapHost="192.168.144.170", Client="600",
-                    Description="FMS - Post fabric putway GRC data to SAP",
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GRC",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="ZWM_BIN_SCAN_T",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA","ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_GRC\": \"GRC001\", \"ZWM_BIN_SCAN_T\": \"VALUE\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZFMS_RFC_FABPUTWAYGRC_VALIDATE", Route="api/ZFMS_RFC_FABPUTWAYGRC_VALIDATE", Group="FMS Fabric Putway", SapRfc="ZFMS_RFC_FABPUTWAYGRC_VALIDATE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZFMS RFC FABPUTWAYGRC VALIDATE - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_GRC", SapType="string", IsTable=false},
-                        new RfcParam{Name="ZWM_BIN_SCAN_T", SapType="table", IsTable=true}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                // ── Inbound — PUTWAY ──────────────────────────────────────
-                new RfcEndpoint { Name="ZVND_PUTWAY_BIN_VAL_RFC", Route="api/ZVND_PUTWAY_BIN_VAL_RFC", Group="Inbound", SapRfc="ZVND_PUTWAY_BIN_VAL_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="PUTWAY - Validate BIN for putway inbound process",
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GRC",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA","ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_GRC\": \"GRC001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZFMS_RFC_FABPUTWAYGRC_BIN_VALI", Route="api/ZFMS_RFC_FABPUTWAYGRC_BIN_VALI", Group="FMS Fabric Putway", SapRfc="ZFMS_RFC_FABPUTWAYGRC_BIN_VALI",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZFMS RFC FABPUTWAYGRC BIN VALI - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_PLANT", SapType="WERKS_D", IsTable=false},
-                        new RfcParam{Name="IM_BIN", SapType="LGPLA", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZVND_PUTWAY_PALETTE_VAL_RFC", Route="api/ZVND_PUTWAY_PALETTE_VAL_RFC", Group="Inbound", SapRfc="ZVND_PUTWAY_PALETTE_VAL_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="PUTWAY - Validate Palette for putway inbound process",
+                        new RfcParam{Name="IM_SITE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BIN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_LGTYP",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA","ET_DATA"},
+                    SampleRequest=@"{\"IM_SITE\": \"VALUE\", \"IM_BIN\": \"BIN-A-01\", \"IM_LGTYP\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZADVANCE_PAYMENT_RFC", Route="api/ZADVANCE_PAYMENT_RFC", Group="Finance", SapRfc="ZADVANCE_PAYMENT_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZADVANCE PAYMENT RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_PLANT", SapType="WERKS_D", IsTable=false},
-                        new RfcParam{Name="IM_BIN", SapType="LGPLA", IsTable=false},
-                        new RfcParam{Name="IM_PALL", SapType="ZZPALETTE", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZVND_PUTWAY_SAVE_DATA_RFC", Route="api/ZVND_PUTWAY_SAVE_DATA_RFC", Group="Inbound", SapRfc="ZVND_PUTWAY_SAVE_DATA_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="PUTWAY - Save validated putway data to SAP",
+                        new RfcParam{Name="I_COMPANY_CODE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="I_POSTING_DATE_LOW",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="I_POSTING_DATE_HIGH",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_ADVANCE_PAYMENT"},
+                    SampleRequest=@"{\"I_COMPANY_CODE\": \"1000\", \"I_POSTING_DATE_LOW\": \"20240101\", \"I_POSTING_DATE_HIGH\": \"20240101\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_ADVANCE_PAYMENT\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZFINANCE_DOCUMENT_RFC", Route="api/ZFINANCE_DOCUMENT_RFC", Group="Finance", SapRfc="ZFINANCE_DOCUMENT_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZFINANCE DOCUMENT RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IT_DATA", SapType="table", IsTable=true}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                // ── Inbound — UNLOAD ──────────────────────────────────────
-                new RfcEndpoint { Name="ZVND_UNLOAD_HU_VALIDATE_RFC", Route="api/ZVND_UNLOAD_HU_VALIDATE_RFC", Group="Inbound", SapRfc="ZVND_UNLOAD_HU_VALIDATE_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="UNLOAD - Validate HU for unloading process",
+                        
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZPO_COST_UPD_RFC", Route="api/ZPO_COST_UPD_RFC", Group="Finance", SapRfc="ZPO_COST_UPD_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZPO COST UPD RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_PLANT", SapType="WERKS_D", IsTable=false},
-                        new RfcParam{Name="IM_HU", SapType="ZEXT_HU", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN","ET_DATA"} },
-
-                new RfcEndpoint { Name="ZVND_UNLOAD_PALLATE_VALIDATION", Route="api/ZVND_UNLOAD_PALLATE_VALIDATION", Group="Inbound", SapRfc="ZVND_UNLOAD_PALLATE_VALIDATION", SapHost="192.168.144.174", Client="210",
-                    Description="UNLOAD - Validate Palette for unloading process",
+                        new RfcParam{Name="IM_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZPO_DD_UPD_RFC", Route="api/ZPO_DD_UPD_RFC", Group="Finance", SapRfc="ZPO_DD_UPD_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZPO DD UPD RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_PLANT", SapType="WERKS_D", IsTable=false},
-                        new RfcParam{Name="IM_PALL", SapType="ZZPALETTE", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZVND_UNLOAD_SAVE_RFC", Route="api/ZVND_UNLOAD_SAVE_RFC", Group="Inbound", SapRfc="ZVND_UNLOAD_SAVE_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="UNLOAD - Save unloading data to SAP",
+                        new RfcParam{Name="IM_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZPO_QTY_UPD_RFC", Route="api/ZPO_QTY_UPD_RFC", Group="Finance", SapRfc="ZPO_QTY_UPD_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZPO QTY UPD RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IT_DATA", SapType="table", IsTable=true}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                // ── Inbound — PUT01 ───────────────────────────────────────
-                new RfcEndpoint { Name="ZVND_PUT01_HU_VAL_RFC", Route="api/ZVND_PUT01_HU_VAL_RFC", Group="Inbound", SapRfc="ZVND_PUT01_HU_VAL_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="PUT01 - Validate HU and fetch PO No, INV No, HU QTY",
+                        new RfcParam{Name="IM_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZRFC_CREDITORS_LOVABL", Route="api/ZRFC_CREDITORS_LOVABL", Group="Finance", SapRfc="ZRFC_CREDITORS_LOVABL",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZRFC CREDITORS LOVABL - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_PLANT", SapType="WERKS_D", IsTable=false},
-                        new RfcParam{Name="IM_HU", SapType="ZEXT_HU", IsTable=false}},
-                    ResponseTables=new List<string>{"ET_DATA"} },
-
-                new RfcEndpoint { Name="ZVND_PUT01_SAVE_DATA_RFC", Route="api/ZVND_PUT01_SAVE_DATA_RFC", Group="Inbound", SapRfc="ZVND_PUT01_SAVE_DATA_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="PUT01 - Save validated HU data to SAP",
+                        new RfcParam{Name="COMPANY_CODE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="VENDOR",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="POSTING_DATE",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"LT_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"COMPANY_CODE\": \"1000\", \"VENDOR\": \"VALUE\", \"POSTING_DATE\": \"20240101\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"LT_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSALES_MOP_RFC", Route="api/ZSALES_MOP_RFC", Group="Finance", SapRfc="ZSALES_MOP_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSALES MOP RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IT_DATA", SapType="ZTT_PUT01_SAVE", IsTable=true}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                // ── Inbound — GATELOT2 ────────────────────────────────────
-                new RfcEndpoint { Name="ZVND_GATELOT2_PICKLIST_VAL_RFC", Route="api/ZVND_GATELOT2_PICKLIST_VAL_RFC", Group="Inbound", SapRfc="ZVND_GATELOT2_PICKLIST_VAL_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="GATELOT2 - Validate Picklist No, fetch PO No and INV No",
+                        new RfcParam{Name="IM_DATE_LOW",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DATE_HIGH",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_DATE_LOW\": \"20240101\", \"IM_DATE_HIGH\": \"20240101\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZTEST_RFC", Route="api/ZTEST_RFC", Group="Finance", SapRfc="ZTEST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZTEST RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_PLANT", SapType="WERKS_D", IsTable=false}},
-                    ResponseTables=new List<string>{"ET_DATA"} },
-
-                new RfcEndpoint { Name="ZVND_GATELOT2_BIN_VAL_RFC", Route="api/ZVND_GATELOT2_BIN_VAL_RFC", Group="Inbound", SapRfc="ZVND_GATELOT2_BIN_VAL_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="GATELOT2 - Validate BIN location for given Picklist",
+                        new RfcParam{Name="I_COMPANY_CODE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="I_DATE",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_RESULT"},
+                    SampleRequest=@"{\"I_COMPANY_CODE\": \"1000\", \"I_DATE\": \"20240101\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_RESULT\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_PALLATE1_N", Route="api/ZWM_GATE_PALLATE1_N", Group="Gate Entry LOT Putway", SapRfc="ZWM_GATE_PALLATE1_N",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE PALLATE1 N - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_PLANT", SapType="WERKS_D", IsTable=false},
-                        new RfcParam{Name="IM_PICKLIST", SapType="ZPICKLIST_NO", IsTable=false},
-                        new RfcParam{Name="IM_BIN", SapType="LGPLA", IsTable=false}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
-
-                new RfcEndpoint { Name="ZVND_GATELOT2_PALETTE_VAL_RFC", Route="api/ZVND_GATELOT2_PALETTE_VAL_RFC", Group="Inbound", SapRfc="ZVND_GATELOT2_PALETTE_VAL_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="GATELOT2 - Validate Palette, returns BIN, Pallet and BOX data",
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_INV",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALL",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_PO\": \"VALUE\", \"IM_INV\": \"VALUE\", \"IM_PALL\": \"PAL00001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_VALIDATION1_N", Route="api/ZWM_GATE_VALIDATION1_N", Group="Gate Entry LOT Putway", SapRfc="ZWM_GATE_VALIDATION1_N",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE VALIDATION1 N - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IM_PLANT", SapType="WERKS_D", IsTable=false},
-                        new RfcParam{Name="IM_PICKLIST", SapType="ZPICKLIST_NO", IsTable=false},
-                        new RfcParam{Name="IM_BIN", SapType="LGPLA", IsTable=false},
-                        new RfcParam{Name="IM_PALL", SapType="ZZPALETTE", IsTable=false}},
-                    ResponseTables=new List<string>{"ET_BIN","ET_PALL","ET_BOX"} },
-
-                new RfcEndpoint { Name="ZVND_GATELOT2_SAVE_DATA_RFC", Route="api/ZVND_GATELOT2_SAVE_DATA_RFC", Group="Inbound", SapRfc="ZVND_GATELOT2_SAVE_DATA_RFC", SapHost="192.168.144.174", Client="210",
-                    Description="GATELOT2 - Save validated Palette/BIN/HU data to SAP",
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_PO\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_PUTWAY_BIN_VAL_RFC", Route="api/ZVND_PUTWAY_BIN_VAL_RFC", Group="Gate Entry LOT Putway", SapRfc="ZVND_PUTWAY_BIN_VAL_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND PUTWAY BIN VAL RFC - SAP RFC",
                     Parameters=new List<RfcParam>{
-                        new RfcParam{Name="IM_USER", SapType="WWWOBJID", IsTable=false},
-                        new RfcParam{Name="IT_DATA", SapType="ZTT_GATELOT2_SAVE", IsTable=true}},
-                    ResponseTables=new List<string>{"EX_RETURN"} },
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BIN",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_BIN\": \"BIN-A-01\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_PUTWAY_PALETTE_VAL_RFC", Route="api/ZVND_PUTWAY_PALETTE_VAL_RFC", Group="Gate Entry LOT Putway", SapRfc="ZVND_PUTWAY_PALETTE_VAL_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND PUTWAY PALETTE VAL RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BIN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALL",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_BIN\": \"BIN-A-01\", \"IM_PALL\": \"PAL00001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_PUTWAY_SAVE_DATA_RFC", Route="api/ZVND_PUTWAY_SAVE_DATA_RFC", Group="Gate Entry LOT Putway", SapRfc="ZVND_PUTWAY_SAVE_DATA_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND PUTWAY SAVE DATA RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_BIN_VALIDATION3_N", Route="api/ZWM_GATE_BIN_VALIDATION3_N", Group="Gate Entry LOT Putway", SapRfc="ZWM_GATE_BIN_VALIDATION3_N",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE BIN VALIDATION3 N - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BIN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALL",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_BIN\": \"BIN-A-01\", \"IM_PALL\": \"PAL00001\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_BIN_VALIDATION4_N", Route="api/ZWM_GATE_BIN_VALIDATION4_N", Group="Gate Entry LOT Putway", SapRfc="ZWM_GATE_BIN_VALIDATION4_N",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE BIN VALIDATION4 N - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BIN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GET",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_BIN\": \"BIN-A-01\", \"IM_GET\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_BOX3N", Route="api/ZWM_GATE_BOX3N", Group="Gate Entry LOT Putway", SapRfc="ZWM_GATE_BOX3N",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE BOX3N - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALL",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BOX",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WEIGHT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_GATE\": \"VALUE\", \"IM_PALL\": \"PAL00001\", \"IM_BOX\": \"VALUE\", \"IM_WEIGHT\": \"VALUE\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_PALLATE_VALIDATE3_N", Route="api/ZWM_GATE_PALLATE_VALIDATE3_N", Group="Gate Entry LOT Putway", SapRfc="ZWM_GATE_PALLATE_VALIDATE3_N",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE PALLATE VALIDATE3 N - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALL",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_PALL\": \"PAL00001\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_PALLATE_VALIDATE4_N", Route="api/ZWM_GATE_PALLATE_VALIDATE4_N", Group="Gate Entry LOT Putway", SapRfc="ZWM_GATE_PALLATE_VALIDATE4_N",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE PALLATE VALIDATE4 N - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BIN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GET",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALETTE",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_BIN\": \"BIN-A-01\", \"IM_GET\": \"VALUE\", \"IM_PALETTE\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GATE_SAVE3_N", Route="api/ZWM_GATE_SAVE3_N", Group="Gate Entry LOT Putway", SapRfc="ZWM_GATE_SAVE3_N",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GATE SAVE3 N - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GATE",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_GATE\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GET_GATE_ENTRY_DATA4_RFC", Route="api/ZWM_GET_GATE_ENTRY_DATA4_RFC", Group="Gate Entry LOT Putway", SapRfc="ZWM_GET_GATE_ENTRY_DATA4_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GET GATE ENTRY DATA4 RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GET",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_GET\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GET_GATE_ENTRY_DATA_RFC", Route="api/ZWM_GET_GATE_ENTRY_DATA_RFC", Group="Gate Entry LOT Putway", SapRfc="ZWM_GET_GATE_ENTRY_DATA_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GET GATE ENTRY DATA RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_GATE\": \"VALUE\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GET_GATE_ENTRY_LIST4_RFC", Route="api/ZWM_GET_GATE_ENTRY_LIST4_RFC", Group="Gate Entry LOT Putway", SapRfc="ZWM_GET_GATE_ENTRY_LIST4_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GET GATE ENTRY LIST4 RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GET_GATE_ENTRY_LIST_RFC", Route="api/ZWM_GET_GATE_ENTRY_LIST_RFC", Group="Gate Entry LOT Putway", SapRfc="ZWM_GET_GATE_ENTRY_LIST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GET GATE ENTRY LIST RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DOCNO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_DOCNO\": \"100001\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_GET_GATE_ENTRY_PALLATE_RFC", Route="api/ZWM_GET_GATE_ENTRY_PALLATE_RFC", Group="Gate Entry LOT Putway", SapRfc="ZWM_GET_GATE_ENTRY_PALLATE_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM GET GATE ENTRY PALLATE RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALL",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_GATE\": \"VALUE\", \"IM_PALL\": \"PAL00001\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZESIC_MASTER_POST_RFC", Route="api/ZESIC_MASTER_POST_RFC", Group="HRMS", SapRfc="ZESIC_MASTER_POST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZESIC MASTER POST RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_ST_CD",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_STATUS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_ST_ESIC_CD",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_ST_ESIC_CD_REF",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_ST_CD\": \"VALUE\", \"IM_STATUS\": \"VALUE\", \"IM_ST_ESIC_CD\": \"VALUE\", \"IM_ST_ESIC_CD_REF\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZHR_LEAVE_POLICY_RFC", Route="api/ZHR_LEAVE_POLICY_RFC", Group="HRMS", SapRfc="ZHR_LEAVE_POLICY_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZHR LEAVE POLICY RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="PPT_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="RTNO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"PPT_NO\": \"100001\", \"RTNO\": \"100001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZLWF_MASTER_POST_RFC", Route="api/ZLWF_MASTER_POST_RFC", Group="HRMS", SapRfc="ZLWF_MASTER_POST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZLWF MASTER POST RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZPF_MASTER_POST_RFC", Route="api/ZPF_MASTER_POST_RFC", Group="HRMS", SapRfc="ZPF_MASTER_POST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZPF MASTER POST RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_ST_CD",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_MIN_WAG",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_STATUS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_ST_PF_CD",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_ST_PF_CD_REF",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_ST_CD\": \"VALUE\", \"IM_MIN_WAG\": \"VALUE\", \"IM_STATUS\": \"VALUE\", \"IM_ST_PF_CD\": \"VALUE\", \"IM_ST_PF_CD_REF\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZPT_MASTER_POST_RFC", Route="api/ZPT_MASTER_POST_RFC", Group="HRMS", SapRfc="ZPT_MASTER_POST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZPT MASTER POST RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_HU_PUSH_API_POST", Route="api/ZVND_HU_PUSH_API_POST", Group="HU Creation", SapRfc="ZVND_HU_PUSH_API_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND HU PUSH API POST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_HU_CHECK_RFC", Route="api/ZVND_HU_CHECK_RFC", Group="HU Creation", SapRfc="ZVND_HU_CHECK_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND HU CHECK RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_PO_DETAIL_FM", Route="api/ZSRM_PO_DETAIL_FM", Group="HU Creation", SapRfc="ZSRM_PO_DETAIL_FM",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM PO DETAIL FM - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="PO_NUM",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="VENDOR_CODE",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"PO_NUM\": \"100001\", \"VENDOR_CODE\": \"1000\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_HU_VALIDATE_RFC", Route="api/ZVND_HU_VALIDATE_RFC", Group="HU Creation", SapRfc="ZVND_HU_VALIDATE_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND HU VALIDATE RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HU_NUMBER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_STORES","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_HU_NUMBER\": \"100001\", \"IM_PO\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_STORES\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_VEND_OPEN_PO", Route="api/ZWM_VEND_OPEN_PO", Group="HU Creation", SapRfc="ZWM_VEND_OPEN_PO",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM VEND OPEN PO - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_LIFNR",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_LIFNR\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_HU_STORE_RFC", Route="api/ZWM_HU_STORE_RFC", Group="HU Print", SapRfc="ZWM_HU_STORE_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM HU STORE RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_HU",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_EXIDV",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="EX_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_HU\": \"HU0001234\", \"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_EXIDV\": \"VALUE\", \"EX_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_ACTUAL_HU_SAVE", Route="api/ZWM_ACTUAL_HU_SAVE", Group="HU Print", SapRfc="ZWM_ACTUAL_HU_SAVE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM ACTUAL HU SAVE - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_EXIDV",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_SAP_HU",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_EXIDV\": \"VALUE\", \"IM_SAP_HU\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_SAVE_HU", Route="api/ZWM_SAVE_HU", Group="HU Scan", SapRfc="ZWM_SAVE_HU",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM SAVE HU - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HU",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_ARTICLES",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_HU\": \"HU0001234\", \"IM_ARTICLES\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_SCAN_HU", Route="api/ZWM_SCAN_HU", Group="HU Scan", SapRfc="ZWM_SCAN_HU",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM SCAN HU - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_HU",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_ATICLES","ET_EAN"},
+                    SampleRequest=@"{\"IM_HU\": \"HU0001234\", \"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_ATICLES\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_GATELOT2_BIN_VAL_RFC", Route="api/ZVND_GATELOT2_BIN_VAL_RFC", Group="Inbound", SapRfc="ZVND_GATELOT2_BIN_VAL_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND GATELOT2 BIN VAL RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PICKLIST",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BIN",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_PICKLIST\": \"PL0001\", \"IM_BIN\": \"BIN-A-01\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_GATELOT2_PALETTE_VAL_RFC", Route="api/ZVND_GATELOT2_PALETTE_VAL_RFC", Group="Inbound", SapRfc="ZVND_GATELOT2_PALETTE_VAL_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND GATELOT2 PALETTE VAL RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PICKLIST",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BIN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALL",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_BOX"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_PICKLIST\": \"PL0001\", \"IM_BIN\": \"BIN-A-01\", \"IM_PALL\": \"PAL00001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_BOX\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_GATELOT2_PICKLIST_VAL_RFC", Route="api/ZVND_GATELOT2_PICKLIST_VAL_RFC", Group="Inbound", SapRfc="ZVND_GATELOT2_PICKLIST_VAL_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND GATELOT2 PICKLIST VAL RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_GATELOT2_SAVE_DATA_RFC", Route="api/ZVND_GATELOT2_SAVE_DATA_RFC", Group="Inbound", SapRfc="ZVND_GATELOT2_SAVE_DATA_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND GATELOT2 SAVE DATA RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_PUT01_HU_VAL_RFC", Route="api/ZVND_PUT01_HU_VAL_RFC", Group="Inbound", SapRfc="ZVND_PUT01_HU_VAL_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND PUT01 HU VAL RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HU",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_HU\": \"HU0001234\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_PUT01_SAVE_DATA_RFC", Route="api/ZVND_PUT01_SAVE_DATA_RFC", Group="Inbound", SapRfc="ZVND_PUT01_SAVE_DATA_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND PUT01 SAVE DATA RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_UNLOAD_HU_VALIDATE_RFC", Route="api/ZVND_UNLOAD_HU_VALIDATE_RFC", Group="Inbound", SapRfc="ZVND_UNLOAD_HU_VALIDATE_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND UNLOAD HU VALIDATE RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HU",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_HU\": \"HU0001234\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_UNLOAD_PALLATE_VALIDATION", Route="api/ZVND_UNLOAD_PALLATE_VALIDATION", Group="Inbound", SapRfc="ZVND_UNLOAD_PALLATE_VALIDATION",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND UNLOAD PALLATE VALIDATION - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HU",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PALL",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_HU\": \"HU0001234\", \"IM_PALL\": \"PAL00001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZVND_UNLOAD_SAVE_RFC", Route="api/ZVND_UNLOAD_SAVE_RFC", Group="Inbound", SapRfc="ZVND_UNLOAD_SAVE_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZVND UNLOAD SAVE RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PARMS",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PARMS\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_NSO_CONF_POST", Route="api/ZSRM_NSO_CONF_POST", Group="NSO", SapRfc="ZSRM_NSO_CONF_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM NSO CONF POST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_CSTATUS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_SRNO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BUDGTE_ST_DATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_BUDGTE_END_DATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_ACT_START_DATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_ACT_END_DATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_START_AT_TIME",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_END_AT_TIME",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_REMARKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_REMARKS1",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_REMARKS2",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_ROUTING_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PROCESS_CONFIRM",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HYPERLINK",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_CSTATUS\": \"VALUE\", \"IM_SRNO\": \"100001\", \"IM_BUDGTE_ST_DATE\": \"20240101\", \"IM_BUDGTE_END_DATE\": \"20240101\", \"IM_ACT_START_DATE\": \"20240101\", \"IM_ACT_END_DATE\": \"20240101\", \"IM_START_AT_TIME\": \"VALUE\", \"IM_END_AT_TIME\": \"VALUE\", \"IM_REMARKS\": \"VALUE\", \"IM_REMARKS1\": \"VALUE\", \"IM_REMARKS2\": \"VALUE\", \"IM_ROUTING_NO\": \"100001\", \"IM_PROCESS_CONFIRM\": \"VALUE\", \"IM_HYPERLINK\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_NSO_CONF_ROUTING", Route="api/ZSRM_NSO_CONF_ROUTING", Group="NSO", SapRfc="ZSRM_NSO_CONF_ROUTING",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM NSO CONF ROUTING - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_SITE_CODE",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_SITE_CODE\": \"1000\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZRFC_ACC_DOC_POST", Route="api/ZRFC_ACC_DOC_POST", Group="NSO", SapRfc="ZRFC_ACC_DOC_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZRFC ACC DOC POST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_DC_ROUTING",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GATE_ENTRY",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"LT_ACCOUNTGL","LT_CURRENCYAMOUNT","LT_PAYBLE","LT_DATA"},
+                    SampleRequest=@"{\"IM_DC_ROUTING\": \"VALUE\", \"IM_GATE_ENTRY\": \"GE0001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"LT_ACCOUNTGL\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"LT_CURRENCYAMOUNT\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"LT_PAYBLE\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"LT_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZNSO_RFC_SITELIST", Route="api/ZNSO_RFC_SITELIST", Group="NSO", SapRfc="ZNSO_RFC_SITELIST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZNSO RFC SITELIST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_SITE_CODE",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_SITE_CODE\": \"1000\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZRFC_GL_CODE", Route="api/ZRFC_GL_CODE", Group="NSO", SapRfc="ZRFC_GL_CODE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZRFC GL CODE - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_EBELN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="GT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_EBELN\": \"4500001234\", \"GT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_USER_AUTHORITY_CHECK", Route="api/ZWM_USER_AUTHORITY_CHECK", Group="Paperless Picklist", SapRfc="ZWM_USER_AUTHORITY_CHECK",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM USER AUTHORITY CHECK - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USERID",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PASSWORD",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USERID\": \"VALUE\", \"IM_PASSWORD\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_RFC_GET_PICKLIST_DATA", Route="api/ZWM_RFC_GET_PICKLIST_DATA", Group="Paperless Picklist", SapRfc="ZWM_RFC_GET_PICKLIST_DATA",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM RFC GET PICKLIST DATA - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PICNR",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_PICNR\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_RFC_GET_PICKLIST", Route="api/ZWM_RFC_GET_PICKLIST", Group="Paperless Picklist", SapRfc="ZWM_RFC_GET_PICKLIST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM RFC GET PICKLIST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DATUM",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_DATUM\": \"VALUE\", \"IM_WERKS\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_RFC_PICKLIST_SCAN_POST", Route="api/ZWM_RFC_PICKLIST_SCAN_POST", Group="Paperless Picklist", SapRfc="ZWM_RFC_PICKLIST_SCAN_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM RFC PICKLIST SCAN POST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_WERKS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PICNR",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_WERKS\": \"VALUE\", \"IM_PICNR\": \"VALUE\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZEAN_ART_DETAILS", Route="api/ZEAN_ART_DETAILS", Group="Sampling", SapRfc="ZEAN_ART_DETAILS",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZEAN ART DETAILS - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="LV_ART",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"LV_ART\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZARTICLE_YES_NO_POST", Route="api/ZARTICLE_YES_NO_POST", Group="Sampling", SapRfc="ZARTICLE_YES_NO_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZARTICLE YES NO POST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="ID",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="ARTICLE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="CREATION_DT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="CREATION_TM",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="STATUS",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="REMARKS",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"ID\": \"VALUE\", \"ARTICLE\": \"VALUE\", \"CREATION_DT\": \"VALUE\", \"CREATION_TM\": \"VALUE\", \"STATUS\": \"VALUE\", \"REMARKS\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZQCDONE_RFC", Route="api/ZQCDONE_RFC", Group="Sampling", SapRfc="ZQCDONE_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZQCDONE RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="LV_ART",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"LV_ART\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_STORE_SITE_CONF_SAVE", Route="api/ZWM_STORE_SITE_CONF_SAVE", Group="Site Creation", SapRfc="ZWM_STORE_SITE_CONF_SAVE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM STORE SITE CONF SAVE - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSITE_RFC_CREATE", Route="api/ZSITE_RFC_CREATE", Group="Site Creation", SapRfc="ZSITE_RFC_CREATE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSITE RFC CREATE - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_STORE_SITE_CONF", Route="api/ZWM_STORE_SITE_CONF", Group="Site Creation", SapRfc="ZWM_STORE_SITE_CONF",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM STORE SITE CONF - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_SITE_CODE",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_SITE_CODE\": \"1000\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_HUBWISE_STORE_LIST_RFC", Route="api/ZWM_HUBWISE_STORE_LIST_RFC", Group="Vehicle Loading", SapRfc="ZWM_HUBWISE_STORE_LIST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM HUBWISE STORE LIST RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HUB",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_STORES","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_HUB\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_STORES\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_HU_SELECTION_RFC", Route="api/ZWM_HU_SELECTION_RFC", Group="Vehicle Loading", SapRfc="ZWM_HU_SELECTION_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM HU SELECTION RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_VEH",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_TRANSPORT_CODE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_SEAL_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DRIVER_NAME",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DRIVER_MOB",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HUB_FLAG",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_STORE_FLAG",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HUB",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GRP",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="STORE_LIST",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_HULIST","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_VEH\": \"VALUE\", \"IM_TRANSPORT_CODE\": \"1000\", \"IM_SEAL_NO\": \"100001\", \"IM_DRIVER_NAME\": \"VALUE\", \"IM_DRIVER_MOB\": \"VALUE\", \"IM_HUB_FLAG\": \"VALUE\", \"IM_STORE_FLAG\": \"VALUE\", \"IM_HUB\": \"VALUE\", \"IM_GRP\": \"VALUE\", \"STORE_LIST\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_HULIST\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_SAVE_SCANNEDHULIST_RFC", Route="api/ZWM_SAVE_SCANNEDHULIST_RFC", Group="Vehicle Loading", SapRfc="ZWM_SAVE_SCANNEDHULIST_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM SAVE SCANNEDHULIST RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_VEHICLE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="HU_LIST",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_REMOVE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="HU_LIST",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_HULIST","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_VEHICLE\": \"VALUE\", \"HU_LIST\": \"VALUE\", \"IM_REMOVE\": \"VALUE\", \"HU_LIST\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_HULIST\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZWM_TRANSPORTER_DETAILS_RFC", Route="api/ZWM_TRANSPORTER_DETAILS_RFC", Group="Vehicle Loading", SapRfc="ZWM_TRANSPORTER_DETAILS_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZWM TRANSPORTER DETAILS RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PLANT",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HUB",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_TRANSPORT_DET","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PLANT\": \"1000\", \"IM_HUB\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_TRANSPORT_DET\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_ASN_APPROVED_DATA_POST", Route="api/ZSRM_ASN_APPROVED_DATA_POST", Group="Vendor SRM Routing", SapRfc="ZSRM_ASN_APPROVED_DATA_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM ASN APPROVED DATA POST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_GET_ROUTING_LIST", Route="api/ZSRM_GET_ROUTING_LIST", Group="Vendor SRM Routing", SapRfc="ZSRM_GET_ROUTING_LIST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM GET ROUTING LIST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_PO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DESIGN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_SATNR",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_PO\": \"VALUE\", \"IM_DESIGN\": \"VALUE\", \"IM_SATNR\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZQC_PO_DATA_NEW", Route="api/ZQC_PO_DATA_NEW", Group="Vendor SRM Routing", SapRfc="ZQC_PO_DATA_NEW",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZQC PO DATA NEW - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="LV_ART",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_LIFNR",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"LV_ART\": \"VALUE\", \"IM_LIFNR\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_GATE_ENTRY_DETAILS", Route="api/ZSRM_GATE_ENTRY_DETAILS", Group="Vendor SRM Routing", SapRfc="ZSRM_GATE_ENTRY_DETAILS",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM GATE ENTRY DETAILS - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_EBELN",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_EBELN\": \"4500001234\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZPUR_TREND_F4", Route="api/ZPUR_TREND_F4", Group="Vendor SRM Routing", SapRfc="ZPUR_TREND_F4",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZPUR TREND F4 - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="I_GJAHR",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="I_MATCAT",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_CAT2"},
+                    SampleRequest=@"{\"I_GJAHR\": \"VALUE\", \"I_MATCAT\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_CAT2\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_RFC_PO_UPDATE_DELV_DATE", Route="api/ZSRM_RFC_PO_UPDATE_DELV_DATE", Group="Vendor SRM Routing", SapRfc="ZSRM_RFC_PO_UPDATE_DELV_DATE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM RFC PO UPDATE DELV DATE - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_PO_NUMBER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DELIVERY_DATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_PO_NUMBER\": \"100001\", \"IM_DELIVERY_DATE\": \"20240101\", \"IT_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_PO_DETAIL", Route="api/ZSRM_PO_DETAIL", Group="Vendor SRM Routing", SapRfc="ZSRM_PO_DETAIL",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM PO DETAIL - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PO\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_RTL_FAB_PO", Route="api/ZSRM_RTL_FAB_PO", Group="Vendor SRM Routing", SapRfc="ZSRM_RTL_FAB_PO",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM RTL FAB PO - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_EBELN",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_EBELN\": \"4500001234\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZRFC_PPT_GET_ROUT", Route="api/ZRFC_PPT_GET_ROUT", Group="Vendor SRM Routing", SapRfc="ZRFC_PPT_GET_ROUT",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZRFC PPT GET ROUT - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_PO_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DESIGN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_SATNR",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PPT_NO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_PO_NO\": \"100001\", \"IM_DESIGN\": \"VALUE\", \"IM_SATNR\": \"VALUE\", \"IM_PPT_NO\": \"100001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZRFC_PPT_GET", Route="api/ZRFC_PPT_GET", Group="Vendor SRM Routing", SapRfc="ZRFC_PPT_GET",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZRFC PPT GET - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_PO_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DESIGN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_SATNR",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_PO_NO\": \"100001\", \"IM_DESIGN\": \"VALUE\", \"IM_SATNR\": \"VALUE\", \"IM_PO\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZRFC_PPT_CONF_POST", Route="api/ZRFC_PPT_CONF_POST", Group="Vendor SRM Routing", SapRfc="ZRFC_PPT_CONF_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZRFC PPT CONF POST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="PPT_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="RTNO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"PPT_NO\": \"100001\", \"RTNO\": \"100001\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZPUR_TREND_DATA", Route="api/ZPUR_TREND_DATA", Group="Vendor SRM Routing", SapRfc="ZPUR_TREND_DATA",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZPUR TREND DATA - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="I_GJAHR",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="I_MATCAT",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DAT"},
+                    SampleRequest=@"{\"I_GJAHR\": \"VALUE\", \"I_MATCAT\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DAT\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_VEND_PAYMENT_INFO", Route="api/ZSRM_VEND_PAYMENT_INFO", Group="Vendor SRM Routing", SapRfc="ZSRM_VEND_PAYMENT_INFO",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM VEND PAYMENT INFO - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_LIFNR",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_LIFNR\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_ROUTING_POST_NEW", Route="api/ZSRM_ROUTING_POST_NEW", Group="Vendor SRM Routing", SapRfc="ZSRM_ROUTING_POST_NEW",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM ROUTING POST NEW - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_PO_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_GEN_ART",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_RTNO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_HHTUSER",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_PO_NO\": \"100001\", \"IM_GEN_ART\": \"VALUE\", \"IM_RTNO\": \"100001\", \"IM_HHTUSER\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_PO_RFC_GET_ROUTING", Route="api/ZSRM_PO_RFC_GET_ROUTING", Group="Vendor SRM Routing", SapRfc="ZSRM_PO_RFC_GET_ROUTING",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM PO RFC GET ROUTING - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_PO_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DESIGN",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_SATNR",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_GROUT_STAT","ET_PRD_ROUTING","ET_BR","ET_ACCST","ET_PPSR"},
+                    SampleRequest=@"{\"IM_PO_NO\": \"100001\", \"IM_DESIGN\": \"VALUE\", \"IM_SATNR\": \"VALUE\", \"IM_PO\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_GROUT_STAT\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_PRD_ROUTING\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_BR\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_ACCST\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_PPSR\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_ROUTING_POST", Route="api/ZSRM_ROUTING_POST", Group="Vendor SRM Routing", SapRfc="ZSRM_ROUTING_POST",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM ROUTING POST - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_USER",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PO",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{},
+                    SampleRequest=@"{\"IM_USER\": \"USER01\", \"IM_PO\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"RESULT\":\"Processed\"}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZME2M_LIVE", Route="api/ZME2M_LIVE", Group="Vendor SRM Routing", SapRfc="ZME2M_LIVE",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZME2M LIVE - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_DATE_FROM",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DATE_TO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_COMP",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IT_WERKS",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_ARTICLE_COLOR","ET_PUR_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_DATE_FROM\": \"20240101\", \"IM_DATE_TO\": \"20240101\", \"IM_COMP\": \"VALUE\", \"IT_WERKS\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_ARTICLE_COLOR\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_PUR_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZMM_ART_CREATION_RFC", Route="api/ZMM_ART_CREATION_RFC", Group="Vendor SRM Routing", SapRfc="ZMM_ART_CREATION_RFC",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZMM ART CREATION RFC - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_DATA",SapType="table",IsTable=true,Required=true},
+                        new RfcParam{Name="EX_DATA",SapType="table",IsTable=true,Required=true}
+                    },
+                    ResponseTables=new List<string>{"LT_DATA","ET_EAN_DATA"},
+                    SampleRequest=@"{\"IM_DATA\": [{\"KEY\": \"VALUE\"}], \"EX_DATA\": [{\"KEY\": \"VALUE\"}]}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"LT_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}], \"ET_EAN_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZPO_MODIFICATION", Route="api/ZPO_MODIFICATION", Group="Vendor SRM Routing", SapRfc="ZPO_MODIFICATION",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZPO MODIFICATION - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_PO_NO",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PO_DEL_DATE",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DEL_CHG_DATE_LOW",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_DEL_CHG_DATE_HIGH",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_PO_OUTPUT"},
+                    SampleRequest=@"{\"IM_PO_NO\": \"100001\", \"IM_PO_DEL_DATE\": \"20240101\", \"IM_DEL_CHG_DATE_LOW\": \"20240101\", \"IM_DEL_CHG_DATE_HIGH\": \"20240101\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_PO_OUTPUT\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_USER_AUTORITY_CHECK", Route="api/ZSRM_USER_AUTORITY_CHECK", Group="Vendor SRM Zone", SapRfc="ZSRM_USER_AUTORITY_CHECK",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM USER AUTORITY CHECK - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_ZONE_ID",SapType="string",IsTable=false,Required=true},
+                        new RfcParam{Name="IM_PASSWORD",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_ZONE_ID\": \"VALUE\", \"IM_PASSWORD\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_GET_VENDOR_ZONE_DATA", Route="api/ZSRM_GET_VENDOR_ZONE_DATA", Group="Vendor SRM Zone", SapRfc="ZSRM_GET_VENDOR_ZONE_DATA",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM GET VENDOR ZONE DATA - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_ZONE_ID",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_ZONE_ID\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
+                new RfcEndpoint {
+                    Name="ZSRM_VEND_PEND_PO", Route="api/ZSRM_VEND_PEND_PO", Group="Vendor SRM Zone", SapRfc="ZSRM_VEND_PEND_PO",
+                    SapHost="192.168.144.170", Client="600",
+                    Description="ZSRM VEND PEND PO - SAP RFC",
+                    Parameters=new List<RfcParam>{
+                        new RfcParam{Name="IM_LIFNR",SapType="string",IsTable=false,Required=true}
+                    },
+                    ResponseTables=new List<string>{"ET_DATA"},
+                    SampleRequest=@"{\"IM_LIFNR\": \"VALUE\"}",
+                    SampleResponse=@"{\"Status\":\"S\",\"Message\":\"Success\",\"Data\":{\"ET_DATA\": [{\"FIELD1\":\"VAL1\",\"FIELD2\":\"VAL2\"}]}}",
+                    SampleError=@"{\"Status\":\"E\",\"Message\":\"SAP error message here\"}"
+                },
             };
         }
 
@@ -240,48 +1429,60 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 var props = new JObject();
                 if (ep.Parameters != null)
                     foreach (var p in ep.Parameters)
-                        props[p.Name] = new JObject {
-                            ["type"] = p.IsTable ? "array" : "string",
-                            ["description"] = p.Description ?? p.Name
-                        };
+                    {
+                        var schema = p.IsTable
+                            ? new JObject { ["type"]="array", ["items"]=new JObject{["type"]="object"}, ["description"]=p.Description??p.Name }
+                            : new JObject { ["type"]="string", ["description"]=p.Description??p.Name };
+                        props[p.Name] = schema;
+                    }
+
+                var exReq  = ep.SampleRequest  != null ? (JToken)JObject.Parse(ep.SampleRequest)  : new JObject();
+                var exResp = ep.SampleResponse != null ? (JToken)JObject.Parse(ep.SampleResponse) : new JObject();
+                var exErr  = ep.SampleError    != null ? (JToken)JObject.Parse(ep.SampleError)    : new JObject();
 
                 paths["/" + ep.Route] = new JObject {
                     ["post"] = new JObject {
-                        ["tags"] = new JArray(ep.Group),
+                        ["tags"]        = new JArray(ep.Group),
                         ["operationId"] = ep.Name,
-                        ["summary"] = ep.Description,
+                        ["summary"]     = ep.Description,
                         ["requestBody"] = new JObject {
                             ["required"] = true,
-                            ["content"] = new JObject {
+                            ["content"]  = new JObject {
                                 ["application/json"] = new JObject {
-                                    ["schema"] = new JObject {
-                                        ["type"] = "object",
-                                        ["properties"] = props
-                                    }
+                                    ["schema"]  = new JObject { ["type"]="object", ["properties"]=props },
+                                    ["example"] = exReq
                                 }
                             }
                         },
                         ["responses"] = new JObject {
-                            ["200"] = new JObject { ["description"] = "Success - Status: S" },
-                            ["400"] = new JObject { ["description"] = "SAP Error - Status: E" },
+                            ["200"] = new JObject {
+                                ["description"] = "SAP Success",
+                                ["content"] = new JObject {
+                                    ["application/json"] = new JObject { ["example"] = exResp }
+                                }
+                            },
+                            ["400"] = new JObject {
+                                ["description"] = "SAP Error",
+                                ["content"] = new JObject {
+                                    ["application/json"] = new JObject { ["example"] = exErr }
+                                }
+                            },
                             ["500"] = new JObject { ["description"] = "Server Error" }
                         }
                     }
                 };
             }
 
-            var spec = new JObject {
+            return new JObject {
                 ["openapi"] = "3.0.1",
                 ["info"] = new JObject {
-                    ["title"] = "V2 Retail - RFC API",
-                    ["version"] = "1.0.0",
+                    ["title"]       = "V2 Retail - RFC API",
+                    ["version"]     = "1.0.0",
                     ["description"] = "SAP RFC Integration API - Branch: " + GH_BRANCH
                 },
                 ["servers"] = new JArray { new JObject { ["url"] = IIS_BASE } },
-                ["paths"] = paths
-            };
-
-            return spec.ToString(Formatting.Indented);
+                ["paths"]   = paths
+            }.ToString(Formatting.Indented);
         }
     }
 }
