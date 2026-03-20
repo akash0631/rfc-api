@@ -22,26 +22,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
             try
             {
                 if (request == null)
-                {
                     return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = "Request data is required" });
-                }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                RfcRepository rfcrep = dest.Repository;
-                IRfcFunction myfun = rfcrep.CreateFunction("ZPO_QTY_UPD_RFC");
+                IRfcFunction myfun = dest.Repository.CreateFunction("ZPO_QTY_UPD_RFC");
 
-                // IM_DATA is a TABLE parameter (ZTT_PO_IMP_QTY → rows of ZST_PO_IMP_QTY)
                 if (request.IM_DATA != null && request.IM_DATA.Count > 0)
                 {
                     IRfcTable imDataTable = myfun.GetTable("IM_DATA");
                     foreach (var row in request.IM_DATA)
                     {
                         imDataTable.Append();
-                        if (!string.IsNullOrEmpty(row.EBELN))    imDataTable.SetValue("EBELN", row.EBELN);
-                        if (!string.IsNullOrEmpty(row.MATNR))    imDataTable.SetValue("MATNR", row.MATNR);
-                        if (!string.IsNullOrEmpty(row.PO_ITEM))  imDataTable.SetValue("PO_ITEM", row.PO_ITEM);
-                        if (!string.IsNullOrEmpty(row.QTY))      imDataTable.SetValue("QTY", row.QTY);
+                        if (!string.IsNullOrEmpty(row.EBELN)) imDataTable.SetValue("EBELN", row.EBELN);
+                        if (!string.IsNullOrEmpty(row.MATNR)) imDataTable.SetValue("MATNR", row.MATNR);
+                        if (!string.IsNullOrEmpty(row.QTY))   imDataTable.SetValue("QTY", row.QTY);
                     }
                 }
 
@@ -49,27 +44,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 
                 string msgType = myfun.GetString("MSG_TYPE");
                 string message = myfun.GetString("MESSAGE");
-                bool   status  = msgType == "S";
 
-                return Ok(new
-                {
-                    Status   = status,
-                    MSG_TYPE = msgType,
-                    MESSAGE  = message
-                });
+                return Ok(new { Status = msgType == "S", MSG_TYPE = msgType, MESSAGE = message });
             }
-            catch (RfcAbapException ex)
-            {
-                return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message });
-            }
-            catch (RfcCommunicationException ex)
-            {
-                return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message });
-            }
+            catch (RfcAbapException ex)       { return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message }); }
+            catch (RfcCommunicationException ex) { return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message }); }
+            catch (Exception ex)              { return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message }); }
         }
     }
 
@@ -80,9 +60,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 
     public class ZST_PO_IMP_QTY
     {
-        public string EBELN   { get; set; }  // Purchasing Document Number (CHAR 10)
-        public string MATNR   { get; set; }  // Material Number (CHAR 40)
-        public string PO_ITEM { get; set; }  // Item Number of PO (NUMC 5)
-        public string QTY     { get; set; }  // Quantity (CHAR 13)
+        public string EBELN { get; set; }  // PO Number (CHAR 10)
+        public string MATNR { get; set; }  // Material Number (CHAR 40)
+        public string QTY   { get; set; }  // Quantity (CHAR 13)
     }
 }
