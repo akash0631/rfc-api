@@ -57,15 +57,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inbound
                         etData.CurrentIndex = i;
                         dataList.Add(new
                         {
-                            HU_NO       = etData.GetValue("HU_NO")?.ToString(),
-                            PO_NO       = etData.GetValue("PO_NO")?.ToString(),
-                            INV_NO      = etData.GetValue("INV_NO")?.ToString(),
-                            VENDOR_CODE = etData.GetValue("VENDOR_CODE")?.ToString(),
-                            VENDOR_NAME = etData.GetValue("VENDOR_NAME")?.ToString(),
-                            ARTICLE_NO  = etData.GetValue("ARTICLE_NO")?.ToString(),
-                            DESIGN      = etData.GetValue("DESIGN")?.ToString(),
-                            QUANTITY    = etData.GetValue("QUANTITY")?.ToString(),
-                            EAN         = etData.GetValue("EAN")?.ToString()
+                            EXT_HU = etData.GetValue("EXT_HU")?.ToString(),
+                            PO_NO = etData.GetValue("PO_NO")?.ToString(),
+                            VENDR_NM = etData.GetValue("VENDR_NM")?.ToString(),
+                            BILL_NO = etData.GetValue("BILL_NO")?.ToString()
+                          
                         });
                     }
 
