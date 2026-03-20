@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_COST_UPD_RFC")]
-        public IHttpActionResult UpdatePurchaseOrderCost(ZPO_COST_UPD_RFC_Request request)
+        public IHttpActionResult UpdatePurchaseOrderCost(ZPO_COST_UPD_Request request)
         {
             try
             {
@@ -26,17 +26,26 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_COST_UPD_RFC");
 
-                IRfcStructure imDataStructure = myfun.GetStructure("IM_DATA");
-                imDataStructure.SetValue("PO_NUMBER", request.IM_DATA.PO_NUMBER);
-                imDataStructure.SetValue("ITEM_NUMBER", request.IM_DATA.ITEM_NUMBER);
-                imDataStructure.SetValue("COST_VALUE", request.IM_DATA.COST_VALUE);
-                imDataStructure.SetValue("CURRENCY", request.IM_DATA.CURRENCY);
-                imDataStructure.SetValue("EFFECTIVE_DATE", request.IM_DATA.EFFECTIVE_DATE);
+                IRfcStructure IM_DATA = myfun.GetStructure("IM_DATA");
+                if (request.IM_DATA != null)
+                {
+                    IM_DATA.SetValue("EBELN", request.IM_DATA.EBELN);
+                    IM_DATA.SetValue("EBELP", request.IM_DATA.EBELP);
+                    IM_DATA.SetValue("NETPR", request.IM_DATA.NETPR);
+                    IM_DATA.SetValue("PEINH", request.IM_DATA.PEINH);
+                    IM_DATA.SetValue("BPRME", request.IM_DATA.BPRME);
+                    IM_DATA.SetValue("BPUMZ", request.IM_DATA.BPUMZ);
+                    IM_DATA.SetValue("BPUMN", request.IM_DATA.BPUMN);
+                    IM_DATA.SetValue("WAERS", request.IM_DATA.WAERS);
+                    IM_DATA.SetValue("UPDAT", request.IM_DATA.UPDAT);
+                    IM_DATA.SetValue("UZEIT", request.IM_DATA.UZEIT);
+                    IM_DATA.SetValue("UNAME", request.IM_DATA.UNAME);
+                }
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-
+                
                 string returnType = EX_RETURN.GetString("TYPE");
                 string returnMessage = EX_RETURN.GetString("MESSAGE");
 
@@ -45,7 +54,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     return Ok(new { Status = "E", Message = returnMessage });
                 }
 
-                return Ok(new { Status = returnType, Message = returnMessage });
+                return Ok(new { Status = "S", Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
@@ -62,17 +71,23 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
         }
     }
 
-    public class ZPO_COST_UPD_RFC_Request
+    public class ZPO_COST_UPD_Request
     {
         public ZST_PO_IMP IM_DATA { get; set; }
     }
 
     public class ZST_PO_IMP
     {
-        public string PO_NUMBER { get; set; }
-        public string ITEM_NUMBER { get; set; }
-        public decimal COST_VALUE { get; set; }
-        public string CURRENCY { get; set; }
-        public string EFFECTIVE_DATE { get; set; }
+        public string EBELN { get; set; }
+        public string EBELP { get; set; }
+        public decimal NETPR { get; set; }
+        public decimal PEINH { get; set; }
+        public string BPRME { get; set; }
+        public decimal BPUMZ { get; set; }
+        public decimal BPUMN { get; set; }
+        public string WAERS { get; set; }
+        public string UPDAT { get; set; }
+        public string UZEIT { get; set; }
+        public string UNAME { get; set; }
     }
 }
