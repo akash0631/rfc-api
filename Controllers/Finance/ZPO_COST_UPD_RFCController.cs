@@ -17,13 +17,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_COST_UPD_RFC")]
-        public IHttpActionResult UpdatePOCost([FromBody] ZPO_COST_UPD_RFC_Request request)
+        public IHttpActionResult ZPO_COST_UPD_RFC([FromBody] ZPO_COST_UPD_RFCRequest request)
         {
             try
             {
-                if (request == null)
+                if (request == null || request.IM_DATA == null)
                 {
-                    return Json(new { Status = "E", Message = "Request data is required" });
+                    return Ok(new { Status = "E", Message = "Request data cannot be null" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -31,55 +31,55 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_COST_UPD_RFC");
 
-                IRfcStructure imDataStruct = myfun.GetStructure("IM_DATA");
-                if (request.IM_DATA != null)
+                IRfcStructure imDataStructure = myfun.GetStructure("IM_DATA");
+                if (imDataStructure != null)
                 {
-                    if (!string.IsNullOrEmpty(request.IM_DATA.PO_NUMBER))
-                        imDataStruct.SetValue("PO_NUMBER", request.IM_DATA.PO_NUMBER);
-                    if (!string.IsNullOrEmpty(request.IM_DATA.ITEM_NUMBER))
-                        imDataStruct.SetValue("ITEM_NUMBER", request.IM_DATA.ITEM_NUMBER);
-                    if (request.IM_DATA.COST_AMOUNT.HasValue)
-                        imDataStruct.SetValue("COST_AMOUNT", request.IM_DATA.COST_AMOUNT.Value);
-                    if (!string.IsNullOrEmpty(request.IM_DATA.CURRENCY))
-                        imDataStruct.SetValue("CURRENCY", request.IM_DATA.CURRENCY);
-                    if (!string.IsNullOrEmpty(request.IM_DATA.COST_TYPE))
-                        imDataStruct.SetValue("COST_TYPE", request.IM_DATA.COST_TYPE);
-                    if (!string.IsNullOrEmpty(request.IM_DATA.VENDOR_CODE))
-                        imDataStruct.SetValue("VENDOR_CODE", request.IM_DATA.VENDOR_CODE);
-                    if (request.IM_DATA.EFFECTIVE_DATE.HasValue)
-                        imDataStruct.SetValue("EFFECTIVE_DATE", request.IM_DATA.EFFECTIVE_DATE.Value);
+                    foreach (var property in typeof(ZST_PO_IMP).GetProperties())
+                    {
+                        var value = property.GetValue(request.IM_DATA);
+                        if (value != null)
+                        {
+                            imDataStructure.SetValue(property.Name, value);
+                        }
+                    }
+                    myfun.SetValue("IM_DATA", imDataStructure);
                 }
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetString("TYPE");
-                string returnMessage = EX_RETURN.GetString("MESSAGE");
-
-                if (returnType == "E")
+                if (EX_RETURN != null)
                 {
-                    return Json(new { Status = "E", Message = returnMessage });
+                    string returnType = EX_RETURN.GetString("TYPE");
+                    string returnMessage = EX_RETURN.GetString("MESSAGE");
+
+                    if (returnType == "E")
+                    {
+                        return Ok(new { Status = "E", Message = returnMessage });
+                    }
+
+                    return Ok(new { Status = "S", Message = returnMessage });
                 }
 
-                return Json(new { Status = "S", Message = returnMessage });
+                return Ok(new { Status = "S", Message = "Operation completed successfully" });
             }
             catch (RfcAbapException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
         }
     }
 
-    public class ZPO_COST_UPD_RFC_Request
+    public class ZPO_COST_UPD_RFCRequest
     {
         public ZST_PO_IMP IM_DATA { get; set; }
     }
@@ -87,11 +87,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     public class ZST_PO_IMP
     {
         public string PO_NUMBER { get; set; }
-        public string ITEM_NUMBER { get; set; }
-        public decimal? COST_AMOUNT { get; set; }
+        public string PO_ITEM { get; set; }
+        public decimal? COST_VALUE { get; set; }
         public string CURRENCY { get; set; }
         public string COST_TYPE { get; set; }
-        public string VENDOR_CODE { get; set; }
+        public string PLANT { get; set; }
+        public string VENDOR { get; set; }
+        public string MATERIAL { get; set; }
         public DateTime? EFFECTIVE_DATE { get; set; }
+        public string USER_ID { get; set; }
     }
 }
