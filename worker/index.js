@@ -1922,6 +1922,44 @@ init();
 
 
 
+
+    // ── GET /cf-zones → list zones + create tunnel hostname ────────────────────
+    if (url.pathname === '/cf-zones') {
+      const CF_ACCOUNT = 'bab06c93e17ae71cae3c11b4cc40240b';
+      const CF_KEY = env.CLOUDFLARE_API_KEY;
+      const CF_EMAIL = 'Akash@v2kart.com';
+      const h = {'X-Auth-Key':CF_KEY,'X-Auth-Email':CF_EMAIL,'Content-Type':'application/json'};
+      const TUNNEL_ID = '7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3';
+      
+      try {
+        // List zones
+        const zr = await fetch(`https://api.cloudflare.com/client/v4/zones?account.id=${CF_ACCOUNT}&per_page=50`, {headers:h});
+        const zd = await zr.json();
+        const zones = (zd.result||[]).map(z => ({id:z.id, name:z.name, status:z.status}));
+        
+        // For each zone, try to create CNAME for tunnel
+        const results = [];
+        for (const zone of zones) {
+          // Try create CNAME: sap-api.zone.name → TUNNEL_ID.cfargotunnel.com
+          const cname = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone.id}/dns_records`, {
+            method:'POST', headers:h,
+            body: JSON.stringify({
+              type:'CNAME', name:'sap-api', 
+              content:`${TUNNEL_ID}.cfargotunnel.com`,
+              proxied:true, ttl:1
+            })
+          });
+          const cd = await cname.json();
+          results.push({zone:zone.name, cnameSuccess:cd.success, errors:cd.errors||[], record:cd.result?.name});
+        }
+        
+        return new Response(JSON.stringify({zones, cnameResults:results}),
+          {headers:{'Content-Type':'application/json'}});
+      } catch(e) {
+        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json'}});
+      }
+    }
+
     // ── GET /tunnel-test → test tunnel connectivity from worker ────────────────
     if (url.pathname === '/tunnel-test') {
       const TUNNEL_ID = '7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3';
