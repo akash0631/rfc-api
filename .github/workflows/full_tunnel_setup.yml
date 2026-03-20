@@ -1,0 +1,152 @@
+name: FULL_TUNNEL_SETUP
+on:
+  push:
+    paths:
+      - '.github/workflows/full_tunnel_setup.yml'
+jobs:
+  # Job 1: Create tunnel on ubuntu (has CF API access + secrets)
+  create_tunnel:
+    runs-on: ubuntu-latest
+    outputs:
+      tunnel_id: ${{ steps.create.outputs.tunnel_id }}
+      tunnel_token: ${{ steps.create.outputs.tunnel_token }}
+    steps:
+      - name: Create named CF tunnel via API
+        id: create
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: "bab06c93e17ae71cae3c11b4cc40240b"
+        run: |
+          set -e
+          TUNNEL_NAME="v2-sap-api"
+          
+          # Check if tunnel exists
+          EXISTING=$(curl -sf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/cfd_tunnel?name=$TUNNEL_NAME&is_deleted=false" \
+            -H "Authorization: Bearer $CF_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['result']))")
+          echo "Existing tunnels: $EXISTING"
+          
+          if [ "$EXISTING" -gt "0" ]; then
+            echo "Tunnel exists, getting info..."
+            TUNNEL_ID=$(curl -sf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/cfd_tunnel?name=$TUNNEL_NAME&is_deleted=false" \
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['result'][0]['id'])")
+          else
+            echo "Creating tunnel..."
+            TUNNEL_ID=$(curl -sf -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/cfd_tunnel" \
+              -H "Authorization: Bearer $CF_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"name":"v2-sap-api","config_src":"cloudflare"}' \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['result']['id'])")
+          fi
+          
+          echo "Tunnel ID: $TUNNEL_ID"
+          
+          # Get tunnel token
+          TUNNEL_TOKEN=$(curl -sf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/cfd_tunnel/$TUNNEL_ID/token" \
+            -H "Authorization: Bearer $CF_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['result'])")
+          
+          echo "Got token (length: ${#TUNNEL_TOKEN})"
+          
+          # Set ingress rule: catch-all → localhost:9292
+          curl -sf -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/cfd_tunnel/$TUNNEL_ID/configurations" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"config":{"ingress":[{"service":"http://localhost:9292"}]}}' \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('Ingress configured:', d['success'])"
+          
+          # The tunnel URL is: https://<tunnel_id>.cfargotunnel.com
+          TUNNEL_URL="https://${TUNNEL_ID}.cfargotunnel.com"
+          echo "=== TUNNEL URL: $TUNNEL_URL ==="
+          
+          echo "tunnel_id=$TUNNEL_ID" >> $GITHUB_OUTPUT
+          echo "tunnel_token=$TUNNEL_TOKEN" >> $GITHUB_OUTPUT
+          echo "tunnel_url=$TUNNEL_URL" >> $GITHUB_OUTPUT
+
+  # Job 2: Install token on .36 and start service
+  install_on_36:
+    runs-on: [self-hosted, iis]
+    needs: create_tunnel
+    steps:
+      - name: Install cloudflared service on .36 with tunnel token
+        shell: powershell
+        env:
+          TUNNEL_TOKEN: ${{ needs.create_tunnel.outputs.tunnel_token }}
+          TUNNEL_ID: ${{ needs.create_tunnel.outputs.tunnel_id }}
+        run: |
+          $cfPath = "C:\cloudflared\cloudflared.exe"
+          $token = $env:TUNNEL_TOKEN
+          $tunnelId = $env:TUNNEL_ID
+          
+          Write-Host "Tunnel ID: $tunnelId"
+          Write-Host "Token length: $($token.Length)"
+          
+          # Stop and uninstall any existing cloudflared service
+          Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep 2
+          $svc = Get-Service "cloudflared" -ErrorAction SilentlyContinue
+          if ($svc) {
+            Stop-Service "cloudflared" -Force -ErrorAction SilentlyContinue
+            Start-Sleep 2
+            & $cfPath service uninstall 2>&1 | Write-Host
+            Start-Sleep 3
+          }
+          
+          # Install service with token
+          Write-Host "=== Installing cloudflared as Windows service ==="
+          $result = & $cfPath service install $token 2>&1
+          Write-Host "Install result: $result"
+          Write-Host "Exit code: $LASTEXITCODE"
+          
+          Start-Sleep 3
+          
+          # Start the service
+          Start-Service "cloudflared"
+          Start-Sleep 8
+          
+          $status = (Get-Service "cloudflared").Status
+          Write-Host "=== Service status: $status ==="
+          
+          # Save tunnel info
+          $info = @{ tunnelId=$tunnelId; tunnelUrl="https://$tunnelId.cfargotunnel.com"; service=$status.ToString() }
+          $info | ConvertTo-Json | Out-File "C:\cloudflared\tunnel_info.json" -Force
+          
+          # Test SAP
+          Write-Host "=== Testing SAP via tunnel ==="
+          Start-Sleep 5
+          $url = "https://$tunnelId.cfargotunnel.com"
+          try {
+            $r = Invoke-WebRequest "$url/api/ZPO_DD_UPD_RFC/Post" -Method POST -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            Write-Host "=== SAP via tunnel: $($r.Content) ==="
+          } catch { Write-Host "SAP test: $_" }
+          
+          Write-Host "=== DONE. Tunnel URL: $url ==="
+
+  # Job 3: Update worker IIS_HOST to use tunnel URL permanently
+  update_worker:
+    runs-on: ubuntu-latest
+    needs: create_tunnel
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PIPELINE_GITHUB_TOKEN }}
+      
+      - name: Update worker IIS_HOST to tunnel URL
+        env:
+          TUNNEL_ID: ${{ needs.create_tunnel.outputs.tunnel_id }}
+        run: |
+          TUNNEL_URL="https://${TUNNEL_ID}.cfargotunnel.com"
+          echo "Updating worker to use: $TUNNEL_URL"
+          
+          # Replace IIS_HOST in worker
+          sed -i "s|const IIS_HOST.*=.*'http://192.168.151.36:9292'.*;|const IIS_HOST         = '${TUNNEL_URL}';  // CF named tunnel v2-sap-api → .36:9292|g" worker/index.js
+          sed -i "s|const IIS_HOST.*= '.*cfargotunnel\.com'.*;|const IIS_HOST         = '${TUNNEL_URL}';  // CF named tunnel v2-sap-api → .36:9292|g" worker/index.js
+          
+          # Verify
+          grep "IIS_HOST" worker/index.js | head -2
+          
+          # Commit
+          git config user.email "ci@v2retail.com"
+          git config user.name "V2 CI"
+          git add worker/index.js
+          git commit -m "fix: IIS_HOST → CF named tunnel v2-sap-api (permanent URL)"
+          git push
+          echo "Worker updated and pushed"
