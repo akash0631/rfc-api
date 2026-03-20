@@ -245,6 +245,54 @@ td:not(:last-child) { padding-right: 18px; }
 /* ── DAB section ── */
 .dab-wrap { max-width: 900px; margin: 0 auto; padding: 16px 28px; }
 .dab-wrap .code-block { white-space: pre-wrap; }
+
+/* ── RFC Generator Tab ─────────────────────────────────────────── */
+.gen-wrap{max-width:720px;margin:0 auto;padding:24px 20px 60px}
+.gen-hero{text-align:center;margin-bottom:28px}
+.gen-pill{display:inline-block;background:linear-gradient(135deg,#1A3C6E,#2a5298);color:#fff;border-radius:20px;padding:4px 16px;font-size:10px;font-family:monospace;letter-spacing:1px;margin-bottom:12px}
+.gen-title{font-size:26px;font-weight:800;margin:0 0 6px;color:#1A3C6E}
+.gen-sub{color:#888;font-size:13px;margin:0}
+.gen-flow{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:28px}
+.gen-step{background:#f0f4ff;border:1px solid #c5d0f0;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;color:#1A3C6E}
+.active-step{background:#1A3C6E;color:#fff;border-color:#1A3C6E}
+.gen-arrow{color:#ccc;font-size:16px}
+.gen-card{background:#fff;border:1px solid #e8ecf4;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.gen-card-label{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:14px}
+.gen-dropzone{border:2px dashed #d0d8ee;border-radius:10px;padding:36px 20px;text-align:center;cursor:pointer;transition:.2s;background:#fafbff;position:relative}
+.gen-dropzone:hover,.gen-dz-hover{border-color:#E8401C;background:#fff8f7}
+.gen-dz-icon{font-size:36px;margin-bottom:10px}
+.gen-dz-text{font-size:15px;font-weight:700;color:#1A3C6E;margin-bottom:4px}
+.gen-dz-sub{font-size:13px;color:#888}
+.gen-dz-hint{font-size:11px;color:#bbb;margin-top:6px;font-family:monospace}
+.gen-file-badge{display:flex;align-items:center;gap:8px;background:#eef7ee;border:1px solid #b2dfb2;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px;font-weight:600;color:#2e7d32}
+.gen-env-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.gen-env{border:1.5px solid #e0e6f0;border-radius:10px;padding:10px 12px;cursor:pointer;transition:.15s;background:#fafbff}
+.gen-env:hover{border-color:#1A3C6E}
+.active-env{border-color:#1A3C6E!important;background:#f0f4ff;box-shadow:0 0 0 2px rgba(26,60,110,.15)}
+.gen-env-name{font-weight:700;font-size:13px;color:#1A3C6E;margin-bottom:3px}
+.gen-env-ip{font-size:10px;color:#999;font-family:monospace}
+.gen-deploy-btn{width:100%;padding:14px;background:linear-gradient(135deg,#1A3C6E,#2a5298);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:.15s;box-shadow:0 3px 12px rgba(26,60,110,.3);margin-top:4px}
+.gen-deploy-btn:hover:not(:disabled){background:linear-gradient(135deg,#152e56,#1A3C6E);box-shadow:0 5px 16px rgba(26,60,110,.4)}
+.gen-deploy-btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+.gen-pipeline{display:flex;flex-direction:column;gap:10px}
+.gen-pipe-step{display:flex;align-items:flex-start;gap:14px;padding:12px 16px;border:1.5px solid #e8ecf4;border-radius:10px;transition:.3s;background:#fafbff}
+.gen-pipe-step.gps-active{border-color:#f0c040;background:#fffdf0}
+.gen-pipe-step.gps-done{border-color:#b2dfb2;background:#eef7ee}
+.gen-pipe-step.gps-error{border-color:#f5c6c6;background:#fff5f5}
+.gen-pipe-icon{font-size:18px;min-width:24px;text-align:center;margin-top:2px}
+.gen-pipe-name{font-size:13px;font-weight:600;color:#1A3C6E}
+.gen-pipe-detail{font-size:11px;color:#888;font-family:monospace;margin-top:3px;word-break:break-all}
+.gen-spin{display:inline-block;width:16px;height:16px;border:2px solid #f0c040;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.gen-endpoint-box{background:#f0f4ff;border:1px solid #c5d0f0;border-radius:8px;padding:14px 18px;font-family:monospace;font-size:13px;color:#1A3C6E;margin-bottom:20px;text-align:left;line-height:1.8}
+.gen-endpoint-box span{color:#888;font-size:11px;display:block}
+.gen-success-links a{display:inline-flex;align-items:center;gap:6px;border-radius:20px;padding:7px 16px;font-size:12px;font-weight:700;text-decoration:none}
+.gen-link-gh{background:#eef7ee;border:1px solid #b2dfb2;color:#2e7d32}
+.gen-link-sw{background:#f0f4ff;border:1px solid #c5d0f0;color:#1A3C6E}
+.gen-error{background:#fff5f5;border:1px solid #f5c6c6;border-radius:10px;padding:14px 18px;color:#c62828;font-size:13px;margin-top:8px}
+.gen-reset-btn{background:#fff;border:1.5px solid #e0e6f0;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:600;color:#1A3C6E;cursor:pointer;transition:.15s}
+.gen-reset-btn:hover{border-color:#1A3C6E;background:#f0f4ff}
+
 </style>
 </head>
 <body>
@@ -278,6 +326,7 @@ td:not(:last-child) { padding-right: 18px; }
   <div class="spec-tab" onclick="switchSection('swagger',this)"><span class="sdot"></span>Swagger UI</div>
   <div class="spec-tab" onclick="switchSection('pipeline',this)"><span class="sdot"></span>Pipeline</div>
   <div class="spec-tab" onclick="switchSection('dab',this)"><span class="sdot"></span>Azure DAB</div>
+<div class="spec-tab" onclick="switchSection('generator',this)"><span class="sdot"></span>⚡ RFC Generator</div>
 </div>
 
 <!-- ══════════════════════════════════
@@ -810,6 +859,101 @@ Invoke-WebRequest <span class="cs">"http://192.168.151.36:9292/api/ZADVANCE_PAYM
 </div>
 
 <!-- Swagger JS (from v2retail_swagger.html) -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- RFC GENERATOR TAB                                                     -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="section-generator" class="section" style="display:none">
+  <div class="gen-wrap">
+
+    <!-- ── UPLOAD CARD ──────────────────────────────────────────────── -->
+    <div id="gen-upload-view">
+      <div class="gen-hero">
+        <div class="gen-pill">⚡ UPLOAD · AI PARSE · C# GENERATE · GITHUB · IIS · LIVE</div>
+        <h2 class="gen-title">SAP RFC <span style="color:#E8401C">→ Live API</span></h2>
+        <p class="gen-sub">Upload an RFC .docx → get a working REST endpoint in under 2 minutes</p>
+      </div>
+
+      <div class="gen-flow">
+        <div class="gen-step">📄 Upload .docx</div><div class="gen-arrow">→</div>
+        <div class="gen-step">🤖 AI Parses</div><div class="gen-arrow">→</div>
+        <div class="gen-step">⚙️ C# Generated</div><div class="gen-arrow">→</div>
+        <div class="gen-step">📦 GitHub Push</div><div class="gen-arrow">→</div>
+        <div class="gen-step active-step">🌐 Live on IIS</div>
+      </div>
+
+      <div class="gen-card">
+        <div class="gen-card-label">RFC DOCUMENT</div>
+        <div class="gen-dropzone" id="gen-dropzone"
+             ondragover="event.preventDefault();this.classList.add('gen-dz-hover')"
+             ondragleave="this.classList.remove('gen-dz-hover')"
+             ondrop="genHandleDrop(event)">
+          <div class="gen-dz-icon">📄</div>
+          <div class="gen-dz-text">Drop your RFC document here</div>
+          <div class="gen-dz-sub">or <strong style="color:#E8401C;cursor:pointer" onclick="document.getElementById('gen-file-input').click()">browse files</strong></div>
+          <div class="gen-dz-hint">.docx · .txt · .md</div>
+          <input type="file" id="gen-file-input" accept=".docx,.txt,.md" style="display:none" onchange="genHandleFile(this.files[0])">
+        </div>
+        <div id="gen-file-selected" style="display:none" class="gen-file-badge">
+          <span>📎</span><span id="gen-file-name"></span>
+          <button onclick="genClearFile()" style="background:none;border:none;cursor:pointer;color:#888;margin-left:auto;font-size:16px">×</button>
+        </div>
+      </div>
+
+      <div class="gen-card">
+        <div class="gen-card-label">SAP ENVIRONMENT</div>
+        <div class="gen-env-grid">
+          <div class="gen-env active-env" id="gen-env-dev" onclick="genSetEnv('dev')">
+            <div class="gen-env-name">Dev</div>
+            <div class="gen-env-ip">192.168.144.174 · Client 210</div>
+          </div>
+          <div class="gen-env" id="gen-env-quality" onclick="genSetEnv('quality')">
+            <div class="gen-env-name">Quality</div>
+            <div class="gen-env-ip">192.168.144.179 · Client 600</div>
+          </div>
+          <div class="gen-env" id="gen-env-production" onclick="genSetEnv('production')">
+            <div class="gen-env-name" style="color:#E8401C">Production</div>
+            <div class="gen-env-ip">192.168.144.170 · Client 600</div>
+          </div>
+        </div>
+      </div>
+
+      <button id="gen-deploy-btn" class="gen-deploy-btn" onclick="genDeploy()" disabled>
+        ⚡ Deploy RFC → Live API
+      </button>
+    </div>
+
+    <!-- ── PROGRESS VIEW ─────────────────────────────────────────────── -->
+    <div id="gen-progress-view" style="display:none">
+      <div class="gen-card">
+        <div class="gen-card-label">PIPELINE PROGRESS</div>
+        <div class="gen-pipeline" id="gen-pipeline">
+          <div class="gen-pipe-step" id="gps-parse">  <div class="gen-pipe-icon">○</div><div class="gen-pipe-info"><div class="gen-pipe-name">Parse RFC document</div><div class="gen-pipe-detail" id="gpd-parse"></div></div></div>
+          <div class="gen-pipe-step" id="gps-controller"><div class="gen-pipe-icon">○</div><div class="gen-pipe-info"><div class="gen-pipe-name">Generate ASP.NET C# controller</div><div class="gen-pipe-detail" id="gpd-controller"></div></div></div>
+          <div class="gen-pipe-step" id="gps-github">  <div class="gen-pipe-icon">○</div><div class="gen-pipe-info"><div class="gen-pipe-name">Push to GitHub</div><div class="gen-pipe-detail" id="gpd-github"></div></div></div>
+          <div class="gen-pipe-step" id="gps-deploy">  <div class="gen-pipe-icon">○</div><div class="gen-pipe-info"><div class="gen-pipe-name">Build &amp; Deploy to IIS (.36:9292)</div><div class="gen-pipe-detail" id="gpd-deploy"></div></div></div>
+          <div class="gen-pipe-step" id="gps-dab">    <div class="gen-pipe-icon">○</div><div class="gen-pipe-info"><div class="gen-pipe-name">Register in Azure DAB</div><div class="gen-pipe-detail" id="gpd-dab"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SUCCESS VIEW ──────────────────────────────────────────────── -->
+    <div id="gen-success-view" style="display:none">
+      <div class="gen-card" style="text-align:center;padding:40px 30px">
+        <div style="font-size:56px;margin-bottom:16px">🚀</div>
+        <h2 id="gen-success-title" style="color:#1A3C6E;margin:0 0 6px;font-size:22px">RFC Deployed!</h2>
+        <p id="gen-success-sub" style="color:#888;font-size:13px;margin:0 0 20px">Your RFC is now a live REST API</p>
+        <div id="gen-success-endpoint" class="gen-endpoint-box"></div>
+        <div id="gen-success-links" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:24px"></div>
+        <button onclick="genReset()" class="gen-reset-btn">+ Deploy Another RFC</button>
+      </div>
+    </div>
+
+    <!-- ── ERROR MESSAGE ─────────────────────────────────────────────── -->
+    <div id="gen-error-box" class="gen-error" style="display:none"></div>
+
+  </div>
+</div><!-- end generator section -->
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-standalone-preset.js"></script>
 <script>
@@ -953,6 +1097,138 @@ async function execute(ep, endpoint) {
     respBdy.textContent = err.toString()+'\n\nMust be on V2 internal network to reach 192.168.151.36';
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// RFC GENERATOR TAB LOGIC
+// ══════════════════════════════════════════════════════════════════════
+(function(){
+  const WORKER = 'https://v2-rfc-pipeline.akash-bab.workers.dev';
+  let genFile = null, genEnv = 'dev', genPollTimer = null;
+
+  window.genHandleFile = function(file) {
+    if (!file) return;
+    genFile = file;
+    document.getElementById('gen-file-name').textContent = file.name;
+    document.getElementById('gen-file-selected').style.display = 'flex';
+    document.getElementById('gen-dropzone').style.display = 'none';
+    document.getElementById('gen-deploy-btn').disabled = false;
+    document.getElementById('gen-error-box').style.display = 'none';
+  };
+
+  window.genHandleDrop = function(e) {
+    e.preventDefault();
+    document.getElementById('gen-dropzone').classList.remove('gen-dz-hover');
+    genHandleFile(e.dataTransfer.files[0]);
+  };
+
+  window.genClearFile = function() {
+    genFile = null;
+    document.getElementById('gen-file-input').value = '';
+    document.getElementById('gen-file-selected').style.display = 'none';
+    document.getElementById('gen-dropzone').style.display = 'block';
+    document.getElementById('gen-deploy-btn').disabled = true;
+  };
+
+  window.genSetEnv = function(env) {
+    genEnv = env;
+    ['dev','quality','production'].forEach(e => {
+      document.getElementById('gen-env-'+e).classList.toggle('active-env', e === env);
+    });
+  };
+
+  window.genDeploy = async function() {
+    if (!genFile) return;
+    document.getElementById('gen-error-box').style.display = 'none';
+    document.getElementById('gen-upload-view').style.display = 'none';
+    document.getElementById('gen-progress-view').style.display = 'block';
+    document.getElementById('gen-success-view').style.display = 'none';
+
+    // Reset all steps
+    ['parse','controller','github','deploy','dab'].forEach(s => genSetStep(s, 'pending', ''));
+
+    const fd = new FormData();
+    fd.append('file', genFile);
+    fd.append('env', genEnv);
+
+    try {
+      const r = await fetch(WORKER + '/deploy', {method:'POST', body:fd});
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || 'Deploy failed');
+      genPoll(d.jobId);
+    } catch(e) {
+      genShowError('Deploy failed: ' + e.message);
+      document.getElementById('gen-upload-view').style.display = 'block';
+      document.getElementById('gen-progress-view').style.display = 'none';
+    }
+  };
+
+  function genPoll(jobId) {
+    if (genPollTimer) clearInterval(genPollTimer);
+    genPollTimer = setInterval(async () => {
+      try {
+        const r = await fetch(WORKER + '/status/' + jobId);
+        const job = await r.json();
+        // Update steps
+        (job.steps || []).forEach(s => genSetStep(s.step, s.status, s.detail || ''));
+        if (job.status === 'complete') {
+          clearInterval(genPollTimer);
+          genShowSuccess(job);
+        } else if (job.status === 'error') {
+          clearInterval(genPollTimer);
+          genShowError('Pipeline error: ' + (job.error || 'Unknown'));
+          document.getElementById('gen-upload-view').style.display = 'block';
+          document.getElementById('gen-progress-view').style.display = 'none';
+        }
+      } catch(e) {}
+    }, 2000);
+  }
+
+  function genSetStep(id, status, detail) {
+    const el = document.getElementById('gps-' + id);
+    if (!el) return;
+    el.className = 'gen-pipe-step' + (status === 'active' || status === 'running' ? ' gps-active' : status === 'done' ? ' gps-done' : status === 'error' ? ' gps-error' : '');
+    const icon = el.querySelector('.gen-pipe-icon');
+    icon.innerHTML = status === 'active' || status === 'running' ? '<span class="gen-spin"></span>' : status === 'done' ? '✅' : status === 'error' ? '❌' : '○';
+    const det = document.getElementById('gpd-' + id);
+    if (det && detail) det.textContent = detail;
+  }
+
+  function genShowSuccess(job) {
+    document.getElementById('gen-progress-view').style.display = 'none';
+    document.getElementById('gen-success-view').style.display = 'block';
+    const name = job.rfcName || genFile?.name?.replace('.docx','') || 'RFC';
+    document.getElementById('gen-success-title').textContent = name + ' Deployed!';
+    document.getElementById('gen-success-sub').textContent = 'Your RFC is now a live REST API at sap-api.v2retail.net';
+    const epBox = document.getElementById('gen-success-endpoint');
+    const apiUrl = 'https://sap-api.v2retail.net/api/' + name + '/Post';
+    epBox.innerHTML = '<span>Public API Endpoint</span>' + apiUrl + '<br><span style="margin-top:6px">Internal IIS</span>' + (job.rfcApi || 'http://192.168.151.36:9292/api/' + name + '/Post');
+    const links = document.getElementById('gen-success-links');
+    links.innerHTML = '';
+    if (job.commit) links.innerHTML += '<a class="gen-link-gh" href="'+job.commit+'" target="_blank">✓ GitHub Commit</a>';
+    links.innerHTML += '<a class="gen-link-sw" href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank">📖 Swagger UI</a>';
+    links.innerHTML += '<a class="gen-link-sw" href="https://v2-rfc-portal.pages.dev/rfc_hub.html#explorer" onclick="switchSection(\"explorer\",this); return false;">🔍 RFC Explorer</a>';
+  }
+
+  function genShowError(msg) {
+    const el = document.getElementById('gen-error-box');
+    el.textContent = '⚠️ ' + msg;
+    el.style.display = 'block';
+  }
+
+  window.genReset = function() {
+    genFile = null; genEnv = 'dev';
+    document.getElementById('gen-file-input').value = '';
+    document.getElementById('gen-file-selected').style.display = 'none';
+    document.getElementById('gen-dropzone').style.display = 'block';
+    document.getElementById('gen-deploy-btn').disabled = true;
+    document.getElementById('gen-success-view').style.display = 'none';
+    document.getElementById('gen-upload-view').style.display = 'block';
+    document.getElementById('gen-error-box').style.display = 'none';
+    genSetEnv('dev');
+    ['parse','controller','github','deploy','dab'].forEach(s => genSetStep(s,'pending',''));
+  };
+})();
+
 </script>
 </body>
 </html>
