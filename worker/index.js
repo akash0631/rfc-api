@@ -6,7 +6,7 @@
 const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'master';
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
-const IIS_HOST         = 'https://7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3.cfargotunnel.com';  // CF named tunnel v2-sap-api (permanent)
+const IIS_HOST         = 'https://sap-api.v2retail.net';  // sap-api.v2retail.net → CF Tunnel → .36:9292
 const GH_WORKFLOW_ID   = '245504825';  // deploy-iis.yml (Build and Deploy to .36 IIS)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
