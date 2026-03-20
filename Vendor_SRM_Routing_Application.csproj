@@ -276,7 +276,6 @@
     <Compile Include="Controllers\PaperlessPicklist\AuthenticateController.cs" />
     <Compile Include="Controllers\PaperlessPicklist\GetPicklistNumberController.cs" />
     <Compile Include="Controllers\PaperlessPicklist\PostPickListScannedDataController.cs" />
-    <Compile Include="Controllers\RfcDeployController.cs" />
     <Compile Include="Controllers\RfcDocUpload\RfcDocUploadController.cs" />
     <Compile Include="Controllers\Sampling\ArticleYesOrNoDataController.cs" />
     <Compile Include="Controllers\Sampling\QcDoneController.cs" />
