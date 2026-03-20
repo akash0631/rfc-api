@@ -17,25 +17,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_DD_UPD_RFC")]
-        public IHttpActionResult UpdatePurchaseOrderDeliveryDate([FromBody] ZPO_DD_UPD_Request request)
+        public IHttpActionResult UpdatePurchaseOrderDeliveryDate([FromBody] ZPO_DD_UPD_RFCRequest request)
         {
             try
             {
-                if (request == null)
-                {
-                    return Ok(new { Status = "E", Message = "Request cannot be null" });
-                }
-
-                if (string.IsNullOrEmpty(request.PO_NO))
-                {
-                    return Ok(new { Status = "E", Message = "PO_NO is required" });
-                }
-
-                if (string.IsNullOrEmpty(request.DELV_DATE))
-                {
-                    return Ok(new { Status = "E", Message = "DELV_DATE is required" });
-                }
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
@@ -73,7 +58,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
         }
     }
 
-    public class ZPO_DD_UPD_Request
+    public class ZPO_DD_UPD_RFCRequest
     {
         public string PO_NO { get; set; }
         public string DELV_DATE { get; set; }
