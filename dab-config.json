@@ -1644,6 +1644,32 @@
       "graphql": {
         "enabled": false
       }
+    },
+    "ET_ZPO_COST_UPD_RFC": {
+      "source": {
+        "object": "dbo.ET_ZPO_COST_UPD_RFC",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_ZPO_COST_UPD_RFC"
+      },
+      "graphql": {
+        "enabled": false
+      }
     }
   }
 }
