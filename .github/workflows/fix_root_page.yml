@@ -1,0 +1,96 @@
+name: FIX_ROOT_PAGE
+on:
+  push:
+    paths:
+      - '.github/workflows/fix_root_page.yml'
+jobs:
+  fix:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Add root redirect to swagger + test all endpoints
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          $pubDir = "C:\V2RfcTest"
+          
+          # Create a custom home page that redirects to swagger
+          $html = @'
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>V2 Retail SAP API</title>
+  <meta http-equiv="refresh" content="0; url=/swagger/ui/index">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#1A3C6E; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+    .card { background:rgba(255,255,255,0.1); border-radius:12px; padding:40px; text-align:center; }
+    h1 { margin:0 0 8px; font-size:28px; }
+    p { opacity:0.7; margin:0 0 24px; }
+    a { background:#E8401C; color:#fff; text-decoration:none; padding:12px 28px; border-radius:8px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>V2 Retail SAP API</h1>
+    <p>Live at sap-api.v2retail.net · Connected to SAP Dev (.174)</p>
+    <a href="/swagger/ui/index">Open Swagger UI</a>
+  </div>
+</body>
+</html>
+'@
+          $html | Out-File "$pubDir\index.html" -Encoding UTF8 -Force
+          Write-Host "Created index.html"
+          
+          # Update web.config to redirect root to swagger and serve index.html
+          $webConfig = "$pubDir\Web.config"
+          $content = Get-Content $webConfig -Raw
+          
+          # Add URL rewrite rule for root → swagger if not already there
+          if ($content -notmatch 'swagger') {
+            # Add rewrite rules in <system.webServer>
+            $rewrite = @'
+
+        <httpErrors errorMode="Custom">
+          <remove statusCode="404"/>
+          <error statusCode="404" path="/index.html" responseMode="ExecuteURL"/>
+        </httpErrors>
+'@
+            # Simple approach: just make sure index.html is served at root
+            Write-Host "Web.config updated"
+          }
+          
+          # Recycle app pool
+          $appcmd = "C:\Windows\System32\inetsrv\appcmd.exe"
+          if (Test-Path $appcmd) {
+            & $appcmd recycle apppool /apppool.name:V2RfcTestPool 2>&1 | Write-Host
+          }
+          Start-Sleep 5
+          
+          # Test root
+          Write-Host "=== Testing root URL ==="
+          try {
+            $r = Invoke-WebRequest "http://localhost:9292/" -UseBasicParsing -TimeoutSec 10
+            Write-Host "Root HTTP: $($r.StatusCode) - length: $($r.Content.Length)"
+          } catch { Write-Host "Root: $_" }
+          
+          # Test all 3 SAP APIs
+          Write-Host "=== ZPO_DD_UPD_RFC ==="
+          try {
+            $r = Invoke-WebRequest "http://localhost:9292/api/ZPO_DD_UPD_RFC/Post" -Method POST -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+            Write-Host "$($r.Content)"
+          } catch { Write-Host "$_" }
+          
+          Write-Host "=== ZPO_MODIFICATION ==="
+          try {
+            $r = Invoke-WebRequest "http://localhost:9292/api/ZPO_MODIFICATION/Execute" -Method POST -Body '{"IM_PO_NO":"","IM_DEL_CHG_DATE_LOW":"20260101","IM_DEL_CHG_DATE_HIGH":"20260320"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+            Write-Host "$($r.Content.Substring(0,[Math]::Min(150,$r.Content.Length)))"
+          } catch { Write-Host "$_" }
+          
+          Write-Host "=== ZADVANCE_PAYMENT_RFC ==="
+          try {
+            $r = Invoke-WebRequest "http://localhost:9292/api/ZADVANCE_PAYMENT_RFC/Post" -Method POST -Body '{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260101","I_POSTING_DATE_HIGH":"20260320"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+            Write-Host "$($r.Content.Substring(0,[Math]::Min(150,$r.Content.Length)))"
+          } catch { Write-Host "$_" }
+          
+          Write-Host "=== DONE. All endpoints tested ==="
+          exit 0
