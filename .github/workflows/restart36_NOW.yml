@@ -1,0 +1,45 @@
+name: RESTART_36_RUNNER
+on:
+  push:
+    paths:
+      - '.github/workflows/restart36_NOW.yml'
+jobs:
+  restart:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Restart runner service on .36 via PS-Remote
+        shell: powershell
+        run: |
+          $pass = ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force
+          $cred = New-Object PSCredential('V2DC-ADDVERB\Administrator', $pass)
+          $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -ErrorAction Stop
+          Write-Host "=== Connected to .36 ==="
+          Invoke-Command -Session $s -ScriptBlock {
+            Write-Host "=== Runner services ===" 
+            $svcs = Get-Service | Where-Object { $_.Name -like 'actions.runner*' }
+            $svcs | Select-Object Name, Status, DisplayName
+            Write-Host "=== Starting/Restarting ===" 
+            foreach ($svc in $svcs) {
+              if ($svc.Status -eq 'Stopped') {
+                Start-Service $svc.Name
+                Write-Host "Started: $($svc.Name)"
+              } else {
+                Restart-Service $svc.Name -Force
+                Write-Host "Restarted: $($svc.Name)"
+              }
+            }
+            Start-Sleep 8
+            Write-Host "=== Final status ==="
+            Get-Service | Where-Object { $_.Name -like 'actions.runner*' } | Select-Object Name, Status
+          }
+          Remove-PSSession $s
+          Write-Host "Done."
+      - name: Test .36 API health
+        shell: powershell
+        run: |
+          try {
+            $r = Invoke-WebRequest "http://192.168.151.36:9292/api/ZPO_DD_UPD_RFC/Post" -Method POST -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
+            Write-Host "SAP Response: $($r.Content)"
+          } catch {
+            Write-Host "Error: $_"
+          }
