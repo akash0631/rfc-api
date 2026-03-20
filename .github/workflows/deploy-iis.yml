@@ -13,25 +13,17 @@ on:
       - 'Global.asax.cs'
       - 'packages.config'
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Target environment (dev or prod)'
-        required: false
-        default: 'prod'
 
 env:
-  SOLUTION:     Vendor_SRM_Routing_Application.sln
-  PROJECT:      Vendor_SRM_Routing_Application.csproj
-  DEPLOY_IP:    192.168.151.36
-  DEPLOY_PORT:  8172
-  DEPLOY_URL:   https://192.168.151.36:8172/msdeploy.axd
-  SITE_NAME:    VendrSrmAndroidApi
-  DEST_URL:     http://192.168.151.36:9005/
+  SOLUTION:  Vendor_SRM_Routing_Application.sln
+  PROJECT:   Vendor_SRM_Routing_Application.csproj
+  SITE_NAME: VendrSrmAndroidApi
+  DEST_URL:  http://192.168.151.36:9005/
 
 jobs:
-  build:
-    name: MSBuild Release
-    runs-on: windows-latest
+  build-and-deploy:
+    name: Build, Package and Deploy
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,9 +31,6 @@ jobs:
           ref: Finaltest
 
       - name: Setup NuGet
-        uses: NuGet/setup-nuget@v1
-
-      - name: NuGet Restore
         run: nuget restore ${{ env.SOLUTION }}
 
       - name: Find MSBuild
@@ -51,104 +40,51 @@ jobs:
           if (-not $vs) { $vs = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe" }
           echo "MSBUILD_PATH=$vs" >> $env:GITHUB_ENV
 
-      - name: MSBuild Release and Package
+      - name: MSBuild Release Package
         shell: powershell
         run: |
           & "$env:MSBUILD_PATH" ${{ env.PROJECT }} /p:Configuration=Release /p:Platform=AnyCPU /p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:PackageLocation="${{ github.workspace }}\deploy-pkg" /p:SkipInvalidConfigurations=true /p:VisualStudioVersion=17.0 /m /nologo /verbosity:minimal
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host "Build successful!"
           Get-ChildItem "${{ github.workspace }}\deploy-pkg" -Recurse | Select FullName
 
-      - name: Inject token into Web.config
+      - name: MSDeploy to IIS
         shell: powershell
         run: |
-          $wc = Get-ChildItem "${{ github.workspace }}\deploy-pkg" -Recurse -Filter "Web.config" | Where-Object { $_.FullName -notlike "*obj*" } | Select-Object -First 1
-          if ($wc) {
-            $c = Get-Content $wc.FullName -Raw
-            $c = $c -replace 'YOUR_GITHUB_TOKEN_HERE', '${{ secrets.V2_GH_PAT }}'
-            Set-Content $wc.FullName $c
-          }
-
-      - name: Upload deploy package
-        uses: actions/upload-artifact@v4
-        with:
-          name: rfc-app-deploy-pkg
-          path: ${{ github.workspace }}\deploy-pkg\
-          retention-days: 1
-
-  deploy:
-    name: MSDeploy to .36 IIS
-    runs-on: windows-latest
-    needs: build
-    steps:
-      - name: Download deploy package
-        uses: actions/download-artifact@v4
-        with:
-          name: rfc-app-deploy-pkg
-          path: C:\deploy-pkg
-
-      - name: Install Web Deploy 3.6
-        shell: powershell
-        run: |
-          $msi = "$env:TEMP\WebDeploy.msi"
-          Invoke-WebRequest "https://download.microsoft.com/download/0/1/D/01DC28EA-638C-4A22-A57B-4CEF97755C6C/WebDeploy_amd64_en-US.msi" -OutFile $msi -UseBasicParsing
-          Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart ADDLOCAL=ALL" -Wait
-          Write-Host "msdeploy ready: $(Test-Path 'C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe')"
-
-      - name: Locate package zip
-        shell: powershell
-        run: |
-          $zip = Get-ChildItem "C:\deploy-pkg" -Filter "*.zip" -Recurse | Select-Object -First 1
-          if (-not $zip) { exit 1 }
-          echo "PKG_ZIP=$($zip.FullName)" >> $env:GITHUB_ENV
-
-      - name: MSDeploy sync to .36
-        shell: powershell
-        run: |
+          $zip = Get-ChildItem "${{ github.workspace }}\deploy-pkg" -Filter "*.zip" -Recurse | Select-Object -First 1
+          if (-not $zip) { Write-Error "No zip found!"; exit 1 }
+          Write-Host "Deploying: $($zip.FullName)"
           $md = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          if (-not (Test-Path $md)) {
+            Write-Host "Installing Web Deploy..."
+            $msi = "$env:TEMP\WebDeploy.msi"
+            Invoke-WebRequest "https://download.microsoft.com/download/0/1/D/01DC28EA-638C-4A22-A57B-4CEF97755C6C/WebDeploy_amd64_en-US.msi" -OutFile $msi -UseBasicParsing
+            Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart ADDLOCAL=ALL" -Wait
+          }
           & $md `
             -verb:sync `
-            "-source:package=`"$env:PKG_ZIP`"" `
-            "-dest:auto,computerName=`"${{ env.DEPLOY_URL }}?site=${{ env.SITE_NAME }}`",userName=`".Administrator`",password=`"${{ secrets.DEPLOY_PASSWORD }}`",authType=`"Basic`",includeAcls=`"False`"" `
+            "-source:package=`"$($zip.FullName)`"" `
+            "-dest:auto,computerName=`"https://localhost:8172/msdeploy.axd?site=${{ env.SITE_NAME }}`",userName=`"Administrator`",password=`"${{ secrets.DEPLOY_PASSWORD }}`",authType=`"Basic`",includeAcls=`"False`"" `
             -disableLink:AppPoolExtension `
             -disableLink:ContentExtension `
             -disableLink:CertificateExtension `
             "-setParam:name=`"IIS Web Application Name`",value=`"${{ env.SITE_NAME }}`"" `
             -allowUntrusted `
             -enableRule:AppOffline `
-            -retryAttempts:5 `
-            -retryInterval:3000 `
+            -retryAttempts:3 `
+            -retryInterval:2000 `
             -verbose
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          Write-Host "Deployed to ${{ env.DEST_URL }}"
+          Write-Host "DEPLOYED SUCCESSFULLY to ${{ env.DEST_URL }}"
 
-      - name: Smoke test
+      - name: Smoke Test
         shell: powershell
         run: |
-          Start-Sleep 15
+          Start-Sleep 10
           try {
-            $r = Invoke-WebRequest "${{ env.DEST_URL }}api/Authentication/Login" -Method POST -Body '{"username":"testing@v2kart.com","password":"123456"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "HTTP $($r.StatusCode) - SMOKE TEST PASSED"
-            Write-Host $r.Content.Substring(0,[Math]::Min(300,$r.Content.Length))
+            $r = Invoke-WebRequest "${{ env.DEST_URL }}api/Authentication/Login" -Method POST -Body '{"username":"testing@v2kart.com","password":"123456"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            Write-Host "SMOKE TEST PASSED - HTTP $($r.StatusCode)"
+            Write-Host $r.Content.Substring(0,[Math]::Min(200,$r.Content.Length))
           } catch {
-            Write-Host "Smoke test: $_"
+            Write-Host "Smoke test note: $_"
           }
-
-  notify:
-    name: Deployment Summary
-    runs-on: ubuntu-latest
-    needs: [build, deploy]
-    if: always()
-    steps:
-      - run: |
-          echo "=================================="
-          echo "Branch  : Finaltest"
-          echo "Target  : 192.168.151.36:8172 -> VendrSrmAndroidApi"
-          echo "URL     : http://192.168.151.36:9005/"
-          echo "Build   : ${{ needs.build.result }}"
-          echo "Deploy  : ${{ needs.deploy.result }}"
-          echo "=================================="
-          if [ "${{ needs.deploy.result }}" = "success" ]; then
-            echo "STATUS: DEPLOYED SUCCESSFULLY"
-          else
-            echo "STATUS: DEPLOY FAILED - check MSDeploy logs"
-          fi
