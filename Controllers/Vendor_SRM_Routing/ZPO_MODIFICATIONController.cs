@@ -69,7 +69,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
             {
                 return Json(new { Status = "E", Message = ex.Message });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
                 return Json(new { Status = "E", Message = ex.Message });
             }
