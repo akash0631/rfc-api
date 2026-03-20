@@ -316,16 +316,15 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
   const RELAY   = 'https://v2-rfc-relay.azurewebsites.net';
   const DAB_URL = 'https://my-dab-app.azurewebsites.net';
 
+  const TOTAL_STEPS = 9; // parse, controller, github, deploy, sql_create, data_sync, dab, dab_verify, swagger
   const log = async (step, status, detail='') => {
     const job = JSON.parse(await kv.get(jobId)||'{}');
     job.steps = job.steps||[];
     const existing = job.steps.find(s=>s.step===step);
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
-    if (status==='done'||status==='error') {
-      const allDone = job.steps.every(s=>['done','error','skip'].includes(s.status));
-      if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
-    }
+    // Only mark complete when we have all steps finished (done at the very end of pipeline)
+    // Never auto-complete mid-pipeline
     await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
   };
 
