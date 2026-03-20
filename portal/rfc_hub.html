@@ -844,7 +844,7 @@ const SAP_SPEC = {
           IM_DEL_CHG_DATE_HIGH:{type:"string",description:"Date to (YYYYMMDD)",example:"20260319"} } } } } },
       responses:{ "200":{ description:"PO modification records",
         content:{ "application/json":{ schema:{ type:"object" },
-          examples:{ data:{summary:"With results",value:{Status:true,Data:{ET_PO_OUTPUT:[{EBELN:"4500001234",ORIGNAL_DEL_DATE:"20260101",CHNG_NO:"001",CURRENT_DEL_DATE:"20260315",DELAYED_BY:"73",REASON:"Production delay"}]}}} } } } } } } },
+          examples:{ data:{summary:"With results",value:{Status:true,Data:{ET_PO_OUTPUT:[{EBELN:"4500001234",ORIGNAL_DEL_DATE:"20260101",CHNG_NO:"001",CURRENT_DEL_DATE:"20260315",DEL_EXT_DATE:"20260330",DELAYED_BY:"73",REASON:"Production delay"}]}}} } } } } } } },
     "/api/ZADVANCE_PAYMENT_RFC/Post":{ post:{ tags:["Finance"], summary:"Advance Payment FI Documents",
       description:"Fetches advance payment FI documents for a company code. Returns IT_FINAL table (ZADVANCE_ST — 16 fields).",
       requestBody:{ required:true, content:{ "application/json":{ schema:{ type:"object", required:["I_COMPANY_CODE"],
@@ -859,7 +859,7 @@ const SAP_SPEC = {
                 FISCAL_YEAR:{type:"string"}, LINE_ITEM:{type:"string"}, POSTING_KEY:{type:"string"}, ACCOUNT_TYPE:{type:"string"},
                 SPECIAL_G_L_IND:{type:"string"}, TRANSACT_TYPE:{type:"string"}, DEBIT_CREDIT:{type:"string"},
                 AMOUNT_IN_LC:{type:"string"}, AMOUNT:{type:"string"}, TEXT:{type:"string"}, VENDOR:{type:"string"},
-                PAYMENT_AMT:{type:"string"}, POSTING_DATE:{type:"string"} } } } } } } } } } } } }
+                PAYMENT_AMT:{type:"string"}, POSTING_DATE:{type:"string"} } } } } } } } } } } } } }
   },
   components:{ schemas:{
     ErrorResponse:{ type:"object", properties:{ Status:{type:"boolean",example:false}, Message:{type:"string"} } }
