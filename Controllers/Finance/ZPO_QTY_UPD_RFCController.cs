@@ -1,115 +1,88 @@
+using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
+using Vendor_SRM_Routing_Application.Models.HU_Creation;
+using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Finance
 {
-    /// <summary>
-    /// RFC: ZPO_QTY_UPD_RFC
-    /// Purpose: Update PO Quantity in SAP for one or more PO line items.
-    /// IMPORT:  IM_DATA TYPE ZTT_PO_IMP_QTY (Pass by Reference)
-    ///          Table structure ZST_PO_IMP_QTY:
-    ///            EBELN   CHAR10  - Purchasing Document Number
-    ///            MATNR   CHAR40  - Material Number
-    ///            PO_ITEM NUMC5   - Item Number of Purchasing Document
-    ///            QTY     CHAR13  - Quantity
-    /// EXPORT:  MSG_TYPE CHAR1   - Message type (S=Success, E=Error, W=Warning)
-    ///          MESSAGE  CHAR100 - Message text
-    /// </summary>
     public class ZPO_QTY_UPD_RFCController : BaseController
     {
         [HttpPost]
-        public async Task<HttpResponseMessage> Post([FromBody] ZPO_QTY_UPD_RFCRequest request)
+        [Route("api/ZPO_QTY_UPD_RFC/Post")]
+        public IHttpActionResult Post([FromBody] ZPO_QTY_UPD_RFCRequest request)
         {
-            return await Task.Run(() =>
+            try
             {
-                try
+                if (request == null)
                 {
-                    if (request == null || request.IM_DATA == null || request.IM_DATA.Count == 0)
-                    {
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                        {
-                            Status  = false,
-                            Message = "IM_DATA table is required and must contain at least one row."
-                        });
-                    }
+                    return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = "Request data is required" });
+                }
 
-                    RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                    RfcDestination      dest   = RfcDestinationManager.GetDestination(rfcPar);
-                    RfcRepository       rfcrep = dest.Repository;
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZPO_QTY_UPD_RFC");
 
-                    IRfcFunction myfun = rfcrep.CreateFunction("ZPO_QTY_UPD_RFC");
-
-                    // Populate IM_DATA table (ZTT_PO_IMP_QTY)
-                    IRfcTable imData = myfun.GetTable("IM_DATA");
+                // IM_DATA is a TABLE parameter (ZTT_PO_IMP_QTY → rows of ZST_PO_IMP_QTY)
+                if (request.IM_DATA != null && request.IM_DATA.Count > 0)
+                {
+                    IRfcTable imDataTable = myfun.GetTable("IM_DATA");
                     foreach (var row in request.IM_DATA)
                     {
-                        imData.Append();
-                        imData.SetValue("EBELN",   row.EBELN   ?? string.Empty);
-                        imData.SetValue("MATNR",   row.MATNR   ?? string.Empty);
-                        imData.SetValue("PO_ITEM", row.PO_ITEM ?? string.Empty);
-                        imData.SetValue("QTY",     row.QTY     ?? string.Empty);
+                        imDataTable.Append();
+                        if (!string.IsNullOrEmpty(row.EBELN))    imDataTable.SetValue("EBELN", row.EBELN);
+                        if (!string.IsNullOrEmpty(row.MATNR))    imDataTable.SetValue("MATNR", row.MATNR);
+                        if (!string.IsNullOrEmpty(row.PO_ITEM))  imDataTable.SetValue("PO_ITEM", row.PO_ITEM);
+                        if (!string.IsNullOrEmpty(row.QTY))      imDataTable.SetValue("QTY", row.QTY);
                     }
-
-                    myfun.Invoke(dest);
-
-                    // Read export parameters
-                    string msgType = myfun.GetValue("MSG_TYPE")?.ToString() ?? string.Empty;
-                    string message = myfun.GetValue("MESSAGE")?.ToString()  ?? string.Empty;
-
-                    if (msgType == "E")
-                    {
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                        {
-                            Status   = false,
-                            MsgType  = msgType,
-                            Message  = message
-                        });
-                    }
-
-                    return Request.CreateResponse(HttpStatusCode.OK, new
-                    {
-                        Status   = true,
-                        MsgType  = msgType,
-                        Message  = message
-                    });
                 }
-                catch (Exception ex)
+
+                myfun.Invoke(dest);
+
+                string msgType = myfun.GetString("MSG_TYPE");
+                string message = myfun.GetString("MESSAGE");
+                bool   status  = msgType == "S";
+
+                return Ok(new
                 {
-                    return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                    {
-                        Status  = false,
-                        Message = ex.Message
-                    });
-                }
-            });
+                    Status   = status,
+                    MSG_TYPE = msgType,
+                    MESSAGE  = message
+                });
+            }
+            catch (RfcAbapException ex)
+            {
+                return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message });
+            }
+            catch (RfcCommunicationException ex)
+            {
+                return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message });
+            }
         }
     }
 
-    // ── Request model ──────────────────────────────────────────────────────────
     public class ZPO_QTY_UPD_RFCRequest
     {
-        /// <summary>Table of PO quantity update records (ZTT_PO_IMP_QTY)</summary>
-        public List<ZST_PO_IMP_QTY_Row> IM_DATA { get; set; }
+        public List<ZST_PO_IMP_QTY> IM_DATA { get; set; }
     }
 
-    public class ZST_PO_IMP_QTY_Row
+    public class ZST_PO_IMP_QTY
     {
-        /// <summary>EBELN CHAR10 - Purchasing Document Number</summary>
-        public string EBELN   { get; set; }
-
-        /// <summary>MATNR CHAR40 - Material Number</summary>
-        public string MATNR   { get; set; }
-
-        /// <summary>PO_ITEM NUMC5 - Item Number of Purchasing Document</summary>
-        public string PO_ITEM { get; set; }
-
-        /// <summary>QTY CHAR13 - New quantity value</summary>
-        public string QTY     { get; set; }
+        public string EBELN   { get; set; }  // Purchasing Document Number (CHAR 10)
+        public string MATNR   { get; set; }  // Material Number (CHAR 40)
+        public string PO_ITEM { get; set; }  // Item Number of PO (NUMC 5)
+        public string QTY     { get; set; }  // Quantity (CHAR 13)
     }
 }
