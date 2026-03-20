@@ -1,0 +1,69 @@
+name: GET_URL_V2
+on:
+  push:
+    paths:
+      - '.github/workflows/get_url_v2.yml'
+jobs:
+  get_url:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Read tunnel log and test SAP
+        shell: powershell
+        run: |
+          $logFile = "C:\cloudflared\tunnel.log"
+          $cfPath = "C:\cloudflared\cloudflared.exe"
+          
+          # Kill old instances  
+          Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep 3
+          
+          # Start cloudflared using Start-Job (no &)
+          $job = Start-Job -ScriptBlock {
+            param($cf, $log)
+            & $cf tunnel --url http://localhost:9292 --logfile $log --no-autoupdate
+          } -ArgumentList $cfPath, $logFile
+          
+          Write-Host "Job ID: $($job.Id)"
+          
+          # Poll log for URL
+          $url = ""
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep 2
+            if (Test-Path $logFile) {
+              $content = [IO.File]::ReadAllText($logFile)
+              # Cloudflare logs URL in JSON: "url":"https://..."
+              $m = [regex]::Match($content, '"url":"(https://[a-z0-9\-]+\.trycloudflare\.com)"')
+              if (-not $m.Success) {
+                # Try bare URL format
+                $m = [regex]::Match($content, 'https://[a-z0-9\-]+\.trycloudflare\.com')
+              }
+              if ($m.Success) {
+                $url = if ($m.Groups.Count -gt 1) { $m.Groups[1].Value } else { $m.Value }
+                Write-Host "=== FOUND TUNNEL URL: $url ==="
+                break
+              }
+            }
+            Write-Host "Waiting... ($i)"
+          }
+          
+          if (-not $url) {
+            Write-Host "=== LOG CONTENT ==="
+            if (Test-Path $logFile) { Get-Content $logFile | Select-Object -Last 30 }
+            Stop-Job $job -ErrorAction SilentlyContinue
+            exit 1
+          }
+          
+          # Save it
+          $url | Out-File "C:\cloudflared\tunnel_url.txt" -Force
+          Write-Host "Saved tunnel URL: $url"
+          
+          # Wait a bit more for tunnel to stabilize
+          Start-Sleep 5
+          
+          # TEST SAP VIA TUNNEL
+          Write-Host "=== TESTING SAP VIA TUNNEL ==="
+          $body = '{"PO_NO":"4500001234","DELV_DATE":"20260401"}'
+          $r = Invoke-WebRequest "$url/api/ZPO_DD_UPD_RFC/Post" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 25
+          Write-Host "HTTP $($r.StatusCode): $($r.Content)"
+          
+          Write-Host "=== TUNNEL URL FOR WORKER: $url ==="
