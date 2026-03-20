@@ -17,23 +17,23 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_DD_UPD_RFC")]
-        public IHttpActionResult UpdatePurchaseOrderDeliveryDate([FromBody] ZPO_DD_UPD_RFCRequest request)
+        public IHttpActionResult UpdatePODeliveryDate([FromBody] ZPO_DD_UPD_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Ok(new { Status = "E", Message = "Request cannot be null" });
+                    return Json(new { Status = "E", Message = "Request cannot be null" });
                 }
 
                 if (string.IsNullOrEmpty(request.PO_NO))
                 {
-                    return Ok(new { Status = "E", Message = "PO_NO is required" });
+                    return Json(new { Status = "E", Message = "PO_NO is required" });
                 }
 
                 if (string.IsNullOrEmpty(request.DELV_DATE))
                 {
-                    return Ok(new { Status = "E", Message = "DELV_DATE is required" });
+                    return Json(new { Status = "E", Message = "DELV_DATE is required" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -53,22 +53,22 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
                 if (returnType == "E")
                 {
-                    return Ok(new { Status = "E", Message = returnMessage });
+                    return Json(new { Status = "E", Message = returnMessage });
                 }
 
-                return Ok(new { Status = "S", Message = returnMessage });
+                return Json(new { Status = returnType, Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
-            catch (RfcCommunicationException ex)
+            catch (CommunicationException ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
         }
     }
