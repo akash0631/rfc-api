@@ -1,115 +1,95 @@
+using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
+using Vendor_SRM_Routing_Application.Models.HU_Creation;
+using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
-namespace Vendor_SRM_Routing_Application.Controllers.Finance
+namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 {
-    /// <summary>
-    /// RFC: ZPO_COST_UPD_RFC
-    /// Purpose: Update PO Cost in SAP for one or more PO line items.
-    /// IMPORT:  IM_DATA TYPE ZTT_PO_IMP (Pass by Reference)
-    ///          Table structure ZST_PO_IMP:
-    ///            EBELN   CHAR10  - Purchasing Document Number
-    ///            MATNR   CHAR40  - Material Number
-    ///            PO_ITEM NUMC5   - Item Number of Purchasing Document
-    ///            COST    CHAR13  - Cost
-    /// EXPORT:  MSG_TYPE CHAR1   - Message type (S=Success, E=Error, W=Warning)
-    ///          MESSAGE  CHAR100 - Message text
-    /// </summary>
     public class ZPO_COST_UPD_RFCController : BaseController
     {
         [HttpPost]
-        public async Task<HttpResponseMessage> Post([FromBody] ZPO_COST_UPD_RFCRequest request)
+        [Route("api/ZPO_COST_UPD_RFC")]
+        public IHttpActionResult ExecuteZPO_COST_UPD_RFC([FromBody] ZPO_COST_UPD_RFCRequest request)
         {
-            return await Task.Run(() =>
+            try
             {
-                try
+                if (request == null || request.IM_DATA == null)
                 {
-                    if (request == null || request.IM_DATA == null || request.IM_DATA.Count == 0)
-                    {
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                        {
-                            Status  = false,
-                            Message = "IM_DATA table is required and must contain at least one row."
-                        });
-                    }
-
-                    RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                    RfcDestination      dest   = RfcDestinationManager.GetDestination(rfcPar);
-                    RfcRepository       rfcrep = dest.Repository;
-
-                    IRfcFunction myfun = rfcrep.CreateFunction("ZPO_COST_UPD_RFC");
-
-                    // Populate IM_DATA table (ZTT_PO_IMP)
-                    IRfcTable imData = myfun.GetTable("IM_DATA");
-                    foreach (var row in request.IM_DATA)
-                    {
-                        imData.Append();
-                        imData.SetValue("EBELN",   row.EBELN   ?? string.Empty);
-                        imData.SetValue("MATNR",   row.MATNR   ?? string.Empty);
-                        imData.SetValue("PO_ITEM", row.PO_ITEM ?? string.Empty);
-                        imData.SetValue("COST",    row.COST    ?? string.Empty);
-                    }
-
-                    myfun.Invoke(dest);
-
-                    // Read export parameters
-                    string msgType = myfun.GetValue("MSG_TYPE")?.ToString() ?? string.Empty;
-                    string message = myfun.GetValue("MESSAGE")?.ToString()  ?? string.Empty;
-
-                    if (msgType == "E")
-                    {
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                        {
-                            Status   = false,
-                            MsgType  = msgType,
-                            Message  = message
-                        });
-                    }
-
-                    return Request.CreateResponse(HttpStatusCode.OK, new
-                    {
-                        Status   = true,
-                        MsgType  = msgType,
-                        Message  = message
-                    });
+                    return Ok(new { Status = "E", Message = "Invalid request data" });
                 }
-                catch (Exception ex)
+
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZPO_COST_UPD_RFC");
+
+                IRfcStructure imDataStructure = myfun.GetStructure("IM_DATA");
+                
+                // Map request data to SAP structure
+                if (!string.IsNullOrEmpty(request.IM_DATA.PO_NUMBER))
+                    imDataStructure.SetValue("PO_NUMBER", request.IM_DATA.PO_NUMBER);
+                if (!string.IsNullOrEmpty(request.IM_DATA.PLANT))
+                    imDataStructure.SetValue("PLANT", request.IM_DATA.PLANT);
+                if (!string.IsNullOrEmpty(request.IM_DATA.MATERIAL))
+                    imDataStructure.SetValue("MATERIAL", request.IM_DATA.MATERIAL);
+                if (!string.IsNullOrEmpty(request.IM_DATA.COST))
+                    imDataStructure.SetValue("COST", request.IM_DATA.COST);
+                if (!string.IsNullOrEmpty(request.IM_DATA.CURRENCY))
+                    imDataStructure.SetValue("CURRENCY", request.IM_DATA.CURRENCY);
+                if (!string.IsNullOrEmpty(request.IM_DATA.VENDOR))
+                    imDataStructure.SetValue("VENDOR", request.IM_DATA.VENDOR);
+
+                myfun.SetValue("IM_DATA", imDataStructure);
+
+                myfun.Invoke(dest);
+
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
+
+                if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                    {
-                        Status  = false,
-                        Message = ex.Message
-                    });
+                    return Ok(new { Status = "E", Message = returnMessage });
                 }
-            });
+
+                return Ok(new { Status = "S", Message = returnMessage });
+            }
+            catch (RfcAbapException ex)
+            {
+                return Ok(new { Status = "E", Message = ex.Message });
+            }
+            catch (RfcCommunicationException ex)
+            {
+                return Ok(new { Status = "E", Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new { Status = "E", Message = ex.Message });
+            }
         }
     }
 
-    // ── Request model ──────────────────────────────────────────────────────────
     public class ZPO_COST_UPD_RFCRequest
     {
-        /// <summary>Table of PO cost update records (ZTT_PO_IMP)</summary>
-        public List<ZST_PO_IMP_Row> IM_DATA { get; set; }
+        public ZST_PO_IMP IM_DATA { get; set; }
     }
 
-    public class ZST_PO_IMP_Row
+    public class ZST_PO_IMP
     {
-        /// <summary>EBELN CHAR10 - Purchasing Document Number</summary>
-        public string EBELN   { get; set; }
-
-        /// <summary>MATNR CHAR40 - Material Number</summary>
-        public string MATNR   { get; set; }
-
-        /// <summary>PO_ITEM NUMC5 - Item Number of Purchasing Document</summary>
-        public string PO_ITEM { get; set; }
-
-        /// <summary>COST CHAR13 - New cost value</summary>
-        public string COST    { get; set; }
+        public string PO_NUMBER { get; set; }
+        public string PLANT { get; set; }
+        public string MATERIAL { get; set; }
+        public string COST { get; set; }
+        public string CURRENCY { get; set; }
+        public string VENDOR { get; set; }
     }
 }
