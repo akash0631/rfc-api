@@ -1924,12 +1924,14 @@ init();
     // ── POST /tunnel-setup → create named CF tunnel (one-time setup) ──────────
     if (url.pathname === '/tunnel-setup' && request.method === 'POST') {
       const CF_ACCOUNT = 'bab06c93e17ae71cae3c11b4cc40240b';
-      const CF_TOKEN   = env.CLOUDFLARE_API_KEY || env.CF_API_KEY || env.CLOUDFLARE_API_TOKEN;
-      if (!CF_TOKEN) return new Response(JSON.stringify({error:'CF_API_KEY secret not set on worker'}),
+      const CF_KEY     = env.CLOUDFLARE_API_KEY || env.CF_API_KEY || env.CLOUDFLARE_API_TOKEN;
+      const CF_EMAIL   = 'Akash@v2kart.com';
+      if (!CF_KEY) return new Response(JSON.stringify({error:'CLOUDFLARE_API_KEY secret not set on worker'}),
         {status:500, headers:{'Content-Type':'application/json'}});
       try {
         const TUNNEL_NAME = 'v2-sap-api';
-        const h = {'Authorization':`Bearer ${CF_TOKEN}`,'Content-Type':'application/json'};
+        // Global API Key auth (X-Auth-Key + X-Auth-Email)
+        const h = {'X-Auth-Key':CF_KEY,'X-Auth-Email':CF_EMAIL,'Content-Type':'application/json'};
         
         // Check existing
         let listR = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false`, {headers:h});
