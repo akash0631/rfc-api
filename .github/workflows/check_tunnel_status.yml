@@ -1,0 +1,64 @@
+name: CHECK_TUNNEL_STATUS
+on:
+  push:
+    paths:
+      - '.github/workflows/check_tunnel_status.yml'
+jobs:
+  check:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Check cloudflared service and tunnel connectivity
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          
+          # Service status
+          $svc = Get-Service "cloudflared" -ErrorAction SilentlyContinue
+          Write-Host "=== Service: $($svc.Status) ==="
+          
+          if ($svc.Status -ne "Running") {
+            Write-Host "Starting service..."
+            Start-Service "cloudflared" -ErrorAction SilentlyContinue
+            Start-Sleep 5
+            $svc = Get-Service "cloudflared" -ErrorAction SilentlyContinue
+            Write-Host "After start: $($svc.Status)"
+          }
+          
+          # Read tunnel log for connectivity
+          $logFiles = @(
+            "C:\Windows\System32\config\systemprofile\.cloudflared\cloudflared.log",
+            "C:\cloudflared\cloudflared.log",
+            "C:\cloudflared\tunnel.log"
+          )
+          foreach ($log in $logFiles) {
+            if (Test-Path $log) {
+              Write-Host "=== LOG: $log ==="
+              Get-Content $log -Tail 20 -ErrorAction SilentlyContinue
+            }
+          }
+          
+          # Check cloudflared process logs via event viewer
+          Write-Host "=== Running processes ==="
+          Get-Process cloudflared -ErrorAction SilentlyContinue | Select-Object Id, CPU, WorkingSet
+          
+          # Test IIS is running
+          Write-Host "=== IIS Test (direct) ==="
+          try {
+            $r = Invoke-WebRequest "http://localhost:9292/api/ZPO_DD_UPD_RFC/Post" -Method POST `
+              -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' `
+              -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+            Write-Host "IIS OK: $($r.Content)"
+          } catch { Write-Host "IIS: $_" }
+          
+          # Test tunnel URL from outside (via Invoke-WebRequest which uses Windows networking)
+          $tunnelUrl = "https://7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3.cfargotunnel.com"
+          Write-Host "=== Tunnel Test ==="
+          try {
+            $r2 = Invoke-WebRequest "$tunnelUrl/api/ZPO_DD_UPD_RFC/Post" -Method POST `
+              -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' `
+              -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
+            Write-Host "TUNNEL OK: $($r2.Content)"
+          } catch { Write-Host "TUNNEL: $_" }
+          
+          Write-Host "Done."
+          exit 0
