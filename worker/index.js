@@ -6,8 +6,8 @@
 const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'master';
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
-const IIS_HOST         = 'http://192.168.151.46:8888';
-const GH_WORKFLOW_ID   = '245608998';  // deploy-test-vm.yml
+const IIS_HOST         = 'http://192.168.151.36:9292';
+const GH_WORKFLOW_ID   = '245504825';  // deploy-iis.yml (Build and Deploy to .36 IIS)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
