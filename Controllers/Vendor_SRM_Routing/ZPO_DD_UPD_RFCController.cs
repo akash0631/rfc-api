@@ -11,56 +11,14 @@ using Vendor_Application_MVC.Controllers;
 using Vendor_SRM_Routing_Application.Models.HU_Creation;
 using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
-namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
+// NOTE: Route handled by Controllers/Finance/ZPO_DD_UPD_RFCController.cs
+// This file is a generated copy — kept for reference only, route is disabled.
+namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
 {
-    public class ZPO_DD_UPD_RFCController : BaseController
+    // Placeholder — canonical controller is in Controllers/Finance/ZPO_DD_UPD_RFCController.cs
+    public class ZPO_DD_UPD_RFC_VendorController : BaseController
     {
-        [HttpPost]
-        [Route("api/ZPO_DD_UPD_RFC")]
-        public IHttpActionResult UpdatePurchaseOrderDeliveryDate([FromBody] ZPO_DD_UPD_RFCRequest request)
-        {
-            try
-            {
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                RfcRepository rfcrep = dest.Repository;
-                IRfcFunction myfun = rfcrep.CreateFunction("ZPO_DD_UPD_RFC");
-
-                myfun.SetValue("PO_NO", request.PO_NO);
-                myfun.SetValue("DELV_DATE", request.DELV_DATE);
-
-                myfun.Invoke(dest);
-
-                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-
-                string returnType = EX_RETURN.GetString("TYPE");
-                string returnMessage = EX_RETURN.GetString("MESSAGE");
-
-                if (returnType == "E")
-                {
-                    return Ok(new { Status = "E", Message = returnMessage });
-                }
-
-                return Ok(new { Status = returnType, Message = returnMessage });
-            }
-            catch (RfcAbapException ex)
-            {
-                return Ok(new { Status = "E", Message = ex.Message });
-            }
-            catch (CommunicationException ex)
-            {
-                return Ok(new { Status = "E", Message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return Ok(new { Status = "E", Message = ex.Message });
-            }
-        }
-    }
-
-    public class ZPO_DD_UPD_RFCRequest
-    {
-        public string PO_NO { get; set; }
-        public string DELV_DATE { get; set; }
+        // Route intentionally omitted to avoid duplicate route conflict.
+        // Use /api/ZPO_DD_UPD_RFC/Post from the Finance controller.
     }
 }
