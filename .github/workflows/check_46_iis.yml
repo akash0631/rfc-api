@@ -1,0 +1,38 @@
+name: CHECK_46_IIS
+on:
+  push:
+    paths: ['.github/workflows/check_46_iis.yml']
+jobs:
+  check:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Check .46 IIS sites and NCo DLLs
+        shell: powershell
+        run: |
+          Write-Host "=== IIS Sites on .46 ==="
+          Import-Module WebAdministration -EA SilentlyContinue
+          Get-Website | Select-Object Name, State, PhysicalPath, @{n='Port';e={($_.bindings.collection[0].bindingInformation -split ':')[1]}}
+          
+          Write-Host "`n=== App Pools ==="
+          Get-WebConfiguration system.applicationHost/applicationPools/add | Select-Object name, state, managedRuntimeVersion
+          
+          Write-Host "`n=== NCo DLLs on .46 ==="
+          $paths = @("C:\Windows\System32", "C:\Windows\SysWOW64", "C:\inetpub\wwwroot")
+          foreach ($p in $paths) {
+            $dlls = Get-ChildItem $p -Filter "sapnco*" -EA SilentlyContinue
+            if ($dlls) { $dlls | Select-Object FullName, Length }
+          }
+          
+          Write-Host "`n=== NCo DLLs on .36 (via PS-Remote) ==="
+          $cred = New-Object PSCredential('V2DC-ADDVERB\Administrator', (ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force))
+          $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop
+          Invoke-Command -Session $s -ScriptBlock {
+            $paths = @("C:\Windows\System32","C:\Windows\SysWOW64","C:\inetpub\wwwroot","C:\V2RfcTest","C:\V2RfcTest\bin")
+            foreach ($p in $paths) {
+              $dlls = Get-ChildItem $p -Filter "sapnco*" -EA SilentlyContinue
+              if ($dlls) { Write-Host "Found in $p"; $dlls | Select-Object FullName, Length }
+            }
+            Write-Host "`n=== .36 IIS C:\V2RfcTest\bin DLLs ==="
+            Get-ChildItem "C:\V2RfcTest\bin" -EA SilentlyContinue | Select-Object Name, Length | Sort-Object Name
+          }
+          Remove-PSSession $s
