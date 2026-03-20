@@ -1921,6 +1921,28 @@ init();
     }
 
 
+
+    // ── GET /tunnel-test → test tunnel connectivity from worker ────────────────
+    if (url.pathname === '/tunnel-test') {
+      const TUNNEL_ID = '7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3';
+      const testUrl = `https://${TUNNEL_ID}.cfargotunnel.com/api/ZPO_DD_UPD_RFC/Post`;
+      try {
+        const r = await fetch(testUrl, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({PO_NO:'4500001234',DELV_DATE:'20260401'}),
+          signal: AbortSignal.timeout(15000)
+        });
+        const txt = await r.text();
+        return new Response(JSON.stringify({
+          tunnelUrl: testUrl, httpStatus: r.status, response: txt
+        }), {headers:{'Content-Type':'application/json'}});
+      } catch(e) {
+        return new Response(JSON.stringify({error:e.message, tunnelUrl:testUrl}),
+          {status:500, headers:{'Content-Type':'application/json'}});
+      }
+    }
+
     // ── POST /tunnel-setup → create named CF tunnel (one-time setup) ──────────
     if (url.pathname === '/tunnel-setup' && request.method === 'POST') {
       const CF_ACCOUNT = 'bab06c93e17ae71cae3c11b4cc40240b';
