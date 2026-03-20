@@ -17,68 +17,65 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_DD_UPD_RFC")]
-        public IHttpActionResult ZPO_DD_UPD_RFC([FromBody] ZPO_DD_UPD_RFCRequest request)
+        public IHttpActionResult UpdatePurchaseOrderDeliveryDate([FromBody] ZPO_DD_UPD_RFCRequest request)
         {
             try
             {
+                if (request == null)
+                {
+                    return Ok(new { Status = "E", Message = "Request cannot be null" });
+                }
+
+                if (string.IsNullOrEmpty(request.PO_NO))
+                {
+                    return Ok(new { Status = "E", Message = "PO_NO is required" });
+                }
+
+                if (string.IsNullOrEmpty(request.DELV_DATE))
+                {
+                    return Ok(new { Status = "E", Message = "DELV_DATE is required" });
+                }
+
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_DD_UPD_RFC");
 
+                myfun.SetValue("PO_NO", request.PO_NO);
+                myfun.SetValue("DELV_DATE", request.DELV_DATE);
+
                 myfun.Invoke(dest);
-                
+
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                if (EX_RETURN.GetString("TYPE") == "E")
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
+
+                if (returnType == "E")
                 {
-                    return Ok(new ZPO_DD_UPD_RFCResponse
-                    {
-                        Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE")
-                    });
+                    return Ok(new { Status = "E", Message = returnMessage });
                 }
 
-                return Ok(new ZPO_DD_UPD_RFCResponse
-                {
-                    Status = EX_RETURN.GetString("TYPE"),
-                    Message = EX_RETURN.GetString("MESSAGE")
-                });
+                return Ok(new { Status = "S", Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new ZPO_DD_UPD_RFCResponse
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
-                return Ok(new ZPO_DD_UPD_RFCResponse
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Ok(new ZPO_DD_UPD_RFCResponse
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
         }
     }
 
     public class ZPO_DD_UPD_RFCRequest
     {
-    }
-
-    public class ZPO_DD_UPD_RFCResponse
-    {
-        public string Status { get; set; }
-        public string Message { get; set; }
+        public string PO_NO { get; set; }
+        public string DELV_DATE { get; set; }
     }
 }
