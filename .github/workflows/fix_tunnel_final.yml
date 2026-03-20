@@ -1,0 +1,65 @@
+name: FIX_TUNNEL_FINAL
+on:
+  push:
+    paths:
+      - '.github/workflows/fix_tunnel_final.yml'
+jobs:
+  fix:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Fix tunnel - restart service and check connection
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          $cfPath = "C:\cloudflared\cloudflared.exe"
+          
+          # Stop everything
+          Write-Host "=== Stopping all cloudflared ==="
+          Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Stop-Service "cloudflared" -Force -ErrorAction SilentlyContinue
+          Start-Sleep 5
+          
+          # Check service config
+          Write-Host "=== Service binary path ==="
+          $svcInfo = Get-WmiObject Win32_Service -Filter "Name='cloudflared'" -ErrorAction SilentlyContinue
+          Write-Host "Path: $($svcInfo.PathName)"
+          
+          # Restart with named tunnel token
+          Write-Host "=== Starting service ==="
+          Start-Service "cloudflared"
+          Start-Sleep 10
+          
+          $status = (Get-Service "cloudflared").Status
+          Write-Host "Service: $status"
+          
+          # Check system profile log (where service writes)
+          $sysLog = "C:\Windows\System32\config\systemprofile\.cloudflared\cloudflared.log"
+          if (Test-Path $sysLog) {
+            Write-Host "=== SERVICE LOG ==="
+            Get-Content $sysLog -Tail 30
+          } else {
+            Write-Host "No system profile log, checking service log..."
+            # Try to find log
+            Get-ChildItem "C:\Windows\System32\config\systemprofile" -Recurse -ErrorAction SilentlyContinue | Select FullName
+          }
+          
+          # Test named tunnel from inside (using hosts file trick won't work)
+          # Test using cfargotunnel.com directly
+          Write-Host "=== Testing named tunnel URL ==="
+          try {
+            $r = Invoke-WebRequest "https://7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3.cfargotunnel.com/api/ZPO_DD_UPD_RFC/Post" `
+              -Method POST -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' `
+              -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            Write-Host "NAMED TUNNEL OK: $($r.Content)"
+          } catch { Write-Host "Named tunnel: $_" }
+          
+          # Test IIS direct  
+          Write-Host "=== IIS Direct ==="
+          try {
+            $r2 = Invoke-WebRequest "http://localhost:9292/api/ZPO_DD_UPD_RFC/Post" `
+              -Method POST -Body '{"PO_NO":"4500001234","DELV_DATE":"20260401"}' `
+              -ContentType "application/json" -UseBasicParsing -TimeoutSec 10
+            Write-Host "IIS: $($r2.Content)"
+          } catch { Write-Host "IIS: $_" }
+          
+          exit 0
