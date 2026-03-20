@@ -17,26 +17,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_DD_UPD_RFC")]
-        public IHttpActionResult UpdatePODeliveryDate([FromBody] ZPO_DD_UPD_RFCRequest request)
+        public IHttpActionResult UpdatePurchaseOrderDeliveryDate(ZPO_DD_UPD_RFCRequest request)
         {
             try
             {
-                if (request == null)
-                {
-                    return Json(new { Status = "E", Message = "Request cannot be null" });
-                }
-
-                if (string.IsNullOrEmpty(request.PO_NO))
-                {
-                    return Json(new { Status = "E", Message = "PO_NO is required" });
-                }
-
-                if (string.IsNullOrEmpty(request.DELV_DATE))
-                {
-                    return Json(new { Status = "E", Message = "DELV_DATE is required" });
-                }
-
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_DD_UPD_RFC");
@@ -48,27 +33,27 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetString("TYPE");
-                string returnMessage = EX_RETURN.GetString("MESSAGE");
+                string status = EX_RETURN.GetValue("TYPE").ToString();
+                string message = EX_RETURN.GetValue("MESSAGE").ToString();
 
-                if (returnType == "E")
+                if (status == "E")
                 {
-                    return Json(new { Status = "E", Message = returnMessage });
+                    return Ok(new { Status = "E", Message = message });
                 }
 
-                return Json(new { Status = returnType, Message = returnMessage });
+                return Ok(new { Status = status, Message = message });
             }
             catch (RfcAbapException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new { Status = "E", Message = ex.Message });
             }
         }
     }
