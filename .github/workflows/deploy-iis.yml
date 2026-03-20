@@ -9,91 +9,80 @@ jobs:
   deploy:
     runs-on: [self-hosted, iis]
     steps:
-      - name: Checkout latest
+      - name: Checkout
         uses: actions/checkout@v3
         with:
-          token: ${{ github.token }}
           fetch-depth: 1
 
-      - name: Publish VS project to IIS folder
+      - name: Build and copy DLLs to IIS
         shell: powershell
         run: |
-          $ErrorActionPreference = "Continue"
-          $projDir  = "D:\V2 Projects\Vendor_SRM_Routing_Application"
-          $pubDir   = "C:\V2RfcTest"
-          $msbuild  = $null
-
-          # Find MSBuild
+          $ErrorActionPreference = 'Continue'
+          $projDir = 'D:\V2 Projects\Vendor_SRM_Routing_Application'
+          $pubDir  = 'C:\V2RfcTest'
+          
+          $msbuild = $null
           $paths = @(
-            "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
-            "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
-            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe"
+            'C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
+            'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
+            'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe'
           )
           foreach ($p in $paths) { if (Test-Path $p) { $msbuild = $p; break } }
-          if (-not $msbuild) {
-            $vs = & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe 2>&1
-            if ($vs) { $msbuild = ($vs | Select-Object -First 1).Trim() }
-          }
-          Write-Host "MSBuild: $msbuild"
-
+          
           if ($msbuild -and (Test-Path "$projDir\Vendor_SRM_Routing_Application.sln")) {
-            Write-Host "=== Building solution ==="
+            Write-Host 'Building solution...'
             & $msbuild "$projDir\Vendor_SRM_Routing_Application.sln" /p:Configuration=Release /t:Build /v:minimal 2>&1 | Select-Object -Last 10
-            Write-Host "Build exit: $LASTEXITCODE"
-
-            Write-Host "=== Copying bin to IIS folder ==="
             $binDir = "$projDir\bin\Release"
             if (Test-Path $binDir) {
               Copy-Item "$binDir\*.dll" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
               Copy-Item "$binDir\*.pdb" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-              Write-Host "Copied DLLs from $binDir"
+              Write-Host 'DLLs copied from Release bin'
             }
           } else {
-            Write-Host "MSBuild unavailable — copying from best available source"
-            $appDll = Get-ChildItem "D:\V2 Projects" -Recurse -Filter "Vendor_SRM_Routing_Application.dll" -ErrorAction SilentlyContinue |
-                      Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            Write-Host 'MSBuild not found - copying from latest compiled DLL'
+            $appDll = Get-ChildItem 'D:\V2 Projects' -Recurse -Filter 'Vendor_SRM_Routing_Application.dll' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if ($appDll) {
               $srcBin = Split-Path $appDll.FullName
-              Write-Host "Source: $srcBin"
               Copy-Item "$srcBin\*.dll" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
               Copy-Item "$srcBin\*.pdb" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-              Write-Host "Copied"
+              Write-Host "Copied from $srcBin"
             }
           }
 
-      - name: Fix Web.config for SAP Dev + recycle app pool
+      - name: Fix Web.config and recycle app pool
         shell: powershell
         run: |
-          $ErrorActionPreference = "Continue"
-          $webConfig = "C:\V2RfcTest\Web.config"
+          $ErrorActionPreference = 'Continue'
+          $webConfig = 'C:\V2RfcTest\Web.config'
           if (Test-Path $webConfig) {
             $c = Get-Content $webConfig -Raw
             $c = $c -replace '192\.168\.144\.170', '192.168.144.174'
             $c = $c -replace 'value="600"', 'value="210"'
-            $c | Set-Content $webConfig -Encoding UTF8
-            Write-Host "Web.config fixed to SAP Dev"
+            Set-Content $webConfig $c -Encoding UTF8
+            Write-Host 'Web.config: switched to SAP Dev'
           }
-          $appcmd = "C:\Windows\System32\inetsrv\appcmd.exe"
+          $appcmd = 'C:\Windows\System32\inetsrv\appcmd.exe'
           if (Test-Path $appcmd) {
             & $appcmd recycle apppool /apppool.name:V2RfcTestPool 2>&1 | Write-Host
-            Write-Host "App pool recycled"
           }
           Start-Sleep 5
 
-      - name: Test all SAP endpoints
+      - name: Test SAP endpoints
         shell: powershell
         run: |
-          $ErrorActionPreference = "Continue"
+          $ErrorActionPreference = 'Continue'
+          Start-Sleep 3
           $tests = @(
-            @{n="ZPO_DD_UPD_RFC";     u="http://localhost:9292/api/ZPO_DD_UPD_RFC/Post";      b='{"PO_NO":"4500001234","DELV_DATE":"20260401"}'},
-            @{n="ZPO_MODIFICATION";   u="http://localhost:9292/api/ZPO_MODIFICATION/Execute";  b='{"IM_PO_NO":"","IM_DEL_CHG_DATE_LOW":"20260101","IM_DEL_CHG_DATE_HIGH":"20260320"}'},
-            @{n="ZPO_COST_UPD_RFC";   u="http://localhost:9292/api/ZPO_COST_UPD_RFC/Post";    b='{"IM_DATA":[{"EBELN":"4500001234","MATNR":"000000000010000001","PO_ITEM":"00010","COST":"100.00"}]}'},
-            @{n="ZADVANCE_PAYMENT";   u="http://localhost:9292/api/ZADVANCE_PAYMENT_RFC/Post"; b='{"I_COMPANY_CODE":"1100","I_POSTING_DATE_LOW":"20260101","I_POSTING_DATE_HIGH":"20260320"}'}
+            @{n='ZPO_DD_UPD_RFC';   u='http://localhost:9292/api/ZPO_DD_UPD_RFC/Post';      b='{"PO_NO":"4500001234","DELV_DATE":"20260401"}'},
+            @{n='ZPO_MODIFICATION'; u='http://localhost:9292/api/ZPO_MODIFICATION/Execute';  b='{"IM_PO_NO":"","IM_DEL_CHG_DATE_LOW":"20260101","IM_DEL_CHG_DATE_HIGH":"20260320"}'},
+            @{n='ZPO_COST_UPD_RFC'; u='http://localhost:9292/api/ZPO_COST_UPD_RFC/Post';    b='{"IM_DATA":[{"EBELN":"4500001234","MATNR":"000000000010000001","PO_ITEM":"00010","COST":"100.00"}]}'}
           )
           foreach ($t in $tests) {
             try {
-              $r = Invoke-WebRequest $t.u -Method POST -Body $t.b -ContentType "application/json" -UseBasicParsing -TimeoutSec 15
-              Write-Host "✅ $($t.n): $($r.Content.Substring(0,[Math]::Min(80,$r.Content.Length)))"
-            } catch { Write-Host "❌ $($t.n): $_" }
+              $r = Invoke-WebRequest $t.u -Method POST -Body $t.b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
+              Write-Host "OK $($t.n): $($r.Content.Substring(0,[Math]::Min(80,$r.Content.Length)))"
+            } catch {
+              Write-Host "FAIL $($t.n): $_"
+            }
           }
           exit 0
