@@ -17,11 +17,26 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_DD_UPD_RFC")]
-        public IHttpActionResult UpdatePurchaseOrderDeliveryDate(ZPO_DD_UPD_RFCRequest request)
+        public IHttpActionResult UpdatePurchaseOrderDeliveryDate([FromBody] ZPO_DD_UPD_Request request)
         {
             try
             {
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
+                if (request == null)
+                {
+                    return Ok(new { Status = "E", Message = "Request cannot be null" });
+                }
+
+                if (string.IsNullOrEmpty(request.PO_NO))
+                {
+                    return Ok(new { Status = "E", Message = "PO_NO is required" });
+                }
+
+                if (string.IsNullOrEmpty(request.DELV_DATE))
+                {
+                    return Ok(new { Status = "E", Message = "DELV_DATE is required" });
+                }
+
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_DD_UPD_RFC");
@@ -33,21 +48,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string status = EX_RETURN.GetValue("TYPE").ToString();
-                string message = EX_RETURN.GetValue("MESSAGE").ToString();
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
 
-                if (status == "E")
+                if (returnType == "E")
                 {
-                    return Ok(new { Status = "E", Message = message });
+                    return Ok(new { Status = "E", Message = returnMessage });
                 }
 
-                return Ok(new { Status = status, Message = message });
+                return Ok(new { Status = returnType, Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
                 return Ok(new { Status = "E", Message = ex.Message });
             }
-            catch (RfcCommunicationException ex)
+            catch (CommunicationException ex)
             {
                 return Ok(new { Status = "E", Message = ex.Message });
             }
@@ -58,7 +73,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
         }
     }
 
-    public class ZPO_DD_UPD_RFCRequest
+    public class ZPO_DD_UPD_Request
     {
         public string PO_NO { get; set; }
         public string DELV_DATE { get; set; }
