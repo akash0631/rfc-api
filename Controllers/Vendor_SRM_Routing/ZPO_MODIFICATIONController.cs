@@ -16,69 +16,60 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     public class ZPO_MODIFICATIONController : BaseController
     {
         [HttpPost]
-        [Route("api/ZPO_MODIFICATION")]
-        public async Task<IHttpActionResult> ExecuteZPO_MODIFICATION([FromBody] ZPO_MODIFICATIONRequest request)
+        [Route("api/ZPO_MODIFICATION/Execute")]
+        public IHttpActionResult Execute([FromBody] ZPO_MODIFICATIONRequest request)
         {
             try
             {
                 if (request == null)
-                {
                     return Json(new { Status = "E", Message = "Request cannot be null" });
-                }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_MODIFICATION");
 
-                myfun.SetValue("IM_PO_NO", request.IM_PO_NO);
-                myfun.SetValue("IM_PO_DEL_DATE", request.IM_PO_DEL_DATE);
-                myfun.SetValue("IM_DEL_CHG_DATE_LOW", request.IM_DEL_CHG_DATE_LOW);
-                myfun.SetValue("IM_DEL_CHG_DATE_HIGH", request.IM_DEL_CHG_DATE_HIGH);
+                if (!string.IsNullOrEmpty(request.IM_PO_NO))
+                    myfun.SetValue("IM_PO_NO", request.IM_PO_NO);
+                if (!string.IsNullOrEmpty(request.IM_PO_DEL_DATE))
+                    myfun.SetValue("IM_PO_DEL_DATE", request.IM_PO_DEL_DATE);
+                if (!string.IsNullOrEmpty(request.IM_DEL_CHG_DATE_LOW))
+                    myfun.SetValue("IM_DEL_CHG_DATE_LOW", request.IM_DEL_CHG_DATE_LOW);
+                if (!string.IsNullOrEmpty(request.IM_DEL_CHG_DATE_HIGH))
+                    myfun.SetValue("IM_DEL_CHG_DATE_HIGH", request.IM_DEL_CHG_DATE_HIGH);
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                
                 if (EX_RETURN.GetString("TYPE") == "E")
-                {
                     return Json(new { Status = "E", Message = EX_RETURN.GetString("MESSAGE") });
-                }
 
                 IRfcTable outputTable = myfun.GetTable("ET_PO_OUTPUT");
                 var outputData = outputTable.AsEnumerable().Select(row =>
                 {
                     var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < outputTable.Metadata.FieldCount; i++)
+                    int fieldCount = outputTable.Metadata.LineType.FieldCount;
+                    for (int i = 0; i < fieldCount; i++)
                     {
-                        var fieldName = outputTable.Metadata[i].Name;
-                        var fieldType = outputTable.Metadata[i].DataType;
-                        
-                        if (fieldType != RfcDataType.STRUCTURE && fieldType != RfcDataType.TABLE)
-                        {
-                            rowData[fieldName] = row.GetValue(fieldName);
-                        }
+                        var fieldMeta = outputTable.Metadata.LineType[i];
+                        if (fieldMeta.DataType != RfcDataType.STRUCTURE && fieldMeta.DataType != RfcDataType.TABLE)
+                            rowData[fieldMeta.Name] = row.GetValue(fieldMeta.Name);
                     }
                     return rowData;
                 }).ToList();
 
-                var response = new
+                return Json(new
                 {
                     Status = "S",
                     Message = "Success",
-                    Data = new
-                    {
-                        ET_PO_OUTPUT = outputData
-                    }
-                };
-
-                return Json(response);
+                    Data = new { ET_PO_OUTPUT = outputData }
+                });
             }
             catch (RfcAbapException ex)
             {
                 return Json(new { Status = "E", Message = ex.Message });
             }
-            catch (RfcCommunicationException ex)
+            catch (CommunicationException ex)
             {
                 return Json(new { Status = "E", Message = ex.Message });
             }
