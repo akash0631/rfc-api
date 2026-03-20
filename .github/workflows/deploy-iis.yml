@@ -13,13 +13,20 @@ on:
       - 'Global.asax.cs'
       - 'packages.config'
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (dev or prod)'
+        required: false
+        default: 'prod'
 
 env:
-  SOLUTION:   Vendor_SRM_Routing_Application.sln
-  PROJECT:    Vendor_SRM_Routing_Application.csproj
-  DEPLOY_URL: https://V2DC-ADDVERB:8172/msdeploy.axd
-  SITE_NAME:  VendrSrmAndroidApi
-  DEST_URL:   http://192.168.151.36:9005/
+  SOLUTION:     Vendor_SRM_Routing_Application.sln
+  PROJECT:      Vendor_SRM_Routing_Application.csproj
+  DEPLOY_IP:    192.168.151.36
+  DEPLOY_PORT:  8172
+  DEPLOY_URL:   https://192.168.151.36:8172/msdeploy.axd
+  SITE_NAME:    VendrSrmAndroidApi
+  DEST_URL:     http://192.168.151.36:9005/
 
 jobs:
   build:
@@ -98,18 +105,33 @@ jobs:
         shell: powershell
         run: |
           $md = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
-          & $md -verb:sync "-source:package=`"$env:PKG_ZIP`"" "-dest:auto,computerName=`"${{ env.DEPLOY_URL }}?site=${{ env.SITE_NAME }}`",userName=`"V2DC-ADDVERB\Administrator`",password=`"${{ secrets.DEPLOY_PASSWORD }}`",authType=`"Basic`",includeAcls=`"False`"" -disableLink:AppPoolExtension -disableLink:ContentExtension -disableLink:CertificateExtension "-setParam:name=`"IIS Web Application Name`",value=`"${{ env.SITE_NAME }}`"" -allowUntrusted -enableRule:AppOffline -retryAttempts:3 -retryInterval:2000
+          & $md `
+            -verb:sync `
+            "-source:package=`"$env:PKG_ZIP`"" `
+            "-dest:auto,computerName=`"${{ env.DEPLOY_URL }}?site=${{ env.SITE_NAME }}`",userName=`".Administrator`",password=`"${{ secrets.DEPLOY_PASSWORD }}`",authType=`"Basic`",includeAcls=`"False`"" `
+            -disableLink:AppPoolExtension `
+            -disableLink:ContentExtension `
+            -disableLink:CertificateExtension `
+            "-setParam:name=`"IIS Web Application Name`",value=`"${{ env.SITE_NAME }}`"" `
+            -allowUntrusted `
+            -enableRule:AppOffline `
+            -retryAttempts:5 `
+            -retryInterval:3000 `
+            -verbose
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          Write-Host "Deployed to http://192.168.151.36:9005/"
+          Write-Host "Deployed to ${{ env.DEST_URL }}"
 
       - name: Smoke test
         shell: powershell
         run: |
-          Start-Sleep 10
+          Start-Sleep 15
           try {
             $r = Invoke-WebRequest "${{ env.DEST_URL }}api/Authentication/Login" -Method POST -Body '{"username":"testing@v2kart.com","password":"123456"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 30
-            Write-Host "HTTP $($r.StatusCode): $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))"
-          } catch { Write-Host "Smoke: $_" }
+            Write-Host "HTTP $($r.StatusCode) - SMOKE TEST PASSED"
+            Write-Host $r.Content.Substring(0,[Math]::Min(300,$r.Content.Length))
+          } catch {
+            Write-Host "Smoke test: $_"
+          }
 
   notify:
     name: Deployment Summary
@@ -118,8 +140,15 @@ jobs:
     if: always()
     steps:
       - run: |
-          echo "Branch : Finaltest"
-          echo "Target : V2DC-ADDVERB .36 VendrSrmAndroidApi"
-          echo "URL    : http://192.168.151.36:9005/"
-          echo "Build  : ${{ needs.build.result }}"
-          echo "Deploy : ${{ needs.deploy.result }}"
+          echo "=================================="
+          echo "Branch  : Finaltest"
+          echo "Target  : 192.168.151.36:8172 -> VendrSrmAndroidApi"
+          echo "URL     : http://192.168.151.36:9005/"
+          echo "Build   : ${{ needs.build.result }}"
+          echo "Deploy  : ${{ needs.deploy.result }}"
+          echo "=================================="
+          if [ "${{ needs.deploy.result }}" = "success" ]; then
+            echo "STATUS: DEPLOYED SUCCESSFULLY"
+          else
+            echo "STATUS: DEPLOY FAILED - check MSDeploy logs"
+          fi
