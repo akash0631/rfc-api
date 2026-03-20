@@ -2005,6 +2005,43 @@ init();
       }
     }
 
+
+    // ── POST /relay-rfc → forward to IIS via CF tunnel → return SAP response ────
+    if (url.pathname === '/relay-rfc' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const { rfc, params } = body;
+        if (!rfc) return new Response(JSON.stringify({error:'rfc required'}),
+          {status:400,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+        const rfcRouteMap = {
+          'ZPO_DD_UPD_RFC':'ZPO_DD_UPD_RFC/Post',
+          'ZPO_MODIFICATION':'ZPO_MODIFICATION/Execute',
+          'ZADVANCE_PAYMENT_RFC':'ZADVANCE_PAYMENT_RFC/Post',
+          'ZSALES_MOP_RFC':'ZSALES_MOP_RFC/Post',
+          'ZPO_MODIFICATION_RFC':'ZPO_MODIFICATION/Execute',
+        };
+        const route = rfcRouteMap[rfc] || (rfc + '/Post');
+        const iisUrl = `${IIS_HOST}/api/${route}`;
+        const iisResp = await fetch(iisUrl, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(params || {}),
+          signal: AbortSignal.timeout(60000)
+        });
+        const raw = await iisResp.text();
+        let data; try { data = JSON.parse(raw); } catch { data = {raw}; }
+        const tableKey = data?.Data ? Object.keys(data.Data)[0] : null;
+        const fetched = tableKey && Array.isArray(data.Data[tableKey]) ? data.Data[tableKey].length : 1;
+        return new Response(JSON.stringify({
+          ok:iisResp.ok, status:iisResp.status, rfc, fetched, stored:0, data
+        }), {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+      } catch(e) {
+        return new Response(JSON.stringify({error:e.message}),
+          {status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+      }
+    }
+
+
     // ── GET /status/{jobId} → poll deployment progress ────────────────────────
     if (url.pathname.startsWith('/status/')) {
       const jobId = url.pathname.split('/status/')[1];
