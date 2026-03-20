@@ -1,142 +1,99 @@
-﻿using SAP.Middleware.Connector;
+using FMS_Fabric_Putway_Api.Models;
+using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
-using System.Web;
 using System.Web.Http;
-using System.Web.UI.WebControls;
-using Vendor_Application_MVC.Models;
+using Vendor_Application_MVC.Controllers;
+using Vendor_SRM_Routing_Application.Models.HU_Creation;
+using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
-namespace Vendor_Application_MVC.Controllers
+namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 {
     public class ZPO_MODIFICATIONController : BaseController
     {
-        // [HttpPost]
-        // public void UploadFile()
-        // {
-        //     var file = HttpContext.Current.Request.Files.Count > 0 ?
-        //HttpContext.Current.Request.Files[0] : null;
-        // }
-
-        public async Task<HttpResponseMessage> POST([FromBody] ZPO_MODIFICATIONRequest request)
+        [HttpPost]
+        [Route("api/ZPO_MODIFICATION")]
+        public async Task<IHttpActionResult> ExecuteZPO_MODIFICATION([FromBody] ZPO_MODIFICATIONRequest request)
         {
-            ZPO_MODIFICATION Authenticate = new ZPO_MODIFICATION();
-
             try
             {
-
-
-                try
+                if (request == null)
                 {
-                    RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
-                    RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                    // Get RfcTable from SAP
-                    RfcRepository rfcrep = dest.Repository;
-                    IRfcFunction myfun = null;
-                    myfun = rfcrep.CreateFunction("ZPO_MODIFICATION"); //RfcFunctionName
+                    return Json(new { Status = "E", Message = "Request cannot be null" });
+                }
 
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZPO_MODIFICATION");
 
-                    myfun.SetValue("IM_PO_NO", request.IM_PO_NO); //Import Parameter
-                    myfun.SetValue("IM_PO_DEL_DATE", request.IM_PO_DEL_DATE); //Import Parameter
-                    myfun.SetValue("IM_DEL_CHG_DATE_LOW", request.IM_DEL_CHG_DATE_LOW); //Import Parameter
-                    myfun.SetValue("IM_DEL_CHG_DATE_HIGH", request.IM_DEL_CHG_DATE_HIGH); //Import Parameter
-                    myfun.Invoke(dest);
+                myfun.SetValue("IM_PO_NO", request.IM_PO_NO);
+                myfun.SetValue("IM_PO_DEL_DATE", request.IM_PO_DEL_DATE);
+                myfun.SetValue("IM_DEL_CHG_DATE_LOW", request.IM_DEL_CHG_DATE_LOW);
+                myfun.SetValue("IM_DEL_CHG_DATE_HIGH", request.IM_DEL_CHG_DATE_HIGH);
 
+                myfun.Invoke(dest);
 
-                    IRfcTable IrfTable = myfun.GetTable("ET_PO_OUTPUT");
-                    IRfcStructure E_RETURN = myfun.GetStructure("EX_RETURN");
-                    string SAP_TYPE = E_RETURN.GetValue("TYPE").ToString();
-                    string SAP_Message = E_RETURN.GetValue("MESSAGE").ToString();
-                    if (SAP_TYPE == "E")
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+                
+                if (EX_RETURN.GetString("TYPE") == "E")
+                {
+                    return Json(new { Status = "E", Message = EX_RETURN.GetString("MESSAGE") });
+                }
+
+                IRfcTable outputTable = myfun.GetTable("ET_PO_OUTPUT");
+                var outputData = outputTable.AsEnumerable().Select(row =>
+                {
+                    var rowData = new Dictionary<string, object>();
+                    for (int i = 0; i < outputTable.Metadata.FieldCount; i++)
                     {
-                        Authenticate.Status = false;
-                        Authenticate.Message = "" + SAP_Message + "";
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, Authenticate);
-                    }
-                    else
-                    {
-
-                        for (int i = 0; i < IrfTable.RowCount; ++i)
+                        var fieldName = outputTable.Metadata[i].Name;
+                        var fieldType = outputTable.Metadata[i].DataType;
+                        
+                        if (fieldType != RfcDataType.STRUCTURE && fieldType != RfcDataType.TABLE)
                         {
-                            ZPO_MODIFICATIONResponse authenticateResponse = new ZPO_MODIFICATIONResponse();
-                           
-
-                            authenticateResponse.REASON = IrfTable[i].GetString("REASON");
-                            authenticateResponse.DELAYED_BY = IrfTable[i].GetString("DELAYED_BY");
-                            authenticateResponse.DEL_EXT_DATE = IrfTable[i].GetString("DEL_EXT_DATE");
-                            authenticateResponse.CURRENT_DEL_DATE = IrfTable[i].GetString("CURRENT_DEL_DATE");
-                            authenticateResponse.CHNG_NO = IrfTable[i].GetString("CHNG_NO");
-                            authenticateResponse.ORIGNAL_DEL_DATE = IrfTable[i].GetString("ORIGNAL_DEL_DATE");
-                            authenticateResponse.EBELN = IrfTable[i].GetString("EBELN");
-
-                            Authenticate.Data.Add(authenticateResponse);
+                            rowData[fieldName] = row.GetValue(fieldName);
                         }
-                        Authenticate.Data = Authenticate.Data.ToList();
-                        //Distinct(row).ToList();
-                        Authenticate.Status = true;
-                        Authenticate.Message = "" + SAP_Message + "";
-                        return Request.CreateResponse(HttpStatusCode.OK, Authenticate);
-
                     }
+                    return rowData;
+                }).ToList();
 
-
-                }
-                catch (Exception ex)
+                var response = new
                 {
-                    Authenticate.Status = false;
-                    Authenticate.Message = "" + ex.Message + "";
-                    return Request.CreateResponse(HttpStatusCode.InternalServerError, Authenticate);
-                }
+                    Status = "S",
+                    Message = "Success",
+                    Data = new
+                    {
+                        ET_PO_OUTPUT = outputData
+                    }
+                };
 
+                return Json(response);
+            }
+            catch (RfcAbapException ex)
+            {
+                return Json(new { Status = "E", Message = ex.Message });
+            }
+            catch (RfcCommunicationException ex)
+            {
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                Authenticate.Status = false;
-                Authenticate.Message = "" + ex.Message + "";
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, Authenticate);
+                return Json(new { Status = "E", Message = ex.Message });
             }
-
-
-        }
-
-    }
-
-    public class ZPO_MODIFICATION
-    {
-        public Boolean Status { get; set; }
-        public string Message { get; set; }
-        public List<ZPO_MODIFICATIONResponse> Data;
-        public ZPO_MODIFICATION()
-        {
-            Data = new List<ZPO_MODIFICATIONResponse>();
         }
     }
+
     public class ZPO_MODIFICATIONRequest
     {
         public string IM_PO_NO { get; set; }
         public string IM_PO_DEL_DATE { get; set; }
         public string IM_DEL_CHG_DATE_LOW { get; set; }
         public string IM_DEL_CHG_DATE_HIGH { get; set; }
-
-
-
     }
-    public class ZPO_MODIFICATIONResponse
-    {
-        public string EBELN { get; set; }
-        public string ORIGNAL_DEL_DATE { get; set; }
-        public string CHNG_NO { get; set; }
-        public string CURRENT_DEL_DATE { get; set; }
-        public string DEL_EXT_DATE { get; set; }
-        public string DELAYED_BY { get; set; }
-        public string REASON { get; set; }
-
-
-    }
-
 }
