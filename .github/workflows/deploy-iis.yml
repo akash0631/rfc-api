@@ -14,75 +14,57 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Build and copy DLLs to IIS
+      - name: Copy latest DLLs to IIS (no full rebuild needed)
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
-          $projDir = 'D:\V2 Projects\Vendor_SRM_Routing_Application'
-          $pubDir  = 'C:\V2RfcTest'
+          $pubDir = 'C:\V2RfcTest'
           
-          $msbuild = $null
-          $paths = @(
-            'C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
-            'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
-            'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe'
-          )
-          foreach ($p in $paths) { if (Test-Path $p) { $msbuild = $p; break } }
+          # Find the most recently compiled application DLL
+          $appDll = Get-ChildItem 'D:\V2 Projects' -Recurse -Filter 'Vendor_SRM_Routing_Application.dll' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.DirectoryName -notlike '*obj*' } |
+                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
           
-          if ($msbuild -and (Test-Path "$projDir\Vendor_SRM_Routing_Application.sln")) {
-            Write-Host 'Building solution...'
-            & $msbuild "$projDir\Vendor_SRM_Routing_Application.sln" /p:Configuration=Release /t:Build /v:minimal 2>&1 | Select-Object -Last 10
-            $binDir = "$projDir\bin\Release"
-            if (Test-Path $binDir) {
-              Copy-Item "$binDir\*.dll" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-              Copy-Item "$binDir\*.pdb" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-              Write-Host 'DLLs copied from Release bin'
-            }
+          if ($appDll) {
+            $srcBin = Split-Path $appDll.FullName
+            Write-Host "Copying from: $srcBin ($($appDll.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))"
+            Copy-Item "$srcBin\*.dll" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
+            Copy-Item "$srcBin\*.pdb" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
+            Write-Host "DLL copy complete. Size: $($appDll.Length) bytes"
           } else {
-            Write-Host 'MSBuild not found - copying from latest compiled DLL'
-            $appDll = Get-ChildItem 'D:\V2 Projects' -Recurse -Filter 'Vendor_SRM_Routing_Application.dll' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            if ($appDll) {
-              $srcBin = Split-Path $appDll.FullName
-              Copy-Item "$srcBin\*.dll" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-              Copy-Item "$srcBin\*.pdb" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-              Write-Host "Copied from $srcBin"
-            }
+            Write-Host "No compiled DLL found - IIS will use existing DLLs"
           }
-
-      - name: Fix Web.config and recycle app pool
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Continue'
-          $webConfig = 'C:\V2RfcTest\Web.config'
-          if (Test-Path $webConfig) {
-            $c = Get-Content $webConfig -Raw
+          
+          # Fix Web.config to SAP Dev
+          $wc = 'C:\V2RfcTest\Web.config'
+          if (Test-Path $wc) {
+            $c = Get-Content $wc -Raw
             $c = $c -replace '192\.168\.144\.170', '192.168.144.174'
-            $c = $c -replace 'value="600"', 'value="210"'
-            Set-Content $webConfig $c -Encoding UTF8
-            Write-Host 'Web.config: switched to SAP Dev'
+            $c = $c -replace 'value=""600""', 'value=""210""'
+            Set-Content $wc $c -Encoding UTF8
+            Write-Host 'Web.config: SAP Dev enabled'
           }
-          $appcmd = 'C:\Windows\System32\inetsrv\appcmd.exe'
-          if (Test-Path $appcmd) {
-            & $appcmd recycle apppool /apppool.name:V2RfcTestPool 2>&1 | Write-Host
+          
+          # Recycle app pool
+          $ap = 'C:\Windows\System32\inetsrv\appcmd.exe'
+          if (Test-Path $ap) {
+            & $ap recycle apppool /apppool.name:V2RfcTestPool 2>&1 | Write-Host
           }
-          Start-Sleep 5
-
-      - name: Test SAP endpoints
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Continue'
-          Start-Sleep 3
+          
+          Start-Sleep 8
+          
+          # Test all controllers
           $tests = @(
-            @{n='ZPO_DD_UPD_RFC';   u='http://localhost:9292/api/ZPO_DD_UPD_RFC/Post';      b='{"PO_NO":"4500001234","DELV_DATE":"20260401"}'},
-            @{n='ZPO_MODIFICATION'; u='http://localhost:9292/api/ZPO_MODIFICATION/Execute';  b='{"IM_PO_NO":"","IM_DEL_CHG_DATE_LOW":"20260101","IM_DEL_CHG_DATE_HIGH":"20260320"}'},
-            @{n='ZPO_COST_UPD_RFC'; u='http://localhost:9292/api/ZPO_COST_UPD_RFC/Post';    b='{"IM_DATA":[{"EBELN":"4500001234","MATNR":"000000000010000001","PO_ITEM":"00010","COST":"100.00"}]}'}
+            @{n='ZPO_DD_UPD_RFC';   u='http://localhost:9292/api/ZPO_DD_UPD_RFC/Post';      b='{\"PO_NO\":\"4500001234\",\"DELV_DATE\":\"20260401\"}'},
+            @{n='ZPO_MODIFICATION'; u='http://localhost:9292/api/ZPO_MODIFICATION/Execute';  b='{\"IM_PO_NO\":\"\",\"IM_DEL_CHG_DATE_LOW\":\"20260101\",\"IM_DEL_CHG_DATE_HIGH\":\"20260320\"}'},
+            @{n='ZPO_COST_UPD_RFC'; u='http://localhost:9292/api/ZPO_COST_UPD_RFC/Post';    b='{\"IM_DATA\":[{\"EBELN\":\"4500001234\",\"MATNR\":\"000000000010000001\",\"PO_ITEM\":\"00010\",\"COST\":\"100.00\"}]}'}
           )
           foreach ($t in $tests) {
             try {
               $r = Invoke-WebRequest $t.u -Method POST -Body $t.b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
-              Write-Host "OK $($t.n): $($r.Content.Substring(0,[Math]::Min(80,$r.Content.Length)))"
+              Write-Host "OK: $($t.n) => $($r.Content.Substring(0,[Math]::Min(100,$r.Content.Length)))"
             } catch {
-              Write-Host "FAIL $($t.n): $_"
+              Write-Host "FAIL: $($t.n) => $_"
             }
           }
           exit 0
