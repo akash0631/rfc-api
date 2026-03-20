@@ -17,13 +17,17 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_COST_UPD_RFC")]
-        public IHttpActionResult ExecuteZPO_COST_UPD_RFC([FromBody] ZPO_COST_UPD_RFCRequest request)
+        public IHttpActionResult ZPO_COST_UPD_RFC([FromBody] ZPO_COST_UPD_RFCRequest request)
         {
             try
             {
-                if (request == null || request.IM_DATA == null)
+                if (request == null)
                 {
-                    return Ok(new { Status = "E", Message = "Invalid request data" });
+                    return Ok(new
+                    {
+                        Status = "E",
+                        Message = "Request data is required"
+                    });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -31,23 +35,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_COST_UPD_RFC");
 
-                IRfcStructure imDataStructure = myfun.GetStructure("IM_DATA");
-                
-                // Map request data to SAP structure
-                if (!string.IsNullOrEmpty(request.IM_DATA.PO_NUMBER))
-                    imDataStructure.SetValue("PO_NUMBER", request.IM_DATA.PO_NUMBER);
-                if (!string.IsNullOrEmpty(request.IM_DATA.PLANT))
-                    imDataStructure.SetValue("PLANT", request.IM_DATA.PLANT);
-                if (!string.IsNullOrEmpty(request.IM_DATA.MATERIAL))
-                    imDataStructure.SetValue("MATERIAL", request.IM_DATA.MATERIAL);
-                if (!string.IsNullOrEmpty(request.IM_DATA.COST))
-                    imDataStructure.SetValue("COST", request.IM_DATA.COST);
-                if (!string.IsNullOrEmpty(request.IM_DATA.CURRENCY))
-                    imDataStructure.SetValue("CURRENCY", request.IM_DATA.CURRENCY);
-                if (!string.IsNullOrEmpty(request.IM_DATA.VENDOR))
-                    imDataStructure.SetValue("VENDOR", request.IM_DATA.VENDOR);
-
-                myfun.SetValue("IM_DATA", imDataStructure);
+                IRfcStructure imData = myfun.GetStructure("IM_DATA");
+                if (request.IM_DATA != null)
+                {
+                    foreach (var property in request.IM_DATA.GetType().GetProperties())
+                    {
+                        var value = property.GetValue(request.IM_DATA);
+                        if (value != null)
+                        {
+                            imData.SetValue(property.Name, value);
+                        }
+                    }
+                }
 
                 myfun.Invoke(dest);
 
@@ -58,22 +57,42 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
                 if (returnType == "E")
                 {
-                    return Ok(new { Status = "E", Message = returnMessage });
+                    return Ok(new
+                    {
+                        Status = "E",
+                        Message = returnMessage
+                    });
                 }
 
-                return Ok(new { Status = "S", Message = returnMessage });
+                return Ok(new
+                {
+                    Status = returnType,
+                    Message = returnMessage
+                });
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (Exception ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
         }
     }
@@ -85,11 +104,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
     public class ZST_PO_IMP
     {
-        public string PO_NUMBER { get; set; }
-        public string PLANT { get; set; }
-        public string MATERIAL { get; set; }
-        public string COST { get; set; }
-        public string CURRENCY { get; set; }
-        public string VENDOR { get; set; }
+        public string EBELN { get; set; }
+        public string EBELP { get; set; }
+        public decimal NETPR { get; set; }
+        public string WAERS { get; set; }
+        public string PEINH { get; set; }
+        public string BPRME { get; set; }
     }
 }
