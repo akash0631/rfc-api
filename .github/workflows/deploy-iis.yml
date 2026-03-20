@@ -122,4 +122,4 @@ jobs:
           echo "Target : V2DC-ADDVERB .36 VendrSrmAndroidApi"
           echo "URL    : http://192.168.151.36:9005/"
           echo "Build  : ${{ needs.build.result }}"
-          echo "Deploy : ${{ needs.deploy.result }}"name: Build and Deploy to .36 IIS VendrSrmAndroidApion:  push:    branches:      - Finaltest    paths:      - 'Controllers/**'      - 'Models/**'      - 'App_Start/**'      - 'Web.config'      - 'Web.Release.config'      - 'Global.asax.cs'      - 'packages.config'  workflow_dispatch:env:  SOLUTION:   Vendor_SRM_Routing_Application.sln  PROJECT:    Vendor_SRM_Routing_Application.csproj  DEPLOY_URL: https://V2DC-ADDVERB:8172/msdeploy.axd  SITE_NAME:  VendrSrmAndroidApi  DEST_URL:   http://192.168.151.36:9005/jobs:  build:    name: MSBuild Release    runs-on: windows-latest    steps:      - name: Checkout Finaltest        uses: actions/checkout@v4        with:          ref: Finaltest      - name: Setup NuGet        uses: NuGet/setup-nuget@v1
+          echo "Deploy : ${{ needs.deploy.result }}"
