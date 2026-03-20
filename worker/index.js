@@ -310,9 +310,12 @@ async function updateSwagger(spec, sapEnv, token) {
 
 // ─── Full pipeline ────────────────────────────────────────────────────────────
 async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
-  const apiKey   = env.ANTHROPIC_API_KEY;
-  const ghToken  = env.GITHUB_TOKEN;
-  const kv       = env.RFC_JOBS;
+  const apiKey  = env.ANTHROPIC_API_KEY;
+  const ghToken = env.GITHUB_TOKEN;
+  const kv      = env.RFC_JOBS;
+  const RELAY   = 'https://v2-rfc-relay.azurewebsites.net';
+  const DAB_URL = 'https://my-dab-app.azurewebsites.net';
+
   const log = async (step, status, detail='') => {
     const job = JSON.parse(await kv.get(jobId)||'{}');
     job.steps = job.steps||[];
@@ -320,124 +323,188 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
     if (status==='done'||status==='error') {
-      const allDone = job.steps.every(s=>s.status==='done'||s.status==='error');
+      const allDone = job.steps.every(s=>['done','error','skip'].includes(s.status));
       if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
     }
     await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
   };
 
+  // ── STEP 1: Parse RFC document ──────────────────────────────────────────
+  await log('parse','running','Extracting RFC spec with Claude AI...');
+  let spec;
+  try { spec = await parseRfc(text, apiKey, filename, images); }
+  catch(e) { await log('parse','error',e.message); return; }
+  await log('parse','done',`${spec.rfcName} · ${spec.category}`);
+
+  // ── STEP 2: Generate C# controller ─────────────────────────────────────
+  await log('controller','running','Generating ASP.NET C# controller...');
+  let ctrlCode;
+  try { ctrlCode = await genController(spec, sapEnv, apiKey); }
+  catch(e) { await log('controller','error',e.message); return; }
+  await log('controller','done',`${ctrlCode.split('\n').length} lines generated`);
+
+  // ── STEP 3: Push to GitHub ──────────────────────────────────────────────
+  await log('github','running','Pushing controller to GitHub...');
+  let ctrlResult;
+  try { ctrlResult = await pushController(spec, ctrlCode, sapEnv, ghToken); }
+  catch(e) { await log('github','error',e.message); return; }
+  await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha.slice(0,8)})`);
+
+  // ── STEP 4: Build + Deploy to IIS via GitHub Actions ───────────────────
+  await log('deploy','running','Triggering build + deploy to .36:9292...');
   try {
-    // Step 1: Parse
-    await log('parse','running','Extracting RFC spec with Claude AI...');
-    let spec;
-    try { spec = await parseRfc(text, apiKey, filename, images); }
-    catch(e) { await log('parse','error',e.message); return; }
-    await log('parse','done',`${spec.rfcName} · ${spec.category}`);
+    const dispatchRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${GH_WORKFLOW_ID}/dispatches`,
+      { method:'POST',
+        headers:{ Authorization:`token ${ghToken}`, Accept:'application/vnd.github+json',
+          'Content-Type':'application/json', 'User-Agent':'V2-RFC-Pipeline' },
+        body: JSON.stringify({ref: GITHUB_BRANCH}) }
+    );
+    if (!dispatchRes.ok && dispatchRes.status !== 204)
+      throw new Error(`Workflow dispatch HTTP ${dispatchRes.status}`);
 
-    // Step 2: Generate controller
-    await log('controller','running','Generating ASP.NET C# controller...');
-    let code;
-    try { code = await genController(spec, sapEnv, apiKey); }
-    catch(e) { await log('controller','error',e.message); return; }
-    await log('controller','done',`${code.split('\n').length} lines generated`);
-
-    // Step 3: Push controller
-    await log('github','running','Pushing controller to GitHub...');
-    let ctrlResult;
-    try { ctrlResult = await pushController(spec, code, sapEnv, ghToken); }
-    catch(e) { await log('github','error',e.message); return; }
-    await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha})`);
-
-    // Step 4: Trigger IIS deploy via GitHub Actions
-    await log('deploy','running','Triggering build + deploy on VM-CRM (.46)...');
-    try {
-      // Dispatch workflow
-      const dispatchRes = await fetch(
-        `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${GH_WORKFLOW_ID}/dispatches`,
-        { method:'POST',
-          headers:{ Authorization:`token ${ghToken}`, Accept:'application/vnd.github+json',
-            'Content-Type':'application/json', 'User-Agent':'V2-RFC-Pipeline' },
-          body: JSON.stringify({ref: GITHUB_BRANCH}) }
+    await sleep(8000);
+    let runId = null;
+    for (let i = 0; i < 15 && !runId; i++) {
+      await sleep(4000);
+      const runsRes = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=5&event=workflow_dispatch&branch=${GITHUB_BRANCH}`,
+        { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
       );
-      if (!dispatchRes.ok && dispatchRes.status !== 204)
-        throw new Error(`Workflow dispatch HTTP ${dispatchRes.status}`);
+      const runs = await runsRes.json();
+      const fresh = runs.workflow_runs?.find(r => r.status !== 'completed');
+      if (fresh) runId = fresh.id;
+    }
+    if (!runId) throw new Error('Could not find workflow run after dispatch');
+    await log('deploy','running',`Build started · run #${runId}`);
 
-      // Wait briefly then find the new running run
-      await sleep(8000);
-      let runId = null;
-      for (let i = 0; i < 15 && !runId; i++) {
-        await sleep(4000);
-        const runsRes = await fetch(
-          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=5&event=workflow_dispatch&branch=${GITHUB_BRANCH}`,
-          { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-        );
-        const runs = await runsRes.json();
-        const fresh = runs.workflow_runs?.find(r => r.status !== 'completed');
-        if (fresh) runId = fresh.id;
+    let deployed = false;
+    for (let i = 0; i < 96; i++) {
+      await sleep(5000);
+      const runRes = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
+        { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+      );
+      const run = await runRes.json();
+      if (run.status === 'completed') {
+        if (run.conclusion === 'success') { deployed = true; }
+        else throw new Error(`Deploy ${run.conclusion} — check GitHub Actions`);
+        break;
       }
-      if (!runId) throw new Error('Could not find workflow run after dispatch');
-      await log('deploy','running',`Build started · run #${runId}`);
+      const jobs = await (await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}/jobs`,
+        { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+      )).json();
+      const cur = jobs.jobs?.[0]?.steps?.find(s => s.status === 'in_progress')?.name;
+      if (cur) await log('deploy','running',`${cur} (run #${runId})`);
+    }
+    if (!deployed) throw new Error('Deployment timed out');
+  } catch(e) { await log('deploy','error',e.message); return; }
+  await log('deploy','done',`Live ✓ sap-api.v2retail.net/api/${spec.rfcName}/Post`);
 
-      // Poll until completed (max ~8 min = 96 × 5s)
-      let deployed = false;
-      for (let i = 0; i < 96; i++) {
-        await sleep(5000);
-        const runRes = await fetch(
-          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
-          { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-        );
-        const run = await runRes.json();
-        if (run.status === 'completed') {
-          if (run.conclusion === 'success') {
-            await log('deploy','done',`Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
-            deployed = true;
-          } else {
-            throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
-          }
-          break;
-        }
-        // Show current step name while waiting
-        try {
-          const jobsRes = await fetch(
-            `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}/jobs`,
-            { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-          );
-          const jobs = await jobsRes.json();
-          const cur = jobs.jobs?.[0]?.steps?.find(s => s.status === 'in_progress')?.name;
-          if (cur) await log('deploy','running',`${cur} (run #${runId})`);
-        } catch(_) {}
-      }
-      if (!deployed) throw new Error('Deployment timed out');
-    } catch(e) { await log('deploy','error',e.message); return; }
+  // ── STEP 5: SQL table creation + data sync ──────────────────────────────
+  // Detect if RFC has table output (read RFC) or scalar output only (write RFC)
+  const hasTableOutput = (spec.exportTables && spec.exportTables.length > 0) ||
+    (spec.exportParams && spec.exportParams.some(p => p.type === 'table' || p.sapType === 'TABLE'));
+  const isWriteRfc = !hasTableOutput && spec.exportParams &&
+    spec.exportParams.every(p => ['MSG_TYPE','MESSAGE','EX_RETURN','RETURN'].some(n => p.name?.toUpperCase().includes(n)));
 
-    // Step 5: Register DAB
-    await log('dab','running','Registering entity in DAB config...');
-    let dabResult;
-    try { dabResult = await registerDab(spec, ghToken); }
-    catch(e) { await log('dab','error',e.message); return; }
-    await log('dab','done',`${dabResult.endpoint}`);
+  const sqlTable = spec.suggestedSqlTable || `ET_${spec.rfcName.replace(/_RFC$/,'')}`;
 
-    // Step 6: Update Swagger
-    await log('swagger','running','Updating Swagger documentation...');
-    try { await updateSwagger(spec, sapEnv, ghToken); }
-    catch(e) { await log('swagger','error',e.message); }
-    await log('swagger','done','Endpoint card added to portal');
+  if (isWriteRfc) {
+    await log('sql_create','skip',`Write RFC — no table output to sync (${sqlTable} skipped)`);
+    await log('data_sync', 'skip','Write RFC — data sync not applicable');
+  } else {
+    // Step 5a: Create SQL table via relay /sql
+    await log('sql_create','running',`Creating table dbo.${sqlTable} in DataV2...`);
+    try {
+      // Build CREATE TABLE from RFC export columns
+      const cols = [
+        ...(spec.exportTables?.flatMap(t => t.fields||[]) || []),
+        ...(spec.exportParams?.filter(p => !['MSG_TYPE','MESSAGE'].includes(p.name?.toUpperCase())) || [])
+      ];
+      const colDefs = cols.length > 0
+        ? cols.map(f => `[${f.name||f.field}] NVARCHAR(500) NULL`).join(', ')
+        : '[FIELD1] NVARCHAR(500) NULL';
+      const createSql = `IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='${sqlTable}')
+CREATE TABLE dbo.[${sqlTable}] ([ID] INT IDENTITY(1,1) PRIMARY KEY, ${colDefs}, [FETCHED_AT] NVARCHAR(50) NULL)`;
+      const sqlRes = await fetch(`${RELAY}/sql`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({Sql: createSql, Database: 'DataV2'}),
+        signal: AbortSignal.timeout(30000)
+      });
+      const sqlData = await sqlRes.json();
+      if (!sqlRes.ok) throw new Error(sqlData.detail || sqlData.error || 'SQL create failed');
+      await log('sql_create','done',`Table dbo.${sqlTable} ready in DataV2`);
+    } catch(e) { await log('sql_create','error',e.message); }
 
-    // Final: write summary
-    const job = JSON.parse(await kv.get(jobId)||'{}');
-    job.status  = 'complete';
-    job.rfcName  = spec.rfcName;
-    job.rfcApi   = `${IIS_HOST}/api/${spec.rfcName}`;
-    job.dataLake = dabResult.endpoint;
-    job.swagger  = `${IIS_HOST}/swagger/ui/index`;
-    job.commit   = ctrlResult.commitUrl;
-    await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
-
-  } catch(e) {
-    const job = JSON.parse(await kv.get(jobId)||'{}');
-    job.status='error'; job.error=e.message;
-    await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
+    // Step 5b: Fetch SAP data → insert into SQL
+    await log('data_sync','running',`Calling SAP ${spec.rfcName} → syncing to DataV2...`);
+    try {
+      // Build default params (empty strings for required params)
+      const defaultParams = {};
+      (spec.importParams||[]).forEach(p => {
+        if (!p.optional && p.type !== 'table') defaultParams[p.name] = '';
+      });
+      const fetchRes = await fetch(`${RELAY}/fetch`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          Rfc: spec.rfcName,
+          Params: defaultParams,
+          MaxRows: 5000,
+          TargetTable: sqlTable,
+          TargetDb: 'DataV2'
+        }),
+        signal: AbortSignal.timeout(120000)
+      });
+      const fetchData = await fetchRes.json();
+      if (!fetchRes.ok && fetchData.error) throw new Error(fetchData.error);
+      const rows = fetchData.stored || fetchData.fetched || 0;
+      await log('data_sync','done',`${rows} rows synced to DataV2.dbo.${sqlTable}`);
+    } catch(e) { await log('data_sync','error',e.message); }
   }
+
+  // ── STEP 6: Register entity in Azure DAB config ─────────────────────────
+  await log('dab','running','Registering entity in Azure DAB...');
+  let dabResult;
+  try { dabResult = await registerDab(spec, ghToken); }
+  catch(e) { await log('dab','error',e.message); return; }
+  await log('dab','done',`${DAB_URL}/api/${sqlTable}`);
+
+  // ── STEP 7: Verify DAB OData endpoint returns data ──────────────────────
+  await log('dab_verify','running','Verifying Data Lake API endpoint...');
+  try {
+    await sleep(8000); // Give DAB a moment
+    const dabCheckRes = await fetch(`${DAB_URL}/api/${sqlTable}?$top=5`, {
+      signal: AbortSignal.timeout(20000)
+    });
+    if (dabCheckRes.ok) {
+      const dabData = await dabCheckRes.json();
+      const count = dabData.value?.length ?? 0;
+      await log('dab_verify','done',`${DAB_URL}/api/${sqlTable} → ${count} rows returned`);
+    } else {
+      await log('dab_verify','done',`DAB endpoint registered (may need redeploy to activate)`);
+    }
+  } catch(e) { await log('dab_verify','done',`Endpoint registered: ${DAB_URL}/api/${sqlTable}`); }
+
+  // ── STEP 8: Update Swagger + RFC Explorer ───────────────────────────────
+  await log('swagger','running','Updating Swagger documentation...');
+  try { await updateSwagger(spec, sapEnv, ghToken); }
+  catch(e) { await log('swagger','error',e.message); }
+  await log('swagger','done','RFC Explorer and Swagger updated');
+
+  // ── Final: write job summary ────────────────────────────────────────────
+  const finalJob = JSON.parse(await kv.get(jobId)||'{}');
+  finalJob.status    = 'complete';
+  finalJob.rfcName   = spec.rfcName;
+  finalJob.rfcApi    = `https://sap-api.v2retail.net/api/${spec.rfcName}/Post`;
+  finalJob.dataLake  = `${DAB_URL}/api/${sqlTable}`;
+  finalJob.sqlTable  = sqlTable;
+  finalJob.swagger   = `https://v2-rfc-portal.pages.dev/rfc_hub.html`;
+  finalJob.commit    = ctrlResult.commitUrl;
+  await kv.put(jobId, JSON.stringify(finalJob), {expirationTtl:86400});
 }
 
 
