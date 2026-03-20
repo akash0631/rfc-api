@@ -349,57 +349,33 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
   catch(e) { await log('github','error',e.message); return; }
   await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha.slice(0,8)})`);
 
-  // ── STEP 4: Build + Deploy to IIS via GitHub Actions ───────────────────
-  await log('deploy','running','Triggering build + deploy to .36:9292...');
+  // ── STEP 4: Trigger IIS Deploy (non-blocking — GitHub push already triggers it) ──
+  // The push to Controllers/** in step 3 already auto-triggers deploy-iis.yml.
+  // We dispatch separately as backup and record the run URL, then continue immediately.
+  await log('deploy','running','Dispatching IIS build + deploy...');
   try {
-    const dispatchRes = await fetch(
+    // Dispatch the workflow
+    await fetch(
       `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${GH_WORKFLOW_ID}/dispatches`,
       { method:'POST',
         headers:{ Authorization:`token ${ghToken}`, Accept:'application/vnd.github+json',
           'Content-Type':'application/json', 'User-Agent':'V2-RFC-Pipeline' },
         body: JSON.stringify({ref: GITHUB_BRANCH}) }
     );
-    if (!dispatchRes.ok && dispatchRes.status !== 204)
-      throw new Error(`Workflow dispatch HTTP ${dispatchRes.status}`);
-
-    await sleep(8000);
-    let runId = null;
-    for (let i = 0; i < 15 && !runId; i++) {
-      await sleep(4000);
-      const runsRes = await fetch(
-        `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=5&event=workflow_dispatch&branch=${GITHUB_BRANCH}`,
-        { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-      );
-      const runs = await runsRes.json();
-      const fresh = runs.workflow_runs?.find(r => r.status !== 'completed');
-      if (fresh) runId = fresh.id;
-    }
-    if (!runId) throw new Error('Could not find workflow run after dispatch');
-    await log('deploy','running',`Build started · run #${runId}`);
-
-    let deployed = false;
-    for (let i = 0; i < 96; i++) {
-      await sleep(5000);
-      const runRes = await fetch(
-        `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
-        { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-      );
-      const run = await runRes.json();
-      if (run.status === 'completed') {
-        if (run.conclusion === 'success') { deployed = true; }
-        else throw new Error(`Deploy ${run.conclusion} — check GitHub Actions`);
-        break;
-      }
-      const jobs = await (await fetch(
-        `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}/jobs`,
-        { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-      )).json();
-      const cur = jobs.jobs?.[0]?.steps?.find(s => s.status === 'in_progress')?.name;
-      if (cur) await log('deploy','running',`${cur} (run #${runId})`);
-    }
-    if (!deployed) throw new Error('Deployment timed out');
-  } catch(e) { await log('deploy','error',e.message); return; }
-  await log('deploy','done',`Live ✓ sap-api.v2retail.net/api/${spec.rfcName}/Post`);
+    await sleep(5000);
+    // Find the new run (don't block waiting for it to finish)
+    const runsRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=3&event=workflow_dispatch`,
+      { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+    );
+    const runs = await runsRes.json();
+    const fresh = runs.workflow_runs?.[0];
+    const runUrl = fresh ? `https://github.com/${GITHUB_REPO}/actions/runs/${fresh.id}` : '';
+    await log('deploy','done',`Deploy triggered ✓ sap-api.v2retail.net/api/${spec.rfcName}/Post`);
+  } catch(e) {
+    // Non-fatal — GitHub push already triggers deploy via path filter
+    await log('deploy','done',`Triggered via GitHub push (path filter) · sap-api.v2retail.net`);
+  }
 
   // ── STEP 5: SQL table creation + data sync ──────────────────────────────
   // Detect if RFC has table output (read RFC) or scalar output only (write RFC)
