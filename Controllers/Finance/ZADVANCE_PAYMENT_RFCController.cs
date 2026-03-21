@@ -17,13 +17,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZADVANCE_PAYMENT_RFC")]
-        public async Task<IHttpActionResult> ZADVANCE_PAYMENT_RFC([FromBody] ZADVANCE_PAYMENT_RFCRequest request)
+        public async Task<IHttpActionResult> ProcessAdvancePayment([FromBody] ZADVANCE_PAYMENT_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Ok(new { Status = "E", Message = "Request cannot be null" });
+                    return Json(new { Status = "E", Message = "Invalid request data" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -31,76 +31,67 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZADVANCE_PAYMENT_RFC");
 
-                myfun.SetValue("IV_COMPANY_CODE", request.IV_COMPANY_CODE);
-                myfun.SetValue("IV_VENDOR_CODE", request.IV_VENDOR_CODE);
-                myfun.SetValue("IV_AMOUNT", request.IV_AMOUNT);
+                myfun.SetValue("IV_BUKRS", request.IV_BUKRS);
+                myfun.SetValue("IV_GJAHR", request.IV_GJAHR);
+                myfun.SetValue("IV_BELNR", request.IV_BELNR);
+                myfun.SetValue("IV_BUZEI", request.IV_BUZEI);
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-
-                if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
+                
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return Ok(new
-                    {
-                        Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE")
-                    });
+                    return Json(new { Status = "E", Message = EX_RETURN.GetString("MESSAGE") });
                 }
 
-                IRfcTable tbl = myfun.GetTable("ET_PAYMENT_DATA");
-                var paymentData = tbl.AsEnumerable().Select(row =>
+                IRfcTable advancePaymentTable = myfun.GetTable("ET_ADVANCE_PAYMENT");
+                
+                var advancePaymentData = advancePaymentTable.AsEnumerable().Select(row =>
                 {
                     var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < row.FieldCount; i++)
+                    foreach (RfcFieldMetadata field in row.GetMetadata())
                     {
-                        var field = row[i];
-                        rowData[field.Metadata.Name] = field.GetValue();
+                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                        {
+                            rowData[field.Name] = row.GetValue(field.Name);
+                        }
                     }
                     return rowData;
                 }).ToList();
 
-                return Ok(new
+                var response = new
                 {
                     Status = "S",
-                    Message = "Success",
+                    Message = "Advance payment data retrieved successfully",
                     Data = new
                     {
-                        ET_PAYMENT_DATA = paymentData
+                        ET_ADVANCE_PAYMENT = advancePaymentData
                     }
-                });
+                };
+
+                return Json(response);
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
         }
     }
 
     public class ZADVANCE_PAYMENT_RFCRequest
     {
-        public string IV_COMPANY_CODE { get; set; }
-        public string IV_VENDOR_CODE { get; set; }
-        public decimal IV_AMOUNT { get; set; }
+        public string IV_BUKRS { get; set; }
+        public string IV_GJAHR { get; set; }
+        public string IV_BELNR { get; set; }
+        public string IV_BUZEI { get; set; }
     }
 }
