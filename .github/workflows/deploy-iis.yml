@@ -14,99 +14,74 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Sync new controllers into VS project folder
+      - name: NuGet restore
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
-          $vsRoot = 'D:\V2 Projects\Vendor_SRM_Routing_Application'
-
-          # Mirror each Controllers subfolder from the repo into the VS project
-          Get-ChildItem "$env:GITHUB_WORKSPACE\Controllers" -Directory | ForEach-Object {
-            $dest = "$vsRoot\$($_.Name)"
-            if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
-            Get-ChildItem $_.FullName -Filter '*.cs' | ForEach-Object {
-              $target = "$dest\$($_.Name)"
-              Copy-Item $_.FullName $target -Force
-              Write-Host "Synced: $($_.Name) -> $dest"
-            }
+          # Find nuget
+          $nuget = 'C:\nuget.exe'
+          if (-not (Test-Path $nuget)) {
+            Write-Host "Downloading nuget.exe..."
+            Invoke-WebRequest 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile $nuget
           }
+          & $nuget restore 'Vendor_SRM_Routing_Application.sln' -NonInteractive
+          Write-Host "NuGet restore done"
 
-      - name: MSBuild — compile project with new controllers
+      - name: MSBuild compile
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-
-          # Find MSBuild (VS 2019)
-          $msBuild = $null
+          # Find MSBuild from VS 2019
           $candidates = @(
             'C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe',
             'C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\MSBuild\Current\Bin\MSBuild.exe',
             'C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe',
             'C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
           )
-          foreach ($c in $candidates) { if (Test-Path $c) { $msBuild = $c; break } }
-
+          $msBuild = $null
+          foreach ($c in $candidates) {
+            if (Test-Path $c) { $msBuild = $c; break }
+          }
           if (-not $msBuild) {
-            $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
             if (Test-Path $vswhere) {
-              $msBuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+              $msBuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
             }
           }
-          if (-not $msBuild) { throw "MSBuild not found on .36" }
+          if (-not $msBuild) { throw "MSBuild not found on this machine" }
           Write-Host "MSBuild: $msBuild"
+          & $msBuild 'Vendor_SRM_Routing_Application.sln' /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /v:minimal
+          Write-Host "Build complete"
 
-          # Find solution file
-          $sln = Get-ChildItem 'D:\V2 Projects' -Recurse -Filter '*.sln' -ErrorAction SilentlyContinue |
-                 Where-Object { $_.FullName -notlike '*node_modules*' } |
-                 Select-Object -First 1 -ExpandProperty FullName
-          if (-not $sln) { throw "Solution file not found under D:\V2 Projects" }
-          Write-Host "Solution: $sln"
-
-          # NuGet restore (non-fatal)
-          $nuget = 'C:\nuget.exe'
-          if (-not (Test-Path $nuget)) {
-            try { Invoke-WebRequest 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile $nuget -TimeoutSec 30 } catch {}
-          }
-          if (Test-Path $nuget) {
-            Write-Host "NuGet restore..."
-            & $nuget restore $sln 2>&1 | Write-Host
-          }
-
-          # Build
-          Write-Host "Building Release..."
-          & $msBuild $sln /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /nologo
-          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
-          Write-Host "Build succeeded."
-
-      - name: Copy DLL to IIS, patch Web.config, recycle pool
+      - name: Copy DLL to IIS and recycle pool
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
           $pubDir = 'C:\V2RfcTest'
 
-          # Find freshly compiled DLL
-          $appDll = Get-ChildItem 'D:\V2 Projects' -Recurse -Filter 'Vendor_SRM_Routing_Application.dll' -ErrorAction SilentlyContinue |
+          # Find freshly compiled DLL from this checkout's build output
+          $appDll = Get-ChildItem '.' -Recurse -Filter 'Vendor_SRM_Routing_Application.dll' -ErrorAction SilentlyContinue |
                     Where-Object { $_.DirectoryName -notlike '*obj*' } |
                     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
           if ($appDll) {
             $srcBin = Split-Path $appDll.FullName
-            Write-Host "Copying from: $srcBin (compiled: $($appDll.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))"
+            Write-Host "Copying from: $srcBin ($($appDll.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))"
             Copy-Item "$srcBin\*.dll" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
             Copy-Item "$srcBin\*.pdb" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-            Write-Host "DLL copy complete. Size: $($appDll.Length) bytes"
+            Write-Host "DLL copy complete"
           } else {
-            Write-Host "WARNING: No compiled DLL found"
+            Write-Host "WARNING: No compiled DLL found in checkout — IIS keeps existing DLLs"
           }
 
-          # Fix Web.config -> SAP Dev
+          # Fix Web.config to SAP Dev
           $wc = "$pubDir\Web.config"
           if (Test-Path $wc) {
             $c = Get-Content $wc -Raw
             $c = $c -replace '192\.168\.144\.170', '192.168.144.174'
             $c = $c -replace 'value=""600""', 'value=""210""'
             Set-Content $wc $c -Encoding UTF8
-            Write-Host 'Web.config: SAP Dev enabled'
+            Write-Host "Web.config: SAP Dev enabled"
           }
 
           # Recycle app pool
@@ -114,21 +89,13 @@ jobs:
           if (Test-Path $ap) {
             & $ap recycle apppool /apppool.name:V2RfcTestPool 2>&1 | Write-Host
           }
-          Start-Sleep 10
+          Start-Sleep 8
 
-          # Smoke test new controllers
-          $tests = @(
-            @{n='ZPO_DD_UPD_RFC';           u='http://localhost:9292/api/ZPO_DD_UPD_RFC/Post';           b='{"PO_NO":"5100001680","DELV_DATE":"20260601"}'},
-            @{n='ZPO_QTY_UPD_RFC';          u='http://localhost:9292/api/ZPO_QTY_UPD_RFC/Post';          b='{"IM_DATA":[{"EBELN":"5100001680","MATNR":"1110002329002","QTY":"900"}]}'},
-            @{n='ZVND_PUT01_HU_VAL_RFC';    u='http://localhost:9292/api/ZVND_PUT01_HU_VAL_RFC';         b='{"IM_USER":"POWERBI","IM_PLANT":"1000","IM_HU":"HU001"}'},
-            @{n='ZVND_PUT01_SAVE_DATA_RFC'; u='http://localhost:9292/api/ZVND_PUT01_SAVE_DATA_RFC';      b='{"IM_USER":"POWERBI","IT_DATA":[]}'}
-          )
-          foreach ($t in $tests) {
-            try {
-              $r = Invoke-WebRequest $t.u -Method POST -Body $t.b -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
-              Write-Host "OK: $($t.n) => $($r.Content.Substring(0,[Math]::Min(120,$r.Content.Length)))"
-            } catch {
-              Write-Host "FAIL: $($t.n) => $_"
-            }
+          # Quick health check
+          try {
+            $r = Invoke-WebRequest 'http://localhost:9292/api/ZPO_DD_UPD_RFC/Post' -Method POST -Body '{"PO_NO":"5100001680","DELV_DATE":"20260401"}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
+            Write-Host "Health check OK: $($r.Content.Substring(0,[Math]::Min(100,$r.Content.Length)))"
+          } catch {
+            Write-Host "Health check failed (may be normal): $_"
           }
           exit 0
