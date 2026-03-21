@@ -17,60 +17,54 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZVND_GATELOT2_PICKLIST_VAL_RFC")]
-        public HttpResponseMessage ZVND_GATELOT2_PICKLIST_VAL_RFC(ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
+        public IHttpActionResult ZVND_GATELOT2_PICKLIST_VAL_RFC(ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
         {
             try
             {
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZVND_GATELOT2_PICKLIST_VAL_RFC");
 
                 myfun.Invoke(dest);
-
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                if (EX_RETURN["TYPE"].GetValue().ToString() == "E")
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    return Ok(new
                     {
                         Status = "E",
-                        Message = EX_RETURN["MESSAGE"].GetValue().ToString()
+                        Message = EX_RETURN.GetString("MESSAGE")
                     });
                 }
 
-                IRfcTable tbl = myfun.GetTable("ET_PICKLIST_VAL");
-                var picklistData = tbl.AsEnumerable().Select(row =>
+                IRfcTable etOutputTable = myfun.GetTable("ET_OUTPUT");
+                var etOutputData = etOutputTable.AsEnumerable().Select(row =>
                 {
-                    var dynamicRow = new Dictionary<string, object>();
-                    var metadata = row.GetMetadata();
-                    
-                    for (int i = 0; i < metadata.FieldCount; i++)
+                    var rowData = new Dictionary<string, object>();
+                    foreach (RfcFieldMetadata field in row.GetMetadata())
                     {
-                        var fieldMetadata = metadata[i];
-                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
+                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            dynamicRow[fieldMetadata.Name] = row[i].GetValue();
+                            rowData[field.Name] = row.GetString(field.Name);
                         }
                     }
-                    return dynamicRow;
+                    return rowData;
                 }).ToList();
 
-                var response = new
+                return Ok(new
                 {
                     Status = "S",
                     Message = "Success",
                     Data = new
                     {
-                        ET_PICKLIST_VAL = picklistData
+                        ET_OUTPUT = etOutputData
                     }
-                };
-
-                return Request.CreateResponse(HttpStatusCode.OK, response);
+                });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Ok(new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -78,7 +72,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Ok(new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -86,7 +80,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Ok(new
                 {
                     Status = "E",
                     Message = ex.Message
