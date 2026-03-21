@@ -17,21 +17,20 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZVND_GATELOT2_PICKLIST_VAL_RFC")]
-        public async Task<IHttpActionResult> ZVND_GATELOT2_PICKLIST_VAL_RFC(ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
+        public IHttpActionResult ZVND_GATELOT2_PICKLIST_VAL_RFC([FromBody] ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
         {
             try
             {
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersquality();
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZVND_GATELOT2_PICKLIST_VAL_RFC");
 
-                myfun.SetValue("IV_PLANT", request.IV_PLANT);
-                myfun.SetValue("IV_LOT", request.IV_LOT);
-                myfun.SetValue("IV_MATERIAL", request.IV_MATERIAL);
+                myfun.SetValue("IM_USER", request.IM_USER);
+                myfun.SetValue("IM_PLANT", request.IM_PLANT);
 
                 myfun.Invoke(dest);
-
+                
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
                 if (EX_RETURN.GetString("TYPE") == "E")
@@ -43,18 +42,24 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     });
                 }
 
-                IRfcTable tbl = myfun.GetTable("ET_VALIDATION");
-                var etValidationData = tbl.AsEnumerable().Select(row =>
+                IRfcTable tbl = myfun.GetTable("ET_DATA");
+                
+                var etDataList = tbl.AsEnumerable().Select(row =>
                 {
                     var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < row.ElementCount; i++)
+                    var metadata = row.GetMetadata();
+                    
+                    for (int i = 0; i < metadata.FieldCount; i++)
                     {
-                        var metadata = row.GetElementMetadata(i);
-                        if (metadata.DataType != RfcDataType.STRUCTURE && metadata.DataType != RfcDataType.TABLE)
+                        var fieldMetadata = metadata.GetField(i);
+                        var fieldType = fieldMetadata.DataType;
+                        
+                        if (fieldType != RfcDataType.STRUCTURE && fieldType != RfcDataType.TABLE)
                         {
-                            rowData[metadata.Name] = row.GetValue(i);
+                            rowData[fieldMetadata.Name] = row.GetValue(fieldMetadata.Name);
                         }
                     }
+                    
                     return rowData;
                 }).ToList();
 
@@ -64,7 +69,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     Message = "Success",
                     Data = new
                     {
-                        ET_VALIDATION = etValidationData
+                        ET_DATA = etDataList
                     }
                 });
             }
@@ -76,7 +81,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     Message = ex.Message
                 });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
                 return Ok(new
                 {
@@ -97,8 +102,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
     public class ZVND_GATELOT2_PICKLIST_VAL_RFCRequest
     {
-        public string IV_PLANT { get; set; }
-        public string IV_LOT { get; set; }
-        public string IV_MATERIAL { get; set; }
+        public string IM_USER { get; set; }
+        public string IM_PLANT { get; set; }
     }
 }
