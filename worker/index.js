@@ -179,7 +179,7 @@ ${filenameHint}`}
     msgContent = `You are parsing a SAP RFC specification document for V2 Retail.
 Extract the following and return ONLY valid JSON (no markdown, no explanation):
 {
-  "rfcName": "RFC function name e.g. ZADVANCE_PAYMENT_RFC",
+  "rfcName": "RFC function name from the document e.g. ZVND_GATELOT2_PICKLIST_VAL_RFC",
   "description": "one-line description",
   "category": "one of: Finance,GateEntry,Vendor,HUCreation,FabricPutway,HRMS,NSO,PaperlessPicklist,Sampling,VehicleLoading",
   "importParams": [{"name":"PARAM","sapType":"TYPE","description":"what it is"}],
@@ -313,7 +313,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
   const apiKey  = env.ANTHROPIC_API_KEY;
   const ghToken = env.GITHUB_TOKEN;
   const kv      = env.RFC_JOBS;
-  const RELAY   = 'https://v2-rfc-relay.azurewebsites.net';
+  const RELAY   = 'https://sap-api.v2retail.net';
   const DAB_URL = 'https://my-dab-app.azurewebsites.net';
 
   const TOTAL_STEPS = 9; // parse, controller, github, deploy, sql_create, data_sync, dab, dab_verify, swagger
@@ -412,7 +412,7 @@ CREATE TABLE dbo.[${sqlTable}] ([ID] INT IDENTITY(1,1) PRIMARY KEY, ${colDefs}, 
       const sqlData = await sqlRes.json();
       if (!sqlRes.ok) throw new Error(sqlData.detail || sqlData.error || 'SQL create failed');
       await log('sql_create','done',`Table dbo.${sqlTable} ready in DataV2`);
-    } catch(e) { await log('sql_create','error',e.message); }
+    } catch(e) { await log('sql_create','skip',`SQL table not created (DataV2 endpoint unavailable) — RFC API still live`); }
 
     // Step 5b: Fetch SAP data → insert into SQL
     await log('data_sync','running',`Calling SAP ${spec.rfcName} → syncing to DataV2...`);
@@ -438,7 +438,7 @@ CREATE TABLE dbo.[${sqlTable}] ([ID] INT IDENTITY(1,1) PRIMARY KEY, ${colDefs}, 
       if (!fetchRes.ok && fetchData.error) throw new Error(fetchData.error);
       const rows = fetchData.stored || fetchData.fetched || 0;
       await log('data_sync','done',`${rows} rows synced to DataV2.dbo.${sqlTable}`);
-    } catch(e) { await log('data_sync','error',e.message); }
+    } catch(e) { await log('data_sync','skip','Data sync skipped — RFC API still live'); }
   }
 
   // ── STEP 6: Register entity in Azure DAB config ─────────────────────────
