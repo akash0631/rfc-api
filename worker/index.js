@@ -1306,15 +1306,15 @@ function showResult(job) {
   const rfcApis  = job.rfcApis  || [job.rfcApi].filter(Boolean);
   const count = rfcNames.length;
   document.getElementById('resultTitle').textContent =
-    count > 1 ? `\${count} RFCs Deployed!` : (rfcNames[0] || 'RFC') + ' Deployed!';
+    count > 1 ? (count + ' RFCs Deployed!') : (rfcNames[0] || 'RFC') + ' Deployed!';
   document.getElementById('resultSub').textContent =
     count > 1
-      ? `\${count} REST APIs are now live on sap-api.v2retail.net`
+      ? (count + ' REST APIs are now live on sap-api.v2retail.net')
       : 'Your RFC is now a live REST API with data lake access';
   let epHtml = '';
   if (rfcApis.length > 0) {
     epHtml += '<span>Live API Endpoints:</span>';
-    rfcApis.forEach(api => { epHtml += `<div style="font-size:12px;margin:2px 0">\${api}</div>`; });
+    rfcApis.forEach(api => { epHtml += '<div style="font-size:12px;margin:2px 0">' + api + '</div>'; });
   }
   epHtml += '<span style="margin-top:8px">Data Lake REST API (Azure DAB)</span>' + (job.dataLake||'') +
     '?$filter=FIELD eq \'value\'&$top=100';
