@@ -1539,7 +1539,7 @@
     "ET_ZADVANCE_PAYMENT": {
       "source": {
         "object": "dbo.ET_ZADVANCE_PAYMENT",
-        "type": "view",
+        "type": "table",
         "key-fields": [
           "ID"
         ]
@@ -1553,7 +1553,14 @@
             }
           ]
         }
-      ]
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_ZADVANCE_PAYMENT"
+      },
+      "graphql": {
+        "enabled": false
+      }
     },
     "ET_ADVANCE_PAYMENT": {
       "source": {
