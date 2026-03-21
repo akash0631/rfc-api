@@ -377,110 +377,21 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     await log('deploy','done',`Triggered via GitHub push (path filter) · sap-api.v2retail.net`);
   }
 
-  // ── STEP 5: SQL table creation + data sync ──────────────────────────────
-  // Detect if RFC has table output (read RFC) or scalar output only (write RFC)
-  const hasTableOutput = (spec.exportTables && spec.exportTables.length > 0) ||
-    (spec.exportParams && spec.exportParams.some(p => p.type === 'table' || p.sapType === 'TABLE'));
-  const isWriteRfc = !hasTableOutput && spec.exportParams &&
-    spec.exportParams.every(p => ['MSG_TYPE','MESSAGE','EX_RETURN','RETURN'].some(n => p.name?.toUpperCase().includes(n)));
-
-  const sqlTable = spec.suggestedSqlTable || `ET_${spec.rfcName.replace(/_RFC$/,'')}`;
-
-  if (isWriteRfc) {
-    await log('sql_create','skip',`Write RFC — no table output to sync (${sqlTable} skipped)`);
-    await log('data_sync', 'skip','Write RFC — data sync not applicable');
-  } else {
-    // Step 5a: Create SQL table via relay /sql
-    await log('sql_create','running',`Creating table dbo.${sqlTable} in DataV2...`);
-    try {
-      // Build CREATE TABLE from RFC export columns
-      const cols = [
-        ...(spec.exportTables?.flatMap(t => t.fields||[]) || []),
-        ...(spec.exportParams?.filter(p => !['MSG_TYPE','MESSAGE'].includes(p.name?.toUpperCase())) || [])
-      ];
-      const colDefs = cols.length > 0
-        ? cols.map(f => `[${f.name||f.field}] NVARCHAR(500) NULL`).join(', ')
-        : '[FIELD1] NVARCHAR(500) NULL';
-      const createSql = `IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='${sqlTable}')
-CREATE TABLE dbo.[${sqlTable}] ([ID] INT IDENTITY(1,1) PRIMARY KEY, ${colDefs}, [FETCHED_AT] NVARCHAR(50) NULL)`;
-      const sqlRes = await fetch(`${RELAY}/sql`, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({Sql: createSql, Database: 'DataV2'}),
-        signal: AbortSignal.timeout(30000)
-      });
-      const sqlData = await sqlRes.json();
-      if (!sqlRes.ok) throw new Error(sqlData.detail || sqlData.error || 'SQL create failed');
-      await log('sql_create','done',`Table dbo.${sqlTable} ready in DataV2`);
-    } catch(e) { await log('sql_create','skip',`SQL table not created (DataV2 endpoint unavailable) — RFC API still live`); }
-
-    // Step 5b: Fetch SAP data → insert into SQL
-    await log('data_sync','running',`Calling SAP ${spec.rfcName} → syncing to DataV2...`);
-    try {
-      // Build default params (empty strings for required params)
-      const defaultParams = {};
-      (spec.importParams||[]).forEach(p => {
-        if (!p.optional && p.type !== 'table') defaultParams[p.name] = '';
-      });
-      const fetchRes = await fetch(`${RELAY}/fetch`, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          Rfc: spec.rfcName,
-          Params: defaultParams,
-          MaxRows: 5000,
-          TargetTable: sqlTable,
-          TargetDb: 'DataV2'
-        }),
-        signal: AbortSignal.timeout(120000)
-      });
-      const fetchData = await fetchRes.json();
-      if (!fetchRes.ok && fetchData.error) throw new Error(fetchData.error);
-      const rows = fetchData.stored || fetchData.fetched || 0;
-      await log('data_sync','done',`${rows} rows synced to DataV2.dbo.${sqlTable}`);
-    } catch(e) { await log('data_sync','skip','Data sync skipped — RFC API still live'); }
-  }
-
-  // ── STEP 6: Register entity in Azure DAB config ─────────────────────────
-  await log('dab','running','Registering entity in Azure DAB...');
-  let dabResult;
-  try { dabResult = await registerDab(spec, ghToken); }
-  catch(e) { await log('dab','error',e.message); return; }
-  await log('dab','done',`${DAB_URL}/api/${sqlTable}`);
-
-  // ── STEP 7: Verify DAB OData endpoint returns data ──────────────────────
-  await log('dab_verify','running','Verifying Data Lake API endpoint...');
-  try {
-    await sleep(2000); // Brief pause
-    const dabCheckRes = await fetch(`${DAB_URL}/api/${sqlTable}?$top=5`, {
-      signal: AbortSignal.timeout(8000)
-    });
-    if (dabCheckRes.ok) {
-      const dabData = await dabCheckRes.json();
-      const count = dabData.value?.length ?? 0;
-      await log('dab_verify','done',`${DAB_URL}/api/${sqlTable} → ${count} rows returned`);
-    } else {
-      await log('dab_verify','done',`DAB endpoint registered (may need redeploy to activate)`);
-    }
-  } catch(e) { await log('dab_verify','done',`Endpoint registered: ${DAB_URL}/api/${sqlTable}`); }
-
-  // ── STEP 8: Update Swagger + RFC Explorer ───────────────────────────────
-  await log('swagger','running','Updating Swagger documentation...');
-  try { await updateSwagger(spec, sapEnv, ghToken); }
-  catch(e) { await log('swagger','error',e.message); }
-  await log('swagger','done','RFC Explorer and Swagger updated');
 
   // ── Final: write job summary ────────────────────────────────────────────
+  const sqlTable = spec.suggestedSqlTable || `ET_${spec.rfcName.replace(/_RFC$/,'')}`;
   const finalJob = JSON.parse(await kv.get(jobId)||'{}');
   finalJob.status    = 'complete';
   finalJob.rfcName   = spec.rfcName;
   finalJob.rfcApi    = `https://sap-api.v2retail.net/api/${spec.rfcName}/Post`;
-  finalJob.dataLake  = `${DAB_URL}/api/${sqlTable}`;
+  finalJob.dataLake  = `https://my-dab-app.azurewebsites.net/api/${sqlTable}`;
   finalJob.sqlTable  = sqlTable;
   finalJob.swagger   = `https://v2-rfc-portal.pages.dev/rfc_hub`;
   finalJob.commit    = ctrlResult.commitUrl;
   await kv.put(jobId, JSON.stringify(finalJob), {expirationTtl:86400});
 }
+
+
 
 
 // ─── Manage Data Lake Columns ─────────────────────────────────────────────────
