@@ -477,7 +477,7 @@ CREATE TABLE dbo.[${sqlTable}] ([ID] INT IDENTITY(1,1) PRIMARY KEY, ${colDefs}, 
   finalJob.rfcApi    = `https://sap-api.v2retail.net/api/${spec.rfcName}/Post`;
   finalJob.dataLake  = `${DAB_URL}/api/${sqlTable}`;
   finalJob.sqlTable  = sqlTable;
-  finalJob.swagger   = `https://v2-rfc-portal.pages.dev/rfc_hub.html`;
+  finalJob.swagger   = `https://v2-rfc-portal.pages.dev/rfc_hub`;
   finalJob.commit    = ctrlResult.commitUrl;
   await kv.put(jobId, JSON.stringify(finalJob), {expirationTtl:86400});
 }
@@ -1003,7 +1003,7 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
   <div class="nav" style="display:flex;align-items:center;gap:4px">
     <a id="tab-deploy" class="tab-link active" href="javascript:void(0)" onclick="showTab('deploy')">⚡ Deploy RFC</a>
     <a id="tab-columns" class="tab-link" href="javascript:void(0)" onclick="showTab('columns')">🗃️ Manage Columns</a>
-    <a href="/swagger" style="margin-left:8px">Swagger →</a>
+    <a href="https://v2-rfc-portal.pages.dev/rfc_hub" target="_blank" style="margin-left:8px">RFC Portal →</a>
   </div>
 </div>
 
@@ -1364,7 +1364,7 @@ function reset() {
 // ─── Swagger redirect page ────────────────────────────────────────────────────
 const SWAGGER_HTML = `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<meta http-equiv="refresh" content="0;url=https://v2-rfc-portal.pages.dev/swagger">
+<meta http-equiv="refresh" content="0;url=https://v2-rfc-portal.pages.dev/rfc_hub">
 <title>Redirecting to Swagger...</title></head>
 <body style="font-family:monospace;display:grid;place-items:center;height:100vh;background:#0f172a;color:#9aa5d4">
 <p>→ Redirecting to Swagger UI...</p>
