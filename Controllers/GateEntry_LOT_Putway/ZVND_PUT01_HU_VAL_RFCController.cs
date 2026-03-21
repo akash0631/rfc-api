@@ -1,3 +1,4 @@
+// PUT01 HU Validation RFC — deploy 1774083213
 using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
 using System;
@@ -11,7 +12,6 @@ using Vendor_Application_MVC.Controllers;
 using Vendor_SRM_Routing_Application.Models.HU_Creation;
 using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
-// PUT01 HU Validation RFC — deployed 1774082089
 namespace Vendor_SRM_Routing_Application.Controllers.GateEntry_LOT_Putway
 {
     public class ZVND_PUT01_HU_VAL_RFCController : BaseController
