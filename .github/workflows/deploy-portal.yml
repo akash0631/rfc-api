@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  deploy-pages:
     runs-on: ubuntu-latest
     name: Deploy to Cloudflare Pages
     steps:
@@ -23,14 +23,26 @@ jobs:
       - name: Install Wrangler
         run: npm install -g wrangler
 
-      - name: Show portal files
-        run: |
-          echo "Portal files and sizes:"
-          ls -la portal/
-          wc -c portal/rfc_hub.html
-
-      - name: Deploy to Cloudflare Pages (production branch = main)
+      - name: Deploy to Cloudflare Pages
         run: wrangler pages deploy portal --project-name=v2-rfc-portal --branch=main --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
+
+  sync-iis:
+    runs-on: [self-hosted, iis]
+    name: Sync default.html on .36
+    needs: deploy-pages
+    steps:
+      - name: Wait for Pages CDN to propagate
+        shell: powershell
+        run: Start-Sleep 30
+
+      - name: Download latest portal to IIS default.html
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest "https://v2-rfc-portal.pages.dev/rfc_hub" -UseBasicParsing -OutFile "C:\V2RfcTest\default.html"
+          $size = (Get-Item "C:\V2RfcTest\default.html").Length
+          Write-Host "✅ default.html updated: $size bytes — localhost:9292 and pages.dev now in sync"
+
