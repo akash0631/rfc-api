@@ -1703,6 +1703,32 @@
       "graphql": {
         "enabled": false
       }
+    },
+    "ET_ZVND_GATELOT2_PICKLIST_VAL": {
+      "source": {
+        "object": "dbo.ET_ZVND_GATELOT2_PICKLIST_VAL",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_ZVND_GATELOT2_PICKLIST_VAL"
+      },
+      "graphql": {
+        "enabled": false
+      }
     }
   }
 }
