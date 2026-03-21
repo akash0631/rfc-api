@@ -204,6 +204,43 @@ RFC Document:
   return JSON.parse(raw.replace(/```json\n?/g,'').replace(/```/g,'').trim());
 }
 
+
+// ─── Parse MULTIPLE RFCs from one document ────────────────────────────────────
+async function parseMultipleRfcs(text, apiKey, filename='', images=[]) {
+  const filenameHint = filename ? `\nHint: The filename is "${filename}".` : '';
+  const msgContent = `You are parsing a SAP RFC specification document for V2 Retail.
+This document may contain ONE or MULTIPLE RFC definitions.
+Extract ALL RFCs found and return ONLY a valid JSON array (no markdown, no explanation):
+[
+  {
+    "rfcName": "EXACT RFC function name e.g. ZVND_GATELOT2_PICKLIST_VAL_RFC",
+    "description": "one-line description of what this RFC does",
+    "category": "one of: Finance,GateEntry,Vendor,HUCreation,FabricPutway,HRMS,NSO,PaperlessPicklist,Sampling,VehicleLoading",
+    "importParams": [{"name":"PARAM","sapType":"TYPE","description":"what it is"}],
+    "outputType": "table OR return_only",
+    "outputTableName": "TABLE export param name or null",
+    "outputFields": [{"fieldName":"F","sapType":"T","length":"L"}],
+    "suggestedSqlTable": "ET_RFCNAME"
+  }
+]
+Return an ARRAY even if only one RFC is found. Never return an object, always an array.
+RFC Document:
+${text.slice(0,8000)}${filenameHint}`;
+
+  const r = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,
+      messages:[{role:'user',content:msgContent}]})
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error?.message||'Claude API error');
+  const raw = d.content?.find(b=>b.type==='text')?.text||'';
+  const parsed = JSON.parse(raw.replace(/```json\n?/g,'').replace(/```/g,'').trim());
+  // Ensure array
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
 // ─── Generate C# controller ───────────────────────────────────────────────────
 async function genController(spec, sapEnv, apiKey) {
   const env = SAP_ENVS[sapEnv];
@@ -328,26 +365,45 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
   };
 
-  // ── STEP 1: Parse RFC document ──────────────────────────────────────────
-  await log('parse','running','Extracting RFC spec with Claude AI...');
-  let spec;
-  try { spec = await parseRfc(text, apiKey, filename, images); }
+  // ── STEP 1: Parse RFC document (supports multiple RFCs in one doc) ─────
+  await log('parse','running','Extracting RFC spec(s) with Claude AI...');
+  let specs;
+  try { specs = await parseMultipleRfcs(text, apiKey, filename, images); }
   catch(e) { await log('parse','error',e.message); return; }
-  await log('parse','done',`${spec.rfcName} · ${spec.category}`);
+  const rfcCount = specs.length;
+  await log('parse','done', rfcCount > 1
+    ? `Found ${rfcCount} RFCs: ${specs.map(s=>s.rfcName).join(', ')}`
+    : `${specs[0].rfcName} · ${specs[0].category}`);
 
-  // ── STEP 2: Generate C# controller ─────────────────────────────────────
-  await log('controller','running','Generating ASP.NET C# controller...');
-  let ctrlCode;
-  try { ctrlCode = await genController(spec, sapEnv, apiKey); }
-  catch(e) { await log('controller','error',e.message); return; }
-  await log('controller','done',`${ctrlCode.split('\n').length} lines generated`);
+  // ── STEPS 2–3: Generate + push controller for EACH RFC ─────────────────
+  const deployedRfcs = [];
+  for (let i = 0; i < specs.length; i++) {
+    const spec = specs[i];
+    const suffix = rfcCount > 1 ? ` (${i+1}/${rfcCount}: ${spec.rfcName})` : '';
 
-  // ── STEP 3: Push to GitHub ──────────────────────────────────────────────
-  await log('github','running','Pushing controller to GitHub...');
-  let ctrlResult;
-  try { ctrlResult = await pushController(spec, ctrlCode, sapEnv, ghToken); }
-  catch(e) { await log('github','error',e.message); return; }
-  await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha.slice(0,8)})`);
+    // Step 2: Generate controller
+    await log('controller','running',`Generating controller${suffix}...`);
+    let ctrlCode;
+    try { ctrlCode = await genController(spec, sapEnv, apiKey); }
+    catch(e) { await log('controller','error',`${spec.rfcName}: ${e.message}`); return; }
+    await log('controller', i < specs.length-1 ? 'running' : 'done',
+      `${spec.rfcName}: ${ctrlCode.split('\n').length} lines`);
+
+    // Step 3: Push to GitHub
+    await log('github','running',`Pushing ${spec.rfcName} to GitHub${suffix}...`);
+    let ctrlResult;
+    try { ctrlResult = await pushController(spec, ctrlCode, sapEnv, ghToken); }
+    catch(e) { await log('github','error',`${spec.rfcName}: ${e.message}`); return; }
+    await log('github', i < specs.length-1 ? 'running' : 'done',
+      `${spec.rfcName}: ${ctrlResult.commitSha.slice(0,8)}`);
+
+    deployedRfcs.push({ spec, ctrlResult });
+    if (i < specs.length - 1) await sleep(1500); // small gap between pushes
+  }
+
+  // Use first RFC spec for downstream steps (DAB, SQL, Swagger use first RFC)
+  const spec = specs[0];
+  const ctrlResult = deployedRfcs[0].ctrlResult;
 
   // ── STEP 4: Trigger IIS Deploy (non-blocking — GitHub push already triggers it) ──
   // The push to Controllers/** in step 3 already auto-triggers deploy-iis.yml.
@@ -371,7 +427,8 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     const runs = await runsRes.json();
     const fresh = runs.workflow_runs?.[0];
     const runUrl = fresh ? `https://github.com/${GITHUB_REPO}/actions/runs/${fresh.id}` : '';
-    await log('deploy','done',`Deploy triggered ✓ sap-api.v2retail.net/api/${spec.rfcName}/Post`);
+    const allEndpoints = deployedRfcs.map(r=>`sap-api.v2retail.net/api/${r.spec.rfcName}`).join(', ');
+    await log('deploy','done',`Deploy triggered ✓ ${allEndpoints}`);
   } catch(e) {
     // Non-fatal — GitHub push already triggers deploy via path filter
     await log('deploy','done',`Triggered via GitHub push (path filter) · sap-api.v2retail.net`);
@@ -382,7 +439,9 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
   const sqlTable = spec.suggestedSqlTable || `ET_${spec.rfcName.replace(/_RFC$/,'')}`;
   const finalJob = JSON.parse(await kv.get(jobId)||'{}');
   finalJob.status    = 'complete';
-  finalJob.rfcName   = spec.rfcName;
+  finalJob.rfcName   = specs.map(s=>s.rfcName).join(', ');
+  finalJob.rfcNames  = specs.map(s=>s.rfcName);
+  finalJob.rfcApis   = deployedRfcs.map(r=>`https://sap-api.v2retail.net/api/${r.spec.rfcName}/Post`);
   finalJob.rfcApi    = `https://sap-api.v2retail.net/api/${spec.rfcName}/Post`;
   finalJob.dataLake  = `https://my-dab-app.azurewebsites.net/api/${sqlTable}`;
   finalJob.sqlTable  = sqlTable;
@@ -986,9 +1045,9 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
     <div class="card">
       <div class="ct">Pipeline Progress</div>
       <div class="steps" id="steps">
-        <div class="step" id="s-parse"><div class="step-icon">○</div><div><div>Parse RFC document</div></div></div>
-        <div class="step" id="s-controller"><div class="step-icon">○</div><div><div>Generate ASP.NET controller</div></div></div>
-        <div class="step" id="s-github"><div class="step-icon">○</div><div><div>Push to GitHub</div></div></div>
+        <div class="step" id="s-parse"><div class="step-icon">○</div><div><div>Parse RFC document(s)</div><div class="step-detail" style="font-size:11px;color:#888">Detects single or multiple RFCs automatically</div></div></div>
+        <div class="step" id="s-controller"><div class="step-icon">○</div><div><div>Generate C# controller(s)</div><div class="step-detail" style="font-size:11px;color:#888">One controller per RFC found</div></div></div>
+        <div class="step" id="s-github"><div class="step-icon">○</div><div><div>Push to GitHub</div><div class="step-detail" style="font-size:11px;color:#888">Triggers auto-deploy via path filter</div></div></div>
         <div class="step" id="s-deploy"><div class="step-icon">○</div><div><div>Build &amp; Deploy to IIS (.36 — V2DC-ADDVERB)</div></div></div>
         <div class="step" id="s-dab"><div class="step-icon">○</div><div><div>Register in Azure DAB</div></div></div>
         <div class="step" id="s-swagger"><div class="step-icon">○</div><div><div>Update Swagger docs</div></div></div>
@@ -1243,12 +1302,23 @@ window.pollStatus = function pollStatus(jobId) {
 function showResult(job) {
   document.getElementById('progress-section').style.display='none';
   document.getElementById('result-section').style.display='block';
-  document.getElementById('resultTitle').textContent = (job.rfcName||'RFC') + ' Deployed!';
-  document.getElementById('resultSub').textContent = 'Your RFC is now a live REST API with data lake access';
-  document.getElementById('epBox').innerHTML =
-    '<span>RFC API (live on IIS)</span>' + (job.rfcApi||'') +
-    '<span style="margin-top:8px">Data Lake REST API (Azure DAB)</span>' + (job.dataLake||'') +
+  const rfcNames = job.rfcNames || [job.rfcName || 'RFC'];
+  const rfcApis  = job.rfcApis  || [job.rfcApi].filter(Boolean);
+  const count = rfcNames.length;
+  document.getElementById('resultTitle').textContent =
+    count > 1 ? `${count} RFCs Deployed!` : (rfcNames[0] || 'RFC') + ' Deployed!';
+  document.getElementById('resultSub').textContent =
+    count > 1
+      ? `${count} REST APIs are now live on sap-api.v2retail.net`
+      : 'Your RFC is now a live REST API with data lake access';
+  let epHtml = '';
+  if (rfcApis.length > 0) {
+    epHtml += '<span>Live API Endpoints:</span>';
+    rfcApis.forEach(api => { epHtml += `<div style="font-size:12px;margin:2px 0">${api}</div>`; });
+  }
+  epHtml += '<span style="margin-top:8px">Data Lake REST API (Azure DAB)</span>' + (job.dataLake||'') +
     '?$filter=FIELD eq \'value\'&$top=100';
+  document.getElementById('epBox').innerHTML = epHtml;
   const chips = document.getElementById('chips');
   chips.innerHTML = '';
   if (job.commit) chips.innerHTML += '<a class="chip g" href="'+job.commit+'" target="_blank">✓ GitHub commit</a>';
