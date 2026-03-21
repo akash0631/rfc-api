@@ -17,105 +17,83 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZVND_GATELOT2_PICKLIST_VAL_RFC")]
-        public async Task<IHttpActionResult> ValidatePicklistData([FromBody] ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
+        public async Task<object> ValidateGateLotToPicklist([FromBody] ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
         {
             try
             {
-                if (request == null)
-                {
-                    return Ok(new
-                    {
-                        Status = "E",
-                        Message = "Request cannot be null",
-                        Data = new { ET_VALIDATION_RESULT = new List<object>() }
-                    });
-                }
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZVND_GATELOT2_PICKLIST_VAL_RFC");
 
-                myfun.SetValue("IV_PLANT", request.IV_PLANT);
-                myfun.SetValue("IV_PICKLIST_NO", request.IV_PICKLIST_NO);
-                myfun.SetValue("IV_LOT_NO", request.IV_LOT_NO);
+                myfun.SetValue("IV_GATE_LOT", request.IV_GATE_LOT);
+                myfun.SetValue("IV_PICKLIST_ID", request.IV_PICKLIST_ID);
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                
-                if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
+
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return Ok(new
+                    return new
                     {
                         Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE"),
-                        Data = new { ET_VALIDATION_RESULT = new List<object>() }
-                    });
+                        Message = EX_RETURN.GetString("MESSAGE")
+                    };
                 }
 
-                IRfcTable validationResultTable = myfun.GetTable("ET_VALIDATION_RESULT");
-                
-                var validationResults = validationResultTable.AsEnumerable().Select(row =>
+                IRfcTable tbl = myfun.GetTable("ET_VALIDATION_RESULT");
+                var validationResults = tbl.AsEnumerable().Select(row =>
                 {
                     var result = new Dictionary<string, object>();
-                    var metadata = row.GetMetaData();
-                    
-                    for (int i = 0; i < metadata.FieldCount; i++)
+                    for (int i = 0; i < row.FieldCount; i++)
                     {
-                        var fieldName = metadata[i].Name;
-                        var fieldType = metadata[i].DataType;
-                        
-                        if (fieldType != RfcDataType.STRUCTURE && fieldType != RfcDataType.TABLE)
-                        {
-                            result[fieldName] = row.GetString(fieldName);
-                        }
+                        var field = row[i];
+                        result[field.Name] = field.GetValue();
                     }
-                    
                     return result;
                 }).ToList();
 
-                return Ok(new
+                return new
                 {
                     Status = "S",
-                    Message = "Picklist validation completed successfully",
-                    Data = new { ET_VALIDATION_RESULT = validationResults }
-                });
+                    Message = "Gate lot to picklist validation completed successfully",
+                    Data = new
+                    {
+                        ET_VALIDATION_RESULT = validationResults
+                    }
+                };
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new
+                return new
                 {
                     Status = "E",
-                    Message = ex.Message,
-                    Data = new { ET_VALIDATION_RESULT = new List<object>() }
-                });
+                    Message = ex.Message
+                };
             }
-            catch (RfcCommunicationException ex)
+            catch (CommunicationException ex)
             {
-                return Ok(new
+                return new
                 {
                     Status = "E",
-                    Message = ex.Message,
-                    Data = new { ET_VALIDATION_RESULT = new List<object>() }
-                });
+                    Message = ex.Message
+                };
             }
             catch (Exception ex)
             {
-                return Ok(new
+                return new
                 {
                     Status = "E",
-                    Message = ex.Message,
-                    Data = new { ET_VALIDATION_RESULT = new List<object>() }
-                });
+                    Message = ex.Message
+                };
             }
         }
     }
 
     public class ZVND_GATELOT2_PICKLIST_VAL_RFCRequest
     {
-        public string IV_PLANT { get; set; }
-        public string IV_PICKLIST_NO { get; set; }
-        public string IV_LOT_NO { get; set; }
+        public string IV_GATE_LOT { get; set; }
+        public string IV_PICKLIST_ID { get; set; }
     }
 }
