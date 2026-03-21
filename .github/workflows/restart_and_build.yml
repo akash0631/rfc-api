@@ -1,0 +1,23 @@
+name: RESTART_36_AND_BUILD_PUT01
+on:
+  workflow_dispatch:
+jobs:
+  restart:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Restart V2DC-ADDVERB runner via PS-remote
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $pass = ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force
+          $cred = New-Object PSCredential('V2DC-ADDVERB\Administrator', $pass)
+          try {
+            $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -ErrorAction Stop
+            Invoke-Command -Session $s -ScriptBlock {
+              Get-Service | Where-Object { $_.Name -like 'actions.runner*' } | Restart-Service -Force
+              Write-Host "Runner restarted"
+            }
+            Remove-PSSession $s
+          } catch {
+            Write-Host "PS-remote failed: $_"
+          }
