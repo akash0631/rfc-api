@@ -38,15 +38,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     });
                 }
 
-                IRfcTable etOutputTable = myfun.GetTable("ET_OUTPUT");
-                var etOutputData = etOutputTable.AsEnumerable().Select(row =>
-                {
+                IRfcTable tbl = myfun.GetTable("ET_PICKLIST_VAL");
+                var picklistData = tbl.AsEnumerable().Select(row => {
                     var rowData = new Dictionary<string, object>();
-                    foreach (RfcFieldMetadata field in row.GetMetadata())
+                    for (int i = 0; i < row.FieldCount; i++)
                     {
+                        var field = row.GetElementMetadata(i);
                         if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            rowData[field.Name] = row.GetString(field.Name);
+                            rowData[field.Name] = row.GetValue(i);
                         }
                     }
                     return rowData;
@@ -58,7 +58,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     Message = "Success",
                     Data = new
                     {
-                        ET_OUTPUT = etOutputData
+                        ET_PICKLIST_VAL = picklistData
                     }
                 });
             }
