@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>V2 Retail — SAP RFC Portal</title>
+<title>V2 Retail · SAP RFC Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -220,7 +220,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
     <div class="logo-icon">V2</div>
     <div>
       <div class="logo-text">V2 Retail — SAP RFC Portal</div>
-      <div class="logo-sub">RFC Integration · Azure DAB · Cloudflare Tunnel</div>
+      <div class="logo-sub">Part 1: RFC API · Part 2: Data Lake · 46 Controllers · 82 DAB Tables</div>
     </div>
   </div>
   <div class="live-badge">
@@ -237,6 +237,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 <!-- ── TABS ──────────────────────────────────────────────────────── -->
 <div id="tabs">
   <div class="tab active" data-tab="overview"><span class="dot"></span> Overview</div>
+  <div class="tab" data-tab="explorer"><span class="dot"></span> RFC Explorer <span class="chip" id="rfc-count">46</span></div>
+  <div class="tab" data-tab="generator"><span class="dot"></span> RFC Generator</div>
+  <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
+  <div class="tab" data-tab="pipeline"><span class="dot"></span> Pipeline</div>
+</div>
   <div class="tab" data-tab="explorer"><span class="dot"></span> RFC Explorer <span class="chip" id="rfc-count">9</span> <span class="new-chip">LIVE</span></div>
   <div class="tab" data-tab="generator"><span class="dot"></span> RFC Generator</div>
   <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
@@ -248,10 +253,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 ════════════════════════════════════════════════════════════════ -->
 <div id="tab-overview" class="section active">
   <div class="stats-grid">
-    <div class="stat-card"><div class="num" id="ctrl-count">9</div><div class="label">Finance Controllers</div></div>
+    <div class="stat-card"><div class="num" id="ctrl-count">46</div><div class="label">Total API Controllers</div></div>
     <div class="stat-card live"><div class="num">LIVE</div><div class="label">IIS .36 — Port 9292</div></div>
     <div class="stat-card"><div class="num">82</div><div class="label">Azure DAB Tables</div></div>
     <div class="stat-card red"><div class="num">SAP Dev</div><div class="label">192.168.144.174 / Client 210</div></div>
+    <div class="stat-card"><div class="num">7</div><div class="label">Module Categories</div></div>
   </div>
 
   <div class="card">
@@ -393,30 +399,69 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 ════════════════════════════════════════════════════════════════ -->
 <div id="tab-pipeline" class="section">
   <div class="card">
-    <div class="card-title">RFC Deployment Pipeline</div>
+    <div class="card-title">Part 1 — RFC API Deployment</div>
     <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
       <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:20px">📄</span>
-        <div><div style="font-weight:600">Upload RFC Document</div><div style="color:var(--muted);font-size:12px">SAP Function Builder screenshot (.docx)</div></div>
+        <div><div style="font-weight:600">1. Upload RFC Document (.docx)</div><div style="color:var(--muted);font-size:12px">SAP Function Builder export — RFC Generator tab</div></div>
       </div>
       <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:20px">🤖</span>
-        <div><div style="font-weight:600">Claude Vision Parse</div><div style="color:var(--muted);font-size:12px">Extracts RFC name, import/export params, structure fields</div></div>
+        <div><div style="font-weight:600">2. AI Parses RFC Parameters</div><div style="color:var(--muted);font-size:12px">Claude extracts RFC name, import/export params, table structures</div></div>
       </div>
       <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:20px">⚙️</span>
-        <div><div style="font-weight:600">C# Controller Generated</div><div style="color:var(--muted);font-size:12px">ASP.NET WebAPI controller with SAP NCo binding</div></div>
+        <div><div style="font-weight:600">3. C# Controller Generated</div><div style="color:var(--muted);font-size:12px">ASP.NET WebAPI controller with SAP NCo binding auto-generated</div></div>
       </div>
       <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:20px">📦</span>
-        <div><div style="font-weight:600">GitHub Push</div><div style="color:var(--muted);font-size:12px">akash0631/rfc-api → Controllers/Finance/</div></div>
+        <div><div style="font-weight:600">4. Push to GitHub (akash0631/rfc-api)</div><div style="color:var(--muted);font-size:12px">Controllers/Finance/ or Controllers/[Module]/ — path filter auto-triggers deploy</div></div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:20px">🏗️</span>
+        <div><div style="font-weight:600">5. Build &amp; Deploy to V2DC-ADDVERB</div><div style="color:var(--muted);font-size:12px">GitHub Actions (deploy-iis.yml) → copies DLL to C:\V2RfcTest\bin\ → recycles V2RfcTestPool</div></div>
       </div>
       <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0">
         <span style="font-size:20px">🚀</span>
-        <div><div style="font-weight:600">Live on sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Tunnel → V2DC-ADDVERB IIS :9292 → SAP Dev</div></div>
+        <div><div style="font-weight:600">6. Live on sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Tunnel → V2DC-ADDVERB IIS :9292 → SAP Dev (192.168.144.174 / Client 210)</div></div>
       </div>
     </div>
+    <div style="margin-top:14px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#15803d;font-weight:600">
+      ⚠️ Note for NEW controllers: VS Build on .36 required once → then all future deploys are fully automated via GitHub push
+    </div>
   </div>
+
+  <div class="card">
+    <div class="card-title">Part 2 — Data Lake Sync</div>
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:20px">🕐</span>
+        <div><div style="font-weight:600">1. Scheduled Trigger — 1:30 AM IST Daily</div><div style="color:var(--muted);font-size:12px">GitHub Actions (p4_sync.yml) runs on cron schedule</div></div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:20px">📡</span>
+        <div><div style="font-weight:600">2. Call SAP RFC via sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Worker → IIS .36 → SAP Dev — fetches latest data</div></div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:20px">💾</span>
+        <div><div style="font-weight:600">3. Store in DataV2 SQL Server</div><div style="color:var(--muted);font-size:12px">192.168.151.28 — SAP data written to DataV2 database tables</div></div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0">
+        <span style="font-size:20px">🌐</span>
+        <div><div style="font-weight:600">4. Exposed via Azure DAB (82 Tables)</div><div style="color:var(--muted);font-size:12px">my-dab-app.azurewebsites.net — OData REST API with $filter, $top, $skip, $select</div></div>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px">
+      <span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;padding:4px 10px;border-radius:6px">SAP Dev RFC</span>
+      <span>→</span>
+      <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">Worker /relay-rfc</span>
+      <span>→</span>
+      <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">DataV2 SQL .28</span>
+      <span>→</span>
+      <span style="background:#faf5ff;border:1px solid #e9d5ff;color:#7e22ce;padding:4px 10px;border-radius:6px">Azure DAB API</span>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title">Infrastructure</div>
     <table class="quick-ref-table">
@@ -425,9 +470,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
         <tr><td>V2DC-ADDVERB IIS</td><td style="font-family:var(--mono);font-size:12px">192.168.151.36:9292</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
         <tr><td>Cloudflare Tunnel</td><td style="font-family:var(--mono);font-size:12px">v2-sap-api → sap-api.v2retail.net</td><td><span style="color:var(--green);font-weight:600">● Connected</span></td></tr>
         <tr><td>CF Worker</td><td style="font-family:var(--mono);font-size:12px">v2-rfc-pipeline.akash-bab.workers.dev</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
-        <tr><td>GitHub Runner</td><td style="font-family:var(--mono);font-size:12px">V2DC-ADDVERB (iis label)</td><td><span style="color:var(--green);font-weight:600">● Online</span></td></tr>
+        <tr><td>GitHub Runner (iis)</td><td style="font-family:var(--mono);font-size:12px">V2DC-ADDVERB — label: iis</td><td><span style="color:var(--green);font-weight:600">● Online</span></td></tr>
+        <tr><td>GitHub Repo</td><td style="font-family:var(--mono);font-size:12px">akash0631/rfc-api (PUBLIC)</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr>
         <tr><td>Azure DAB</td><td style="font-family:var(--mono);font-size:12px">my-dab-app.azurewebsites.net</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
         <tr><td>SAP Dev</td><td style="font-family:var(--mono);font-size:12px">192.168.144.174 · Client 210</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr>
+        <tr><td>Data Lake SQL</td><td style="font-family:var(--mono);font-size:12px">192.168.151.28 · DataV2 DB</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Active GitHub Workflows</div>
+    <table class="quick-ref-table">
+      <thead><tr><th>Workflow</th><th>File</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td style="font-weight:600">Build and Deploy to .36 IIS</td><td style="font-family:var(--mono);font-size:11px">deploy-iis.yml</td><td style="font-size:12px;color:var(--muted)">Auto-triggers on Controllers/** push → compiles & deploys DLL</td></tr>
+        <tr><td style="font-weight:600">Deploy RFC Portal</td><td style="font-family:var(--mono);font-size:11px">deploy-portal.yml</td><td style="font-size:12px;color:var(--muted)">Deploys portal/rfc_hub.html to Cloudflare Pages</td></tr>
+        <tr><td style="font-weight:600">Deploy RFC Worker</td><td style="font-family:var(--mono);font-size:11px">deploy-worker.yml</td><td style="font-size:12px;color:var(--muted)">Deploys worker/index.js to Cloudflare Workers</td></tr>
+        <tr><td style="font-weight:600">P4 Data Lake Sync</td><td style="font-family:var(--mono);font-size:11px">p4_sync.yml</td><td style="font-size:12px;color:var(--muted)">Daily 1:30 AM IST — SAP RFC → DataV2 SQL</td></tr>
+        <tr><td style="font-weight:600">Restart .36 Runner</td><td style="font-family:var(--mono);font-size:11px">restart36_NOW.yml</td><td style="font-size:12px;color:var(--muted)">Emergency: restarts GitHub Actions runner on .36</td></tr>
       </tbody>
     </table>
   </div>
