@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZVND_GATELOT2_PICKLIST_VAL_RFC")]
-        public async Task<object> ValidateGateLotToPicklist([FromBody] ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
+        public HttpResponseMessage ZVND_GATELOT2_PICKLIST_VAL_RFC(ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
         {
             try
             {
@@ -26,74 +26,76 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZVND_GATELOT2_PICKLIST_VAL_RFC");
 
-                myfun.SetValue("IV_GATE_LOT", request.IV_GATE_LOT);
-                myfun.SetValue("IV_PICKLIST_ID", request.IV_PICKLIST_ID);
-
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                if (EX_RETURN.GetString("TYPE") == "E")
+                if (EX_RETURN["TYPE"].GetValue().ToString() == "E")
                 {
-                    return new
+                    return Request.CreateResponse(HttpStatusCode.OK, new
                     {
                         Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE")
-                    };
+                        Message = EX_RETURN["MESSAGE"].GetValue().ToString()
+                    });
                 }
 
-                IRfcTable tbl = myfun.GetTable("ET_VALIDATION_RESULT");
-                var validationResults = tbl.AsEnumerable().Select(row =>
+                IRfcTable tbl = myfun.GetTable("ET_PICKLIST_VAL");
+                var picklistData = tbl.AsEnumerable().Select(row =>
                 {
-                    var result = new Dictionary<string, object>();
-                    for (int i = 0; i < row.FieldCount; i++)
+                    var dynamicRow = new Dictionary<string, object>();
+                    var metadata = row.GetMetadata();
+                    
+                    for (int i = 0; i < metadata.FieldCount; i++)
                     {
-                        var field = row[i];
-                        result[field.Name] = field.GetValue();
+                        var fieldMetadata = metadata[i];
+                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
+                        {
+                            dynamicRow[fieldMetadata.Name] = row[i].GetValue();
+                        }
                     }
-                    return result;
+                    return dynamicRow;
                 }).ToList();
 
-                return new
+                var response = new
                 {
                     Status = "S",
-                    Message = "Gate lot to picklist validation completed successfully",
+                    Message = "Success",
                     Data = new
                     {
-                        ET_VALIDATION_RESULT = validationResults
+                        ET_PICKLIST_VAL = picklistData
                     }
                 };
+
+                return Request.CreateResponse(HttpStatusCode.OK, response);
             }
             catch (RfcAbapException ex)
             {
-                return new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
                     Message = ex.Message
-                };
+                });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
-                return new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
                     Message = ex.Message
-                };
+                });
             }
             catch (Exception ex)
             {
-                return new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
                     Message = ex.Message
-                };
+                });
             }
         }
     }
 
     public class ZVND_GATELOT2_PICKLIST_VAL_RFCRequest
     {
-        public string IV_GATE_LOT { get; set; }
-        public string IV_PICKLIST_ID { get; set; }
     }
 }
