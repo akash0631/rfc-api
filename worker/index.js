@@ -1078,7 +1078,7 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
         <div class="step" id="s-parse"><div class="step-icon">○</div><div><div>Parse RFC document</div></div></div>
         <div class="step" id="s-controller"><div class="step-icon">○</div><div><div>Generate ASP.NET controller</div></div></div>
         <div class="step" id="s-github"><div class="step-icon">○</div><div><div>Push to GitHub</div></div></div>
-        <div class="step" id="s-deploy"><div class="step-icon">○</div><div><div>Build &amp; Deploy to IIS (.46)</div></div></div>
+        <div class="step" id="s-deploy"><div class="step-icon">○</div><div><div>Build &amp; Deploy to IIS (.36 — V2DC-ADDVERB)</div></div></div>
         <div class="step" id="s-dab"><div class="step-icon">○</div><div><div>Register in Azure DAB</div></div></div>
         <div class="step" id="s-swagger"><div class="step-icon">○</div><div><div>Update Swagger docs</div></div></div>
       </div>
@@ -2208,7 +2208,7 @@ input::placeholder{color:var(--dim)}
 </head>
 <body>
 <div class="top">
-  <div class="brand"><div class="bdot"></div>V2 Retail · SAP Fetch <span class="badge">claudetestv2 @ 192.168.151.46</span></div>
+  <div class="brand"><div class="bdot"></div>V2 Retail · SAP Fetch <span class="badge">V2DC-ADDVERB @ 192.168.151.36</span></div>
   <div style="color:#94a3b8;font-size:12px">Relay: v2-rfc-relay.azurewebsites.net</div>
 </div>
 
