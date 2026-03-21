@@ -2,60 +2,119 @@ using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
+using Vendor_SRM_Routing_Application.Models.HU_Creation;
+using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
-namespace Vendor_SRM_Routing_Application.Controllers.Finance
+namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 {
     public class ZPO_COST_UPD_RFCController : BaseController
     {
         [HttpPost]
-        [Route("api/ZPO_COST_UPD_RFC/Post")]
-        public IHttpActionResult Post([FromBody] ZPO_COST_UPD_RFCRequest request)
+        [Route("api/ZPO_COST_UPD_RFC")]
+        public IHttpActionResult UpdatePurchaseOrderCost(ZPO_COST_UPD_RFC_Request request)
         {
             try
             {
-                if (request == null)
-                    return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = "Request data is required" });
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                IRfcFunction myfun = dest.Repository.CreateFunction("ZPO_COST_UPD_RFC");
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZPO_COST_UPD_RFC");
 
-                if (request.IM_DATA != null && request.IM_DATA.Count > 0)
+                if (request.IM_DATA != null)
                 {
-                    IRfcTable imDataTable = myfun.GetTable("IM_DATA");
-                    foreach (var row in request.IM_DATA)
-                    {
-                        imDataTable.Append();
-                        if (!string.IsNullOrEmpty(row.EBELN)) imDataTable.SetValue("EBELN", row.EBELN);
-                        if (!string.IsNullOrEmpty(row.MATNR)) imDataTable.SetValue("MATNR", row.MATNR);
-                        if (!string.IsNullOrEmpty(row.COST))  imDataTable.SetValue("COST", row.COST);
-                    }
+                    IRfcStructure imDataStructure = myfun.GetStructure("IM_DATA");
+                    if (!string.IsNullOrEmpty(request.IM_DATA.PO_NUMBER))
+                        imDataStructure.SetValue("PO_NUMBER", request.IM_DATA.PO_NUMBER);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.PO_ITEM))
+                        imDataStructure.SetValue("PO_ITEM", request.IM_DATA.PO_ITEM);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.COST_AMOUNT))
+                        imDataStructure.SetValue("COST_AMOUNT", request.IM_DATA.COST_AMOUNT);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.CURRENCY))
+                        imDataStructure.SetValue("CURRENCY", request.IM_DATA.CURRENCY);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.COST_TYPE))
+                        imDataStructure.SetValue("COST_TYPE", request.IM_DATA.COST_TYPE);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.VENDOR_CODE))
+                        imDataStructure.SetValue("VENDOR_CODE", request.IM_DATA.VENDOR_CODE);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.PLANT))
+                        imDataStructure.SetValue("PLANT", request.IM_DATA.PLANT);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.MATERIAL))
+                        imDataStructure.SetValue("MATERIAL", request.IM_DATA.MATERIAL);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.UPDATED_BY))
+                        imDataStructure.SetValue("UPDATED_BY", request.IM_DATA.UPDATED_BY);
+                    if (!string.IsNullOrEmpty(request.IM_DATA.UPDATE_DATE))
+                        imDataStructure.SetValue("UPDATE_DATE", request.IM_DATA.UPDATE_DATE);
                 }
 
                 myfun.Invoke(dest);
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string msgType = myfun.GetString("MSG_TYPE");
-                string message = myfun.GetString("MESSAGE");
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
 
-                return Ok(new { Status = msgType == "S", MSG_TYPE = msgType, MESSAGE = message });
+                if (returnType == "E")
+                {
+                    return Ok(new
+                    {
+                        Status = "E",
+                        Message = returnMessage
+                    });
+                }
+
+                return Ok(new
+                {
+                    Status = "S",
+                    Message = returnMessage
+                });
             }
-            catch (RfcAbapException ex)      { return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message }); }
-            catch (RfcCommunicationException ex) { return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message }); }
-            catch (Exception ex)             { return Ok(new { Status = false, MSG_TYPE = "E", MESSAGE = ex.Message }); }
+            catch (RfcAbapException ex)
+            {
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
+            }
+            catch (CommunicationException ex)
+            {
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
+            }
         }
     }
 
-    public class ZPO_COST_UPD_RFCRequest
+    public class ZPO_COST_UPD_RFC_Request
     {
-        public List<ZST_PO_IMP> IM_DATA { get; set; }
+        public ZST_PO_IMP IM_DATA { get; set; }
     }
 
     public class ZST_PO_IMP
     {
-        public string EBELN { get; set; }  // PO Number
-        public string MATNR { get; set; }  // Material Number
-        public string COST  { get; set; }  // Cost
+        public string PO_NUMBER { get; set; }
+        public string PO_ITEM { get; set; }
+        public string COST_AMOUNT { get; set; }
+        public string CURRENCY { get; set; }
+        public string COST_TYPE { get; set; }
+        public string VENDOR_CODE { get; set; }
+        public string PLANT { get; set; }
+        public string MATERIAL { get; set; }
+        public string UPDATED_BY { get; set; }
+        public string UPDATE_DATE { get; set; }
     }
 }
