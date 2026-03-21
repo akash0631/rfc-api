@@ -230,7 +230,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   <div class="topbar-links">
     <a class="tl" href="https://github.com/akash0631/rfc-api" target="_blank">GitHub ↗</a>
     <a class="tl" href="https://my-dab-app.azurewebsites.net" target="_blank">Azure DAB ↗</a>
-    <a class="tl" href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank">Swagger ↗</a>
+    <a class="tl" href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank" style="background:rgba(232,64,28,.2);color:#fca5a5;border-radius:5px;padding:5px 10px">🔍 Swagger UI ↗</a>
   </div>
 </div>
 
@@ -242,7 +242,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
   <div class="tab" data-tab="pipeline"><span class="dot"></span> Pipeline</div>
 </div>
-  <div class="tab" data-tab="explorer"><span class="dot"></span> RFC Explorer <span class="chip" id="rfc-count">9</span> <span class="new-chip">LIVE</span></div>
+  <div class="tab" onclick="window.open('https://sap-api.v2retail.net/swagger/ui/index','_blank')" style="cursor:pointer"><span class="dot" style="background:#22c55e"></span> API Explorer (Swagger) ↗</div>
   <div class="tab" data-tab="generator"><span class="dot"></span> RFC Generator</div>
   <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
   <div class="tab" data-tab="pipeline"><span class="dot"></span> Pipeline</div>
@@ -261,31 +261,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   </div>
 
   <div class="card">
-    <div class="card-title">Live APIs — Quick Reference</div>
-    <table class="quick-ref-table">
-      <thead><tr><th>RFC Name</th><th>Route</th><th>Method</th><th>Description</th></tr></thead>
-      <tbody id="overview-table"></tbody>
-    </table>
+    <div class="card-title">All 125 APIs — Via Swagger</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">All live endpoints are documented and testable in Swagger UI — auto-generated from the deployed controllers on IIS .36.</p>
+    <a href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank" 
+       style="display:inline-flex;align-items:center;gap:8px;background:var(--navy);color:#fff;padding:10px 20px;border-radius:7px;text-decoration:none;font-size:13px;font-weight:600">
+      🔍 Open Swagger UI — All 125 APIs ↗
+    </a>
+    <p style="font-size:11px;color:var(--muted);margin-top:10px">Try any endpoint directly — fill parameters and hit Execute. Auto-updates when new RFCs are deployed.</p>
   </div>
-
-  <div class="card">
-    <div class="card-title">Public Endpoint</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">All Finance RFCs accessible via Cloudflare Tunnel → IIS .36:9292 → SAP Dev</p>
-    <code style="font-family:var(--mono);font-size:13px;background:#F0F4FA;padding:8px 12px;border-radius:6px;display:block">
-      https://sap-api.v2retail.net/api/{RFC_NAME}/Post
-    </code>
-  </div>
-</div>
 
 <!-- ════════════════════════════════════════════════════════════════
      RFC EXPLORER TAB
-════════════════════════════════════════════════════════════════ -->
-<div id="tab-explorer" class="section">
-  <div id="explorer-list"></div>
-</div>
-
-<!-- ════════════════════════════════════════════════════════════════
-     RFC GENERATOR TAB
 ════════════════════════════════════════════════════════════════ -->
 <div id="tab-generator" class="section">
   <div class="gen-hero">
@@ -498,222 +484,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 // ═══════════════════════════════════════════════════════════
 // RFC DEFINITIONS
 // ═══════════════════════════════════════════════════════════
-const RFCS = [
-  {
-    name: 'ZPO_DD_UPD_RFC',
-    route: '/api/ZPO_DD_UPD_RFC/Post',
-    desc: 'Update Purchase Order Delivery Date',
-    params: [
-      { name:'PO_NO', type:'CHAR10', desc:'Purchase Order Number' },
-      { name:'DELV_DATE', type:'CHAR10', desc:'New Delivery Date (YYYYMMDD)' }
-    ],
-    exports: [
-      { name:'Status', type:'bool', desc:'Success flag' },
-      { name:'Message', type:'CHAR100', desc:'SAP response message' }
-    ],
-    sample: '{\n  "PO_NO": "5100001680",\n  "DELV_DATE": "20260401"\n}'
-  },
-  {
-    name: 'ZPO_MODIFICATION',
-    route: '/api/ZPO_MODIFICATION/Execute',
-    desc: 'PO Modification — Delivery Date Extension Report',
-    params: [
-      { name:'IM_PO_NO', type:'CHAR10', desc:'PO Number (blank = all)' },
-      { name:'IM_DEL_CHG_DATE_LOW', type:'CHAR8', desc:'Date range from (YYYYMMDD)' },
-      { name:'IM_DEL_CHG_DATE_HIGH', type:'CHAR8', desc:'Date range to (YYYYMMDD)' }
-    ],
-    exports: [
-      { name:'EX_RETURN', type:'BAPIRET2', desc:'Return message' },
-      { name:'ET_PO_OUTPUT', type:'TABLE', desc:'PO output records' }
-    ],
-    sample: '{\n  "IM_PO_NO": "",\n  "IM_DEL_CHG_DATE_LOW": "20260101",\n  "IM_DEL_CHG_DATE_HIGH": "20260320"\n}'
-  },
-  {
-    name: 'ZADVANCE_PAYMENT_RFC',
-    route: '/api/ZADVANCE_PAYMENT_RFC/Post',
-    desc: 'Advance Payment — Finance Document Report',
-    params: [
-      { name:'I_COMPANY_CODE', type:'CHAR4', desc:'Company Code (e.g. 1100)' },
-      { name:'I_POSTING_DATE_LOW', type:'CHAR8', desc:'Posting date from (YYYYMMDD)' },
-      { name:'I_POSTING_DATE_HIGH', type:'CHAR8', desc:'Posting date to (YYYYMMDD)' }
-    ],
-    exports: [
-      { name:'ET_ADVANCE_PAYMENT', type:'TABLE', desc:'Advance payment records' }
-    ],
-    sample: '{\n  "I_COMPANY_CODE": "1100",\n  "I_POSTING_DATE_LOW": "20260101",\n  "I_POSTING_DATE_HIGH": "20260320"\n}'
-  },
-  {
-    name: 'ZPO_COST_UPD_RFC',
-    route: '/api/ZPO_COST_UPD_RFC/Post',
-    desc: 'Update Purchase Order Cost / Price',
-    params: [
-      { name:'IM_DATA', type:'TABLE', desc:'Array of {EBELN, MATNR, COST}' }
-    ],
-    exports: [
-      { name:'MSG_TYPE', type:'CHAR1', desc:'S=Success, E=Error' },
-      { name:'MESSAGE', type:'CHAR100', desc:'Result message' }
-    ],
-    sample: '{\n  "IM_DATA": [\n    {\n      "EBELN": "5100001680",\n      "MATNR": "1110002329002",\n      "COST": "500.00"\n    }\n  ]\n}'
-  },
-  {
-    name: 'ZPO_QTY_UPD_RFC',
-    route: '/api/ZPO_QTY_UPD_RFC/Post',
-    desc: 'Update Purchase Order Quantity',
-    params: [
-      { name:'IM_DATA', type:'TABLE', desc:'Array of {EBELN, MATNR, QTY}' }
-    ],
-    exports: [
-      { name:'MSG_TYPE', type:'CHAR1', desc:'S=Success, E=Error' },
-      { name:'MESSAGE', type:'CHAR100', desc:'Result message' }
-    ],
-    sample: '{\n  "IM_DATA": [\n    {\n      "EBELN": "5100001680",\n      "MATNR": "1110002329002",\n      "QTY": "1000"\n    }\n  ]\n}'
-  },
-  {
-    name: 'ZFINANCE_DOCUMENT_RFC',
-    route: '/api/ZFINANCE_DOCUMENT_RFC/Post',
-    desc: 'Finance Document — GL Posting Report',
-    params: [
-      { name:'I_COMPANY_CODE', type:'CHAR4', desc:'Company Code' },
-      { name:'I_DATE_LOW', type:'CHAR8', desc:'Date from (YYYYMMDD)' },
-      { name:'I_DATE_HIGH', type:'CHAR8', desc:'Date to (YYYYMMDD)' }
-    ],
-    exports: [
-      { name:'ET_FINANCE_DOCUMENTS', type:'TABLE', desc:'Finance document records' }
-    ],
-    sample: '{\n  "I_COMPANY_CODE": "1100",\n  "I_DATE_LOW": "20260101",\n  "I_DATE_HIGH": "20260320"\n}'
-  },
-  {
-    name: 'ZSALES_MOP_RFC',
-    route: '/api/ZSALES_MOP_RFC/Post',
-    desc: 'Sales Mode of Payment Report',
-    params: [
-      { name:'I_STORE', type:'CHAR4', desc:'Store Code' },
-      { name:'I_DATE', type:'CHAR8', desc:'Sale Date (YYYYMMDD)' }
-    ],
-    exports: [
-      { name:'ET_SALES_MOP', type:'TABLE', desc:'MOP breakdown records' }
-    ],
-    sample: '{\n  "I_STORE": "DL01",\n  "I_DATE": "20260320"\n}'
-  },
-  {
-    name: 'ZPO_COST_UPD_RFC',
-    route: '/api/ZPO_COST_UPD_RFC/Post',
-    desc: 'PO Cost Update RFC',
-    params: [
-      { name:'IM_DATA', type:'TABLE', desc:'Array of {EBELN, MATNR, COST}' }
-    ],
-    exports: [
-      { name:'MSG_TYPE', type:'CHAR1', desc:'S=Success, E=Error' },
-      { name:'MESSAGE', type:'CHAR100', desc:'Message' }
-    ],
-    sample: '{\n  "IM_DATA":[{"EBELN":"5100001680","MATNR":"1110002329002","COST":"500"}]\n}'
-  },
-  {
-    name: 'ZRFC_CREDITORS_LOVABL',
-    route: '/api/ZRFC_CREDITORS_LOVABL',
-    desc: 'Creditors / Vendors Outstanding Balance',
-    params: [
-      { name:'VENDOR', type:'CHAR10', desc:'Vendor number (e.g. 100001)' },
-      { name:'COMPANY_CODE', type:'CHAR4', desc:'Company Code (e.g. 1100)' },
-      { name:'POSTING_DATE', type:'CHAR8', desc:'Posting Date (YYYYMMDD)' }
-    ],
-    exports: [
-      { name:'LT_DATA', type:'TABLE', desc:'Creditor balance records' },
-      { name:'EX_RETURN', type:'BAPIRET2', desc:'Return message' }
-    ],
-    sample: '{\n  "VENDOR": "100001",\n  "COMPANY_CODE": "1100",\n  "POSTING_DATE": "20260320"\n}'
-  },
-    {
-    name: 'ZVND_PUT01_HU_VAL_RFC',
-    route: '/api/ZVND_PUT01_HU_VAL_RFC',
-    desc: 'PUT01 Inbound — HU Validation',
-    params: [
-      { name:'IM_USER',  type:'WWWOBJID', desc:'SAP User ID' },
-      { name:'IM_PLANT', type:'WERKS_D',  desc:'Plant code (e.g. 1000)' },
-      { name:'IM_HU',    type:'ZEXT_HU',  desc:'Handling Unit number' }
-    ],
-    exports: [
-      { name:'EX_RETURN', type:'BAPIRET2', desc:'Return message (TYPE/MESSAGE)' },
-      { name:'ET_DATA',   type:'ZTT_PUT01_HU', desc:'HU validation result records' }
-    ],
-    sample: '{\n  "IM_USER": "POWERBI",\n  "IM_PLANT": "1000",\n  "IM_HU": "HU001"\n}'
-  },
-  {
-    name: 'ZVND_PUT01_SAVE_DATA_RFC',
-    route: '/api/ZVND_PUT01_SAVE_DATA_RFC',
-    desc: 'PUT01 Inbound — Save Scanned Data to SAP',
-    params: [
-      { name:'IM_USER', type:'WWWOBJID', desc:'SAP User ID' },
-      { name:'IT_DATA', type:'ZTT_PUT01_SAVE TABLE', desc:'Array of scanned HU records' }
-    ],
-    exports: [
-      { name:'EX_RETURN', type:'BAPIRET2', desc:'Return message (TYPE/MESSAGE)' }
-    ],
-    sample: '{\n  "IM_USER": "POWERBI",\n  "IT_DATA": [\n    { "HU": "HU001", "PLANT": "1000" }\n  ]\n}'
-  },
-  
-  // ── DC Routing ──
-  { name:'ZWM_GATE_ENTRY_RFC', route:'/api/ZWM_GATE_ENTRY_RFC', desc:'DC Routing — Gate Entry', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZDC_ROUTING_SUB_RFC', route:'/api/ZDC_ROUTING_SUB_RFC', desc:'DC Routing — Sub RFC', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_HU_STORE_TT_RFC', route:'/api/ZWM_HU_STORE_TT_RFC', desc:'DC Routing — HU Store Transfer', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'zwm_dc_routing_rfc', route:'/api/zwm_dc_routing_rfc', desc:'DC Routing — Main RFC', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  // ── Putway / Gate Entry ──
-  { name:'ZVND_PUTWAY_BIN_VAL_RFC', route:'/api/ZVND_PUTWAY_BIN_VAL_RFC', desc:'Putway — Bin Validation', params:[{name:'IM_USER',type:'WWWOBJID',desc:'SAP User'},{name:'IM_BIN',type:'string',desc:'Bin number'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_USER": "POWERBI",\n  "IM_BIN": "BIN001"\n}' },
-  { name:'ZVND_PUTWAY_PALETTE_VAL_RFC', route:'/api/ZVND_PUTWAY_PALETTE_VAL_RFC', desc:'Putway — Palette Validation', params:[{name:'IM_USER',type:'WWWOBJID',desc:'SAP User'},{name:'IM_PALETTE',type:'string',desc:'Palette ID'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_USER": "POWERBI",\n  "IM_PALETTE": "PAL001"\n}' },
-  { name:'ZVND_PUTWAY_SAVE_DATA_RFC', route:'/api/ZVND_PUTWAY_SAVE_DATA_RFC', desc:'Putway — Save Scanned Data', params:[{name:'IM_USER',type:'WWWOBJID',desc:'SAP User'},{name:'IT_DATA',type:'TABLE',desc:'Records'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_USER": "POWERBI",\n  "IT_DATA": []\n}' },
-  { name:'ZWM_GATE_BIN_VALIDATION3_N', route:'/api/ZWM_GATE_BIN_VALIDATION3_N', desc:'Gate Entry — Bin Validation (v3)', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GATE_BIN_VALIDATION4_N', route:'/api/ZWM_GATE_BIN_VALIDATION4_N', desc:'Gate Entry — Bin Validation (v4)', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GATE_BOX3N', route:'/api/ZWM_GATE_BOX3N', desc:'Gate Entry — Box Scan (v3)', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GATE_PALLATE_VALIDATE3_N', route:'/api/ZWM_GATE_PALLATE_VALIDATE3_N', desc:'Gate Entry — Pallet Validation (v3)', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GATE_PALLATE_VALIDATE4_N', route:'/api/ZWM_GATE_PALLATE_VALIDATE4_N', desc:'Gate Entry — Pallet Validation (v4)', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GATE_SAVE3_N', route:'/api/ZWM_GATE_SAVE3_N', desc:'Gate Entry — Save Scanned Data (v3)', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GET_GATE_ENTRY_DATA_RFC', route:'/api/ZWM_GET_GATE_ENTRY_DATA_RFC', desc:'Gate Entry — Get Entry Data', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'ET_DATA',type:'TABLE',desc:'Entry data'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GET_GATE_ENTRY_DATA4_RFC', route:'/api/ZWM_GET_GATE_ENTRY_DATA4_RFC', desc:'Gate Entry — Get Entry Data (v4)', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'ET_DATA',type:'TABLE',desc:'Entry data'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GET_GATE_ENTRY_LIST_RFC', route:'/api/ZWM_GET_GATE_ENTRY_LIST_RFC', desc:'Gate Entry — Get Entry List', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'ET_LIST',type:'TABLE',desc:'Entry list'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GET_GATE_ENTRY_LIST4_RFC', route:'/api/ZWM_GET_GATE_ENTRY_LIST4_RFC', desc:'Gate Entry — Get Entry List (v4)', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'ET_LIST',type:'TABLE',desc:'Entry list'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_GET_GATE_ENTRY_PALLATE_RFC', route:'/api/ZWM_GET_GATE_ENTRY_PALLATE_RFC', desc:'Gate Entry — Get Pallet Data', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'ET_DATA',type:'TABLE',desc:'Pallet data'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  // ── Inbound / Unloading ──
-  { name:'ZVND_UNLOAD_HU_VALIDATE_RFC', route:'/api/ZVND_UNLOAD_HU_VALIDATE_RFC', desc:'Inbound — HU Validation for Unloading', params:[{name:'IM_USER',type:'WWWOBJID',desc:'SAP User'},{name:'IM_HU',type:'string',desc:'HU number'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_USER": "POWERBI",\n  "IM_HU": "HU001"\n}' },
-  { name:'ZVND_UNLOAD_PALLATE_VALIDATION', route:'/api/ZVND_UNLOAD_PALLATE_VALIDATION', desc:'Inbound — Pallet Validation for Unloading', params:[{name:'IM_USER',type:'WWWOBJID',desc:'SAP User'},{name:'IM_PALETTE',type:'string',desc:'Pallet ID'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_USER": "POWERBI",\n  "IM_PALETTE": "PAL001"\n}' },
-  { name:'ZVND_UNLOAD_SAVE_RFC', route:'/api/ZVND_UNLOAD_SAVE_RFC', desc:'Inbound — Save Unloading Data', params:[{name:'IM_USER',type:'WWWOBJID',desc:'SAP User'},{name:'IT_DATA',type:'TABLE',desc:'Unload records'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_USER": "POWERBI",\n  "IT_DATA": []\n}' },
-  // ── HU Creation / Scan ──
-  { name:'ZVND_HU_VALIDATE_RFC', route:'/api/ZVND_HU_VALIDATE_RFC', desc:'HU Creation — Validate HU', params:[{name:'IM_USER',type:'WWWOBJID',desc:'SAP User'},{name:'IM_HU',type:'string',desc:'HU number'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_USER": "POWERBI",\n  "IM_HU": "HU001"\n}' },
-  { name:'ZVND_HU_PUSH_API_POST', route:'/api/ZVND_HU_PUSH_API_POST', desc:'HU Creation — Push HU to SAP', params:[{name:'IM_USER',type:'string',desc:'SAP User'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_USER": "POWERBI"\n}' },
-  { name:'ZWM_VEND_PO_HEADER', route:'/api/ZWM_VEND_PO_HEADER', desc:'HU Creation — Get Vendor PO Header', params:[{name:'IM_PO_NO',type:'CHAR10',desc:'PO Number'}], exports:[{name:'ET_PO_HEADER',type:'TABLE',desc:'PO header data'}], sample:'{\n  "IM_PO_NO": "5100001680"\n}' },
-  { name:'ZWM_SCAN_HU', route:'/api/ZWM_SCAN_HU', desc:'HU Scan — Scan Handling Unit', params:[{name:'IM_HU',type:'string',desc:'HU barcode'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_HU": "HU001"\n}' },
-  { name:'ZWM_SAVE_HU', route:'/api/ZWM_SAVE_HU', desc:'HU Scan — Save Scanned HU', params:[{name:'IM_HU',type:'string',desc:'HU number'},{name:'IT_DATA',type:'TABLE',desc:'Scan records'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_HU": "HU001",\n  "IT_DATA": []\n}' },
-  // ── Vehicle Loading ──
-  { name:'ZWM_TRANSPORTER_DETAILS_RFC', route:'/api/ZWM_TRANSPORTER_DETAILS_RFC', desc:'Vehicle Loading — Get Transporter Details', params:[{name:'IM_VH_NO',type:'string',desc:'Vehicle number'}], exports:[{name:'ET_TRANSPORTER',type:'TABLE',desc:'Transporter data'}], sample:'{\n  "IM_VH_NO": "DL01AA1234"\n}' },
-  { name:'ZWM_HUBWISE_STORE_LIST_RFC', route:'/api/ZWM_HUBWISE_STORE_LIST_RFC', desc:'Vehicle Loading — Hub-wise Store List', params:[{name:'IM_HUB',type:'string',desc:'Hub code'}], exports:[{name:'ET_STORES',type:'TABLE',desc:'Store list'}], sample:'{\n  "IM_HUB": "HUB01"\n}' },
-  { name:'ZWM_HU_SELECTION_RFC', route:'/api/ZWM_HU_SELECTION_RFC', desc:'Vehicle Loading — Select HUs for Loading', params:[{name:'IM_VH_NO',type:'string',desc:'Vehicle'},{name:'IM_HU',type:'string',desc:'HU to load'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_VH_NO": "DL01AA1234",\n  "IM_HU": "HU001"\n}' },
-  { name:'ZWM_SAVE_SCANNEDHULIST_RFC', route:'/api/ZWM_SAVE_SCANNEDHULIST_RFC', desc:'Vehicle Loading — Save Scanned HU List', params:[{name:'IM_VH_NO',type:'string',desc:'Vehicle'},{name:'IT_HU_LIST',type:'TABLE',desc:'HU list'}], exports:[{name:'EX_RETURN',type:'BAPIRET2',desc:'Return'}], sample:'{\n  "IM_VH_NO": "DL01AA1234",\n  "IT_HU_LIST": []\n}' },
-  // ── HRMS ──
-  { name:'ZPT_MASTER_POST_RFC', route:'/api/ZPT_MASTER_POST_RFC', desc:'HRMS — Post Pay Type Master', params:[{name:'IM_COMPANY',type:'CHAR4',desc:'Company code'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_COMPANY": "1100"\n}' },
-  { name:'ZPF_MASTER_POST_RFC', route:'/api/ZPF_MASTER_POST_RFC', desc:'HRMS — Post PF Master', params:[{name:'IM_COMPANY',type:'CHAR4',desc:'Company code'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_COMPANY": "1100"\n}' },
-  { name:'ZESIC_MASTER_POST_RFC', route:'/api/ZESIC_MASTER_POST_RFC', desc:'HRMS — Post ESIC Master', params:[{name:'IM_COMPANY',type:'CHAR4',desc:'Company code'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_COMPANY": "1100"\n}' },
-  { name:'ZLWF_MASTER_POST_RFC', route:'/api/ZLWF_MASTER_POST_RFC', desc:'HRMS — Post LWF Master', params:[{name:'IM_COMPANY',type:'CHAR4',desc:'Company code'}], exports:[{name:'Status',type:'bool',desc:'Success'}], sample:'{\n  "IM_COMPANY": "1100"\n}' },
-  { name:'ZHR_LEAVE_POLICY_RFC', route:'/api/ZHR_LEAVE_POLICY_RFC', desc:'HRMS — Get Leave Policy', params:[{name:'IM_COMPANY',type:'CHAR4',desc:'Company code'}], exports:[{name:'ET_LEAVE',type:'TABLE',desc:'Leave policy'}], sample:'{\n  "IM_COMPANY": "1100"\n}' },
-
-  {
-    name: 'ZTEST_RFC',
-    route: '/api/ZTEST_RFC/Post',
-    desc: 'Test RFC — connectivity check',
-    params: [
-      { name:'I_INPUT', type:'CHAR100', desc:'Test input string' }
-    ],
-    exports: [
-      { name:'E_OUTPUT', type:'CHAR100', desc:'Echo output' }
-    ],
-    sample: '{\n  "I_INPUT": "HELLO_SAP"\n}'
-  }
-];
-
-// Deduplicate by name
-const RFC_LIST = [];
-const seen = new Set();
-for (const r of RFCS) {
-  if (!seen.has(r.name)) { seen.add(r.name); RFC_LIST.push(r); }
-}
+// RFC Explorer removed — use Swagger UI
 
 // ═══════════════════════════════════════════════════════════
 // TAB SWITCHING
@@ -735,138 +506,23 @@ document.querySelectorAll('.tab').forEach(function(tab) {
 // BUILD OVERVIEW TABLE
 // ═══════════════════════════════════════════════════════════
 (function() {
-  var tbody = document.getElementById('overview-table');
-  var html = '';
-  RFC_LIST.forEach(function(r) {
-    html += '<tr>' +
-      '<td style="font-weight:600;font-family:var(--mono);font-size:12px">' + r.name + '</td>' +
-      '<td><span class="route-code">' + r.route + '</span></td>' +
-      '<td><span class="method-post">POST</span></td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + r.desc + '</td>' +
-      '</tr>';
-  });
-  tbody.innerHTML = html;
-  document.getElementById('ctrl-count').textContent = RFC_LIST.length;
-  document.getElementById('rfc-count').textContent = RFC_LIST.length;
+  document.getElementById('ctrl-count-stat').textContent = '125';
+  document.getElementById('rfc-count').textContent = '';
 })();
 
 // ═══════════════════════════════════════════════════════════
 // BUILD RFC EXPLORER
 // ═══════════════════════════════════════════════════════════
-(function() {
-  var container = document.getElementById('explorer-list');
-  var html = '';
+// RFC Explorer removed
 
-  RFC_LIST.forEach(function(rfc, idx) {
-    var paramsHtml = '';
-    if (rfc.params && rfc.params.length) {
-      paramsHtml += '<table class="params-table"><thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead><tbody>';
-      rfc.params.forEach(function(p) {
-        paramsHtml += '<tr><td style="font-family:var(--mono);font-weight:500">' + p.name + '</td>' +
-          '<td><span class="ptype">' + p.type + '</span></td>' +
-          '<td style="color:var(--muted)">' + p.desc + '</td></tr>';
-      });
-      paramsHtml += '</tbody></table>';
-    }
-
-    var exportsHtml = '';
-    if (rfc.exports && rfc.exports.length) {
-      exportsHtml += '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Response Fields</div>';
-      exportsHtml += '<table class="params-table"><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody>';
-      rfc.exports.forEach(function(e) {
-        exportsHtml += '<tr><td style="font-family:var(--mono);font-weight:500">' + e.name + '</td>' +
-          '<td><span class="ptype">' + e.type + '</span></td>' +
-          '<td style="color:var(--muted)">' + e.desc + '</td></tr>';
-      });
-      exportsHtml += '</tbody></table>';
-    }
-
-    html += '<div class="rfc-card" id="rfc-card-' + idx + '">' +
-      '<div class="rfc-header" onclick="toggleRFC(' + idx + ')">' +
-        '<div>' +
-          '<div class="rfc-name">' + rfc.name + '</div>' +
-          '<div class="rfc-desc">' + rfc.desc + '</div>' +
-        '</div>' +
-        '<span class="rfc-chevron">▾</span>' +
-      '</div>' +
-      '<div class="rfc-body">' +
-        '<div class="rfc-body-inner">' +
-          '<div style="font-family:var(--mono);font-size:12px;background:#F0F4FA;padding:8px 12px;border-radius:6px;margin-bottom:14px">' +
-            '<span class="method-post">POST</span> <span style="margin-left:8px">https://sap-api.v2retail.net' + rfc.route + '</span>' +
-          '</div>' +
-          paramsHtml +
-          exportsHtml +
-          '<div class="try-it">' +
-            '<div class="try-it-header">⚡ Try It</div>' +
-            '<textarea class="try-textarea" id="try-body-' + idx + '">' + rfc.sample + '</textarea>' +
-            '<div class="try-row">' +
-              '<select class="env-select" id="try-env-' + idx + '">' +
-                '<option value="https://sap-api.v2retail.net">sap-api.v2retail.net (Live)</option>' +
-              '</select>' +
-              '<button class="run-btn" onclick="runRFC(' + idx + ')">▶ Run</button>' +
-            '</div>' +
-            '<div class="response-box" id="try-resp-' + idx + '"></div>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  });
-
-  container.innerHTML = html;
-})();
-
-function toggleRFC(idx) {
-  var card = document.getElementById('rfc-card-' + idx);
-  card.classList.toggle('open');
-}
+// toggleRFC removed
 
 // ═══════════════════════════════════════════════════════════
 // RUN RFC CALL
 // ═══════════════════════════════════════════════════════════
-function runRFC(idx) {
-  var rfc = RFC_LIST[idx];
-  var bodyEl = document.getElementById('try-body-' + idx);
-  var envEl = document.getElementById('try-env-' + idx);
-  var respEl = document.getElementById('try-resp-' + idx);
+// runRFC removed
 
-  var bodyText = bodyEl.value.trim();
-  var baseUrl = envEl.value;
-  var url = baseUrl + rfc.route;
-
-  respEl.className = 'response-box visible';
-  respEl.innerHTML = '<span class="resp-loading">⏳ Calling SAP…</span>';
-
-  var bodyObj;
-  try { bodyObj = JSON.parse(bodyText); }
-  catch(e) {
-    respEl.innerHTML = '<span class="resp-err">❌ Invalid JSON: ' + e.message + '</span>';
-    return;
-  }
-
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(bodyObj)
-  })
-  .then(function(r) {
-    var status = r.status;
-    return r.text().then(function(txt) {
-      var formatted;
-      try { formatted = JSON.stringify(JSON.parse(txt), null, 2); }
-      catch(e) { formatted = txt; }
-      var ok = status >= 200 && status < 300;
-      respEl.innerHTML = '<span style="color:#94a3b8">HTTP ' + status + '</span>\n' +
-        '<span class="' + (ok ? 'resp-ok' : 'resp-err') + '">' + escHtml(formatted) + '</span>';
-    });
-  })
-  .catch(function(e) {
-    respEl.innerHTML = '<span class="resp-err">❌ ' + escHtml(e.message) + '</span>';
-  });
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+// escHtml removed
 
 // ═══════════════════════════════════════════════════════════
 // RFC GENERATOR
