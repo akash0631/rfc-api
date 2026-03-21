@@ -451,9 +451,9 @@ CREATE TABLE dbo.[${sqlTable}] ([ID] INT IDENTITY(1,1) PRIMARY KEY, ${colDefs}, 
   // ── STEP 7: Verify DAB OData endpoint returns data ──────────────────────
   await log('dab_verify','running','Verifying Data Lake API endpoint...');
   try {
-    await sleep(8000); // Give DAB a moment
+    await sleep(2000); // Brief pause
     const dabCheckRes = await fetch(`${DAB_URL}/api/${sqlTable}?$top=5`, {
-      signal: AbortSignal.timeout(20000)
+      signal: AbortSignal.timeout(8000)
     });
     if (dabCheckRes.ok) {
       const dabData = await dabCheckRes.json();
