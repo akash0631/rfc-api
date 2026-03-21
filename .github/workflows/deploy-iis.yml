@@ -8,6 +8,7 @@ on:
       - 'Controllers/**'
       - 'Models/**'
       - 'App_Start/**'
+      - 'Views/**'
       - 'Web.config'
       - 'Web.Release.config'
       - 'Global.asax.cs'
@@ -21,46 +22,75 @@ env:
   DEST_URL:  http://192.168.151.36:9005/
 
 jobs:
-  build-and-deploy:
-    name: Build, Package and Deploy
+  deploy:
+    name: Build and Deploy
     runs-on: self-hosted
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: Finaltest
 
-      - name: Setup NuGet
-        run: nuget restore ${{ env.SOLUTION }}
+      - name: Restore NuGet packages
+        shell: cmd
+        run: nuget restore %SOLUTION%
 
       - name: Find MSBuild
         shell: powershell
         run: |
-          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe 2>$null | Select-Object -First 1
-          if (-not $vs) { $vs = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe" }
+          $vs = & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe 2>$null | Select-Object -First 1
+          if (-not $vs) {
+            $candidates = @(
+              "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+              "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
+              "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
+              "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe",
+              "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+            )
+            $vs = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          Write-Host "MSBuild: $vs"
           echo "MSBUILD_PATH=$vs" >> $env:GITHUB_ENV
 
-      - name: MSBuild Release Package
+      - name: Build and Package
         shell: powershell
         run: |
-          & "$env:MSBUILD_PATH" ${{ env.PROJECT }} /p:Configuration=Release /p:Platform=AnyCPU /p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:PackageLocation="${{ github.workspace }}\deploy-pkg" /p:SkipInvalidConfigurations=true /p:VisualStudioVersion=17.0 /m /nologo /verbosity:minimal
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          Write-Host "Build successful!"
-          Get-ChildItem "${{ github.workspace }}\deploy-pkg" -Recurse | Select FullName
+          $pkg = "${{ github.workspace }}\deploy-pkg"
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+          & "$env:MSBUILD_PATH" ${{ env.PROJECT }} `
+            /p:Configuration=Release `
+            /p:Platform=AnyCPU `
+            /p:DeployOnBuild=true `
+            /p:WebPublishMethod=Package `
+            /p:PackageAsSingleFile=true `
+            /p:PackageLocation="$pkg" `
+            /p:SkipInvalidConfigurations=true `
+            /m /nologo /verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { Write-Error "Build failed!"; exit 1 }
+          Write-Host "Build OK"
+          Get-ChildItem $pkg -Recurse | Select-Object FullName
 
-      - name: MSDeploy to IIS
+      - name: Check MSDeploy installed
         shell: powershell
         run: |
-          $zip = Get-ChildItem "${{ github.workspace }}\deploy-pkg" -Filter "*.zip" -Recurse | Select-Object -First 1
-          if (-not $zip) { Write-Error "No zip found!"; exit 1 }
-          Write-Host "Deploying: $($zip.FullName)"
           $md = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
           if (-not (Test-Path $md)) {
-            Write-Host "Installing Web Deploy..."
+            Write-Host "Installing Web Deploy 3.6..."
             $msi = "$env:TEMP\WebDeploy.msi"
             Invoke-WebRequest "https://download.microsoft.com/download/0/1/D/01DC28EA-638C-4A22-A57B-4CEF97755C6C/WebDeploy_amd64_en-US.msi" -OutFile $msi -UseBasicParsing
             Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart ADDLOCAL=ALL" -Wait
+            Write-Host "Web Deploy installed"
+          } else {
+            Write-Host "Web Deploy already installed: $md"
           }
+
+      - name: Deploy to IIS via MSDeploy
+        shell: powershell
+        run: |
+          $md  = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          $zip = Get-ChildItem "${{ github.workspace }}\deploy-pkg" -Filter "*.zip" -Recurse | Select-Object -First 1
+          if (-not $zip) { Write-Error "No package zip found!"; exit 1 }
+          Write-Host "Package: $($zip.FullName)"
           & $md `
             -verb:sync `
             "-source:package=`"$($zip.FullName)`"" `
@@ -72,19 +102,29 @@ jobs:
             -allowUntrusted `
             -enableRule:AppOffline `
             -retryAttempts:3 `
-            -retryInterval:2000 `
-            -verbose
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          Write-Host "DEPLOYED SUCCESSFULLY to ${{ env.DEST_URL }}"
+            -retryInterval:2000
+          if ($LASTEXITCODE -ne 0) { Write-Error "MSDeploy failed!"; exit 1 }
+          Write-Host "DEPLOYED SUCCESSFULLY!"
 
       - name: Smoke Test
         shell: powershell
         run: |
-          Start-Sleep 10
+          Start-Sleep 8
           try {
-            $r = Invoke-WebRequest "${{ env.DEST_URL }}api/Authentication/Login" -Method POST -Body '{"username":"testing@v2kart.com","password":"123456"}' -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
+            $body = '{"username":"testing@v2kart.com","password":"123456"}'
+            $r = Invoke-WebRequest "${{ env.DEST_URL }}api/Authentication/Login" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing -TimeoutSec 20
             Write-Host "SMOKE TEST PASSED - HTTP $($r.StatusCode)"
-            Write-Host $r.Content.Substring(0,[Math]::Min(200,$r.Content.Length))
+            Write-Host $r.Content.Substring(0,[Math]::Min(300,$r.Content.Length))
           } catch {
-            Write-Host "Smoke test note: $_"
+            Write-Host "Smoke test info: $_"
           }
+
+      - name: Summary
+        shell: powershell
+        run: |
+          Write-Host "==============================="
+          Write-Host "DEPLOYMENT COMPLETE"
+          Write-Host "Branch  : Finaltest"
+          Write-Host "Site    : ${{ env.SITE_NAME }}"
+          Write-Host "URL     : ${{ env.DEST_URL }}"
+          Write-Host "==============================="
