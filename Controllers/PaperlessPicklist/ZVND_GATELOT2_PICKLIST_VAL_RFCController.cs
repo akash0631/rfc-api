@@ -17,38 +17,43 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZVND_GATELOT2_PICKLIST_VAL_RFC")]
-        public IHttpActionResult ZVND_GATELOT2_PICKLIST_VAL_RFC(ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
+        public IHttpActionResult ZVND_GATELOT2_PICKLIST_VAL_RFC([FromBody] ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
         {
             try
             {
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZVND_GATELOT2_PICKLIST_VAL_RFC");
 
                 myfun.Invoke(dest);
+
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                if (EX_RETURN.GetString("TYPE") == "E")
+                if (EX_RETURN.GetValue("TYPE").ToString() == "E")
                 {
                     return Ok(new
                     {
                         Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE")
+                        Message = EX_RETURN.GetValue("MESSAGE").ToString()
                     });
                 }
 
                 IRfcTable tbl = myfun.GetTable("ET_PICKLIST_VAL");
-                var picklistData = tbl.AsEnumerable().Select(row => {
+                var picklistData = tbl.AsEnumerable().Select(row =>
+                {
                     var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < row.FieldCount; i++)
+                    var metadata = row.GetMetadata();
+                    
+                    for (int i = 0; i < metadata.FieldCount; i++)
                     {
-                        var field = row.GetElementMetadata(i);
-                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                        var fieldMetadata = metadata[i];
+                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
                         {
-                            rowData[field.Name] = row.GetValue(i);
+                            rowData[fieldMetadata.Name] = row.GetValue(fieldMetadata.Name);
                         }
                     }
+                    
                     return rowData;
                 }).ToList();
 
