@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZADVANCE_PAYMENT_RFC")]
-        public IHttpActionResult ProcessAdvancePayment([FromBody] ZADVANCE_PAYMENT_RFCRequest request)
+        public async Task<IHttpActionResult> ZADVANCE_PAYMENT_RFC([FromBody] ZADVANCE_PAYMENT_RFCRequest request)
         {
             try
             {
@@ -35,9 +35,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZADVANCE_PAYMENT_RFC");
 
-                myfun.SetValue("I_BUKRS", request.I_BUKRS);
-                myfun.SetValue("I_GJAHR", request.I_GJAHR);
-                myfun.SetValue("I_BELNR", request.I_BELNR);
+                myfun.SetValue("IV_VENDOR_ID", request.IV_VENDOR_ID ?? "");
+                myfun.SetValue("IV_AMOUNT", request.IV_AMOUNT);
 
                 myfun.Invoke(dest);
 
@@ -52,22 +51,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     });
                 }
 
-                IRfcTable paymentTable = myfun.GetTable("ET_PAYMENT_DATA");
-                var paymentData = paymentTable.AsEnumerable().Select(row =>
+                IRfcTable tbl = myfun.GetTable("ET_PAYMENTS");
+                var etPayments = tbl.AsEnumerable().Select(row =>
                 {
-                    var result = new Dictionary<string, object>();
-                    var metadata = row.GetMetadata();
-                    
-                    for (int i = 0; i < metadata.FieldCount; i++)
+                    var dynamicRow = new Dictionary<string, object>();
+                    for (int i = 0; i < row.ElementCount; i++)
                     {
-                        var fieldMetadata = metadata[i];
-                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
+                        var element = row[i];
+                        if (element.Metadata.DataType != RfcDataType.STRUCTURE && element.Metadata.DataType != RfcDataType.TABLE)
                         {
-                            result[fieldMetadata.Name] = row.GetValue(fieldMetadata.Name);
+                            var fieldName = element.Metadata.Name;
+                            var fieldValue = element.GetValue();
+                            dynamicRow[fieldName] = fieldValue;
                         }
                     }
-                    
-                    return result;
+                    return dynamicRow;
                 }).ToList();
 
                 return Ok(new
@@ -76,7 +74,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     Message = "Success",
                     Data = new
                     {
-                        ET_PAYMENT_DATA = paymentData
+                        ET_PAYMENTS = etPayments
                     }
                 });
             }
@@ -109,8 +107,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
     public class ZADVANCE_PAYMENT_RFCRequest
     {
-        public string I_BUKRS { get; set; }
-        public string I_GJAHR { get; set; }
-        public string I_BELNR { get; set; }
+        public string IV_VENDOR_ID { get; set; }
+        public decimal IV_AMOUNT { get; set; }
     }
 }
