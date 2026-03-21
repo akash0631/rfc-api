@@ -15,11 +15,12 @@ const SAP_ENVS = {
   production: { fn: 'rfcConfigparametersproduction', host: '192.168.144.170', client: '600' },
 };
 const FOLDER_MAP = {
-  Finance:'Controllers/Finance', GateEntry:'Controllers/GateEntry_LOT_Putway',
-  Vendor:'Controllers/Vendor_SRM_Routing', HUCreation:'Controllers/HU_Creation',
-  FabricPutway:'Controllers/FMS_FABRIC_PUTWAY', HRMS:'Controllers/HRMS',
-  NSO:'Controllers/NSO', PaperlessPicklist:'Controllers/PaperlessPicklist',
-  Sampling:'Controllers/Sampling', VehicleLoading:'Controllers/Vehicle_Loading',
+  Finance:'Controllers/RFC', GateEntry:'Controllers/RFC',
+  Vendor:'Controllers/RFC', HUCreation:'Controllers/RFC',
+  FabricPutway:'Controllers/RFC', HRMS:'Controllers/RFC',
+  NSO:'Controllers/RFC', PaperlessPicklist:'Controllers/RFC',
+  Sampling:'Controllers/RFC', VehicleLoading:'Controllers/RFC',
+  DC_Routing:'Controllers/RFC', Inbound:'Controllers/RFC'
 };
 const USINGS = `using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
@@ -288,7 +289,7 @@ Return ONLY raw C#. No markdown.`, apiKey, 2500);
 
 // ─── Push controller to GitHub ────────────────────────────────────────────────
 async function pushController(spec, code, sapEnv, token) {
-  const folder = FOLDER_MAP[spec.category]||'Controllers/NSO';
+  const folder = FOLDER_MAP[spec.category]||'Controllers/RFC';
   const fp = `${folder}/${spec.rfcName}Controller.cs`;
   const {sha} = await ghGet(fp, token);
   return {
