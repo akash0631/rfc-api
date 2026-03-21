@@ -563,6 +563,34 @@ const RFCS = [
     sample: '{\n  "VENDOR": "100001",\n  "COMPANY_CODE": "1100",\n  "POSTING_DATE": "20260320"\n}'
   },
     {
+    name: 'ZVND_PUT01_HU_VAL_RFC',
+    route: '/api/ZVND_PUT01_HU_VAL_RFC',
+    desc: 'PUT01 Inbound — HU Validation',
+    params: [
+      { name:'IM_USER',  type:'WWWOBJID', desc:'SAP User ID' },
+      { name:'IM_PLANT', type:'WERKS_D',  desc:'Plant code (e.g. 1000)' },
+      { name:'IM_HU',    type:'ZEXT_HU',  desc:'Handling Unit number' }
+    ],
+    exports: [
+      { name:'EX_RETURN', type:'BAPIRET2', desc:'Return message (TYPE/MESSAGE)' },
+      { name:'ET_DATA',   type:'ZTT_PUT01_HU', desc:'HU validation result records' }
+    ],
+    sample: '{\n  "IM_USER": "POWERBI",\n  "IM_PLANT": "1000",\n  "IM_HU": "HU001"\n}'
+  },
+  {
+    name: 'ZVND_PUT01_SAVE_DATA_RFC',
+    route: '/api/ZVND_PUT01_SAVE_DATA_RFC',
+    desc: 'PUT01 Inbound — Save Scanned Data to SAP',
+    params: [
+      { name:'IM_USER', type:'WWWOBJID', desc:'SAP User ID' },
+      { name:'IT_DATA', type:'ZTT_PUT01_SAVE TABLE', desc:'Array of scanned HU records' }
+    ],
+    exports: [
+      { name:'EX_RETURN', type:'BAPIRET2', desc:'Return message (TYPE/MESSAGE)' }
+    ],
+    sample: '{\n  "IM_USER": "POWERBI",\n  "IT_DATA": [\n    { "HU": "HU001", "PLANT": "1000" }\n  ]\n}'
+  },
+    {
     name: 'ZTEST_RFC',
     route: '/api/ZTEST_RFC/Post',
     desc: 'Test RFC — connectivity check',
