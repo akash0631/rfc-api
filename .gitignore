@@ -361,3 +361,11 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Allow SAP NCo DLLs (not on NuGet, must be committed)
+!packages/sapnco_x64.3.0.18/
+!packages/sapnco_x64.3.0.18/lib/
+!packages/sapnco_x64.3.0.18/lib/sapnco.dll
+!packages/sapnco_x64.3.0.18/lib/sapnco_utils.dll
+-e 
+# Azure publish profiles (needed for CI)
+!Properties/PublishProfiles/

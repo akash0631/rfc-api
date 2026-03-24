@@ -84,6 +84,16 @@ namespace Vendor_Application_MVC.Controllers.HHT
             return BuildResponse(response);
         }
 
+        // ── Health check ──────────────────────────────────────────────────────
+        // GET /api/hht/health  — used by CI smoke test and Azure monitoring
+        [HttpGet]
+        [Route("health")]
+        public HttpResponseMessage Health()
+        {
+            var opcodeCount = HHTRouter.AllOpcodes().Count();
+            return BuildResponse($"OK|v2-hht-api|opcodes={opcodeCount}|{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}UTC");
+        }
+
         // ── Backward-compat route: /ValueXMW/* → same handler ─────────────────
         // Allows devices to keep the old URL during cutover period.
         [HttpPost]
