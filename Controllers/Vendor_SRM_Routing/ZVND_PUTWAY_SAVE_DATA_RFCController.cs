@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
 
-namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
+namespace Vendor_SRM_Routing_Application.Controllers.VendorSRM
 {
     /// <summary>
     /// API Controller for ZVND_PUTWAY_SAVE_DATA_RFC

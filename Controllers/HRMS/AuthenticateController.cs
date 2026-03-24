@@ -106,7 +106,7 @@ namespace Vendor_Application_MVC.Controllers
        
     }
 
-    public static class SapToDataExtensionClass
+    public static class SapToDataExtensionClassHRMS
     {
 
         public static Dictionary<string, string> ToDictionary(this IRfcStructure stru)
