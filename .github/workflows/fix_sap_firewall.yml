@@ -1,0 +1,76 @@
+name: Fix SAP Firewall for HCM
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-firewall:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Test SAP port connectivity from this machine
+        shell: powershell
+        run: |
+          Write-Host "=== Testing SAP 192.168.144.170:3302 from this machine (.36) ==="
+          $result = Test-NetConnection -ComputerName 192.168.144.170 -Port 3302 -WarningAction SilentlyContinue
+          Write-Host "TcpTestSucceeded: $($result.TcpTestSucceeded)"
+          Write-Host "PingSucceeded:    $($result.PingSucceeded)"
+
+      - name: Add firewall rule on .36 (in case HCM installed here)
+        shell: powershell
+        run: |
+          Write-Host "=== Adding outbound firewall rule on .36 ==="
+          $ruleName = "SAP RFC Port 3302 Outbound"
+          $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+          if ($existing) {
+            Write-Host "Rule already exists — skipping"
+          } else {
+            New-NetFirewallRule `
+              -DisplayName $ruleName `
+              -Direction Outbound `
+              -Protocol TCP `
+              -RemoteAddress 192.168.144.170 `
+              -RemotePort 3302 `
+              -Action Allow
+            Write-Host "Rule created on .36"
+          }
+
+      - name: Also add rule via netsh (belt and suspenders)
+        shell: cmd
+        run: |
+          netsh advfirewall firewall add rule name="SAP RFC 3302" dir=out action=allow protocol=TCP remoteip=192.168.144.170 remoteport=3302
+          echo Done
+
+      - name: Try PSRemote to Server200 (.40) and add rule there too
+        shell: powershell
+        run: |
+          Write-Host "=== Trying PSRemote to 192.168.151.40 (Server 200) ==="
+          $cred = New-Object System.Management.Automation.PSCredential(
+            "Administrator",
+            (ConvertTo-SecureString "vrl@55555" -AsPlainText -Force)
+          )
+          try {
+            Invoke-Command -ComputerName 192.168.151.40 -Credential $cred `
+              -ScriptBlock {
+                Write-Host "Connected to Server 200 (.40)"
+                # Test port from .40
+                $r = Test-NetConnection -ComputerName 192.168.144.170 -Port 3302 -WarningAction SilentlyContinue
+                Write-Host "SAP port from .40: TcpTestSucceeded=$($r.TcpTestSucceeded)"
+                # Add firewall rule
+                netsh advfirewall firewall add rule name="SAP RFC 3302" dir=out action=allow protocol=TCP remoteip=192.168.144.170 remoteport=3302
+                Write-Host "Firewall rule added on .40"
+              } -ErrorAction Stop
+          } catch {
+            Write-Host "PSRemote to .40 failed (WinRM may not be enabled): $_"
+            Write-Host "If HCM is on .40, you will need to run the netsh command manually there"
+          }
+
+      - name: Re-test SAP port after rule
+        shell: powershell
+        run: |
+          Write-Host "=== Re-testing SAP connectivity from .36 ==="
+          $r = Test-NetConnection -ComputerName 192.168.144.170 -Port 3302 -WarningAction SilentlyContinue
+          if ($r.TcpTestSucceeded) {
+            Write-Host "✅ SAP port 3302 is NOW REACHABLE from .36"
+          } else {
+            Write-Host "❌ SAP port 3302 still not reachable from .36"
+            Write-Host "(If HCM is on .40, it needs the rule added there)"
+          }
