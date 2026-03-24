@@ -11,7 +11,7 @@ using Vendor_Application_MVC.Controllers;
 using Vendor_SRM_Routing_Application.Models.HU_Creation;
 using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
-namespace Vendor_SRM_Routing_Application.Controllers.VendorSRM
+namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 {
     public class ZPO_QTY_UPD_RFCController : BaseController
     {

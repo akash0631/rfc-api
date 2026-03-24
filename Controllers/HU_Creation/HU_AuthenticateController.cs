@@ -105,7 +105,7 @@ namespace VendorSRM_Application.Controllers.API
        
     }
 
-    public static class SapToDataExtensionClassHU
+    public static class SapToDataExtensionClass
     {
 
         public static Dictionary<string, string> ToDictionary(this IRfcStructure stru)
