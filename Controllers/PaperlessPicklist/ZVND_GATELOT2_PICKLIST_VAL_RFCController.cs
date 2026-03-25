@@ -43,25 +43,20 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 }
 
                 IRfcTable tbl = myfun.GetTable("ET_DATA");
-                
-                var etDataList = tbl.AsEnumerable().Select(row =>
+                var etDataList = new List<Dictionary<string, object>>();
+                var meta = tbl.Metadata.LineType;
+                for (int i = 0; i < tbl.RowCount; i++)
                 {
+                    tbl.CurrentIndex = i;
                     var rowData = new Dictionary<string, object>();
-                    var metadata = row.GetMetadata();
-                    
-                    for (int i = 0; i < metadata.FieldCount; i++)
+                    for (int j = 0; j < meta.FieldCount; j++)
                     {
-                        var fieldMetadata = metadata.GetField(i);
-                        var fieldType = fieldMetadata.DataType;
-                        
-                        if (fieldType != RfcDataType.STRUCTURE && fieldType != RfcDataType.TABLE)
-                        {
-                            rowData[fieldMetadata.Name] = row.GetValue(fieldMetadata.Name);
-                        }
+                        var field = meta[j];
+                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                            rowData[field.Name] = tbl.GetValue(field.Name)?.ToString() ?? "";
                     }
-                    
-                    return rowData;
-                }).ToList();
+                    etDataList.Add(rowData);
+                }
 
                 return Ok(new
                 {

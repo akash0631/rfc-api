@@ -46,19 +46,20 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 }
 
                 IRfcTable advancePaymentTable = myfun.GetTable("ET_ADVANCE_PAYMENT");
-                
-                var advancePaymentData = advancePaymentTable.AsEnumerable().Select(row =>
+                var advancePaymentData = new List<Dictionary<string, object>>();
+                var apMeta = advancePaymentTable.Metadata.LineType;
+                for (int i = 0; i < advancePaymentTable.RowCount; i++)
                 {
+                    advancePaymentTable.CurrentIndex = i;
                     var rowData = new Dictionary<string, object>();
-                    foreach (RfcFieldMetadata field in row.GetMetadata())
+                    for (int j = 0; j < apMeta.FieldCount; j++)
                     {
+                        var field = apMeta[j];
                         if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
-                        {
-                            rowData[field.Name] = row.GetValue(field.Name);
-                        }
+                            rowData[field.Name] = advancePaymentTable.GetValue(field.Name)?.ToString() ?? "";
                     }
-                    return rowData;
-                }).ToList();
+                    advancePaymentData.Add(rowData);
+                }
 
                 var response = new
                 {
