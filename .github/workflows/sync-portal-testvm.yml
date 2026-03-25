@@ -1,0 +1,38 @@
+name: Sync Portal HTML via test-vm → .36
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'portal/**'
+
+jobs:
+  sync:
+    runs-on: [self-hosted, test-vm]
+    name: Copy portal HTML to .36 via PS-Remote
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Copy portal HTML to .36 via PS-Remote
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pass = ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force
+          $cred = New-Object PSCredential('V2DC-ADDVERB\Administrator', $pass)
+          $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -ErrorAction Stop
+          Write-Host "=== Connected to .36 ==="
+
+          # Read HTML from checked-out repo and write to .36 via session
+          $html = Get-Content "$env:GITHUB_WORKSPACE\portal\rfc_hub.html" -Raw -Encoding UTF8
+          Invoke-Command -Session $s -ScriptBlock {
+            param($content)
+            Set-Content "C:\V2RfcTest\default.html" -Value $content -Encoding UTF8 -NoNewline
+            $size = (Get-Item "C:\V2RfcTest\default.html").Length
+            Write-Host "✅ default.html updated: $size bytes"
+          } -ArgumentList $html
+
+          Remove-PSSession $s
+          Write-Host "Done — sap-api.v2retail.net now serves latest portal"
