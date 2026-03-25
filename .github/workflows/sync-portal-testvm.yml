@@ -31,11 +31,14 @@ jobs:
             -ToSession $s -Force
           Write-Host "File transferred."
 
-          # Verify size and that fix comment is present
+          # Verify and recycle app pool to flush IIS kernel cache
           Invoke-Command -Session $s -ScriptBlock {
             $size = (Get-Item "C:\V2RfcTest\default.html").Length
             $hasSync = (Get-Content "C:\V2RfcTest\default.html" -Raw) -match "sync:"
             Write-Host "✅ default.html updated: $size bytes | sync comment present: $hasSync"
+            # Recycle app pool — flushes IIS kernel/output cache so new file is served
+            & C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
+            Write-Host "✅ V2RfcTestPool recycled — IIS cache cleared"
           }
 
           Remove-PSSession $s
