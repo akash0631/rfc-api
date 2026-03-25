@@ -17,6 +17,12 @@ CF_PAGES_URL = "https://v2-rfc-portal.pages.dev"
 # ANTHROPIC_API_KEY   ← set as secret
 # GITHUB_TOKEN        ← set as secret
 
+# Custom domain route — makes worker accessible via sap-api.v2retail.net/pipeline/*
+# This routes around the corporate firewall block on *.workers.dev
+[[routes]]
+pattern = "sap-api.v2retail.net/pipeline*"
+zone_name = "v2retail.net"
+
 # Data Lake CRON — runs daily at 02:00 IST (20:30 UTC)
 [triggers]
 crons = ["30 20 * * *"]

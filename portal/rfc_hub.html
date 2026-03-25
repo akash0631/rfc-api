@@ -451,7 +451,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
       <tbody>
         <tr><td>V2DC-ADDVERB IIS</td><td style="font-family:var(--mono);font-size:12px">192.168.151.36:9292</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
         <tr><td>Cloudflare Tunnel</td><td style="font-family:var(--mono);font-size:12px">v2-sap-api → sap-api.v2retail.net</td><td><span style="color:var(--green);font-weight:600">● Connected</span></td></tr>
-        <tr><td>CF Worker</td><td style="font-family:var(--mono);font-size:12px">v2-rfc-pipeline.akash-bab.workers.dev</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
+        <tr><td>CF Worker</td><td style="font-family:var(--mono);font-size:12px">sap-api.v2retail.net/pipeline</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
         <tr><td>GitHub Runner (iis)</td><td style="font-family:var(--mono);font-size:12px">V2DC-ADDVERB — label: iis</td><td><span style="color:var(--green);font-weight:600">● Online</span></td></tr>
         <tr><td>GitHub Repo</td><td style="font-family:var(--mono);font-size:12px">akash0631/rfc-api (PUBLIC)</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr>
         <tr><td>Azure DAB</td><td style="font-family:var(--mono);font-size:12px">my-dab-app.azurewebsites.net</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
@@ -580,7 +580,7 @@ function genDeploy() {
   form.append('file', genFile, genFile.name);
   form.append('env', genEnv);
 
-  fetch('https://v2-rfc-pipeline.akash-bab.workers.dev/deploy', {
+  fetch('https://sap-api.v2retail.net/pipeline/deploy', {
     method: 'POST', body: form
   })
   .then(function(r) { return r.json(); })
@@ -597,7 +597,7 @@ function genDeploy() {
 
 function genPollStatus() {
   if (!genJobId) return;
-  fetch('https://v2-rfc-pipeline.akash-bab.workers.dev/status/' + genJobId)
+  fetch('https://sap-api.v2retail.net/pipeline/status/' + genJobId)
     .then(function(r) { return r.json(); })
     .then(function(d) {
       (d.steps || []).forEach(function(s) {
