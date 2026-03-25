@@ -207,7 +207,8 @@
     <Compile Include="App_Start\RouteConfig.cs" />
     <Compile Include="App_Start\SwaggerConfig.cs" />
     <Compile Include="App_Start\WebApiConfig.cs" />
-    <Compile Include="Controllers\**\*.cs" />
+    <Compile Include="Controllers\**\*.cs"
+             Exclude="Controllers\Authenticate_oldController.cs;Controllers\Authenticate_sub_oldController.cs;Controllers\Vendor_SRM_Routing\ZVND_PUTWAY_SAVE_DATA_RFCController.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
     </Compile>
