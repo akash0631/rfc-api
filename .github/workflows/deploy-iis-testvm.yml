@@ -32,8 +32,8 @@ jobs:
         with:
           name: iis-bin
           path: |
-            **/bin/Release/*.dll
-            **/bin/Release/*.pdb
+            **/bin/*.dll
+            **/bin/*.pdb
           if-no-files-found: error
           retention-days: 1
 
