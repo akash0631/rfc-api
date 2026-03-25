@@ -25,14 +25,18 @@ jobs:
           $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -ErrorAction Stop
           Write-Host "=== Connected to .36 ==="
 
-          # Read HTML from checked-out repo and write to .36 via session
-          $html = Get-Content "$env:GITHUB_WORKSPACE\portal\rfc_hub.html" -Raw -Encoding UTF8
+          # Copy-Item -ToSession transfers the file directly (no string serialisation limit)
+          Copy-Item "$env:GITHUB_WORKSPACE\portal\rfc_hub.html" `
+            -Destination "C:\V2RfcTest\default.html" `
+            -ToSession $s -Force
+          Write-Host "File transferred."
+
+          # Verify size and that fix comment is present
           Invoke-Command -Session $s -ScriptBlock {
-            param($content)
-            Set-Content "C:\V2RfcTest\default.html" -Value $content -Encoding UTF8 -NoNewline
             $size = (Get-Item "C:\V2RfcTest\default.html").Length
-            Write-Host "✅ default.html updated: $size bytes"
-          } -ArgumentList $html
+            $hasSync = (Get-Content "C:\V2RfcTest\default.html" -Raw) -match "sync:"
+            Write-Host "✅ default.html updated: $size bytes | sync comment present: $hasSync"
+          }
 
           Remove-PSSession $s
           Write-Host "Done — sap-api.v2retail.net now serves latest portal"
