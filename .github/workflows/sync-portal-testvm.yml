@@ -9,37 +9,46 @@ on:
 jobs:
   sync:
     runs-on: [self-hosted, test-vm]
-    name: Copy portal HTML to .36 via PS-Remote
+    name: Copy portal HTML to .36 via SMB + recycle pool
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Copy portal HTML to .36 via PS-Remote
+      - name: Copy portal HTML via SMB admin share, then recycle app pool
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
+
+          # ── Step 1: mount admin share on .36 via net use ────────────────────
+          Write-Host "=== Mounting \\192.168.151.36\C$ ==="
+          $netResult = & cmd /c "net use \\192.168.151.36\C$ vrl@55555 /user:V2DC-ADDVERB\Administrator" 2>&1
+          Write-Host "net use result: $netResult"
+          if ($LASTEXITCODE -ne 0 -and $netResult -notmatch 'already been connected') {
+            throw "net use failed (exit $LASTEXITCODE): $netResult"
+          }
+
+          # ── Step 2: direct file copy via UNC — no serialisation limit ───────
+          $src  = "$env:GITHUB_WORKSPACE\portal\rfc_hub.html"
+          $dest = "\\192.168.151.36\C$\V2RfcTest\default.html"
+          Write-Host "Copying $src → $dest"
+          Copy-Item $src $dest -Force
+          Write-Host "Copy complete."
+
+          # ── Step 3: disconnect admin share ──────────────────────────────────
+          & cmd /c "net use \\192.168.151.36\C$ /delete /yes" 2>&1 | Out-Null
+
+          # ── Step 4: PS-Remote to verify + recycle app pool ──────────────────
           $pass = ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force
           $cred = New-Object PSCredential('V2DC-ADDVERB\Administrator', $pass)
           $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -ErrorAction Stop
-          Write-Host "=== Connected to .36 ==="
-
-          # Copy-Item -ToSession transfers the file directly (no string serialisation limit)
-          Copy-Item "$env:GITHUB_WORKSPACE\portal\rfc_hub.html" `
-            -Destination "C:\V2RfcTest\default.html" `
-            -ToSession $s -Force
-          Write-Host "File transferred."
-
-          # Verify and recycle app pool to flush IIS kernel cache
           Invoke-Command -Session $s -ScriptBlock {
-            $size = (Get-Item "C:\V2RfcTest\default.html").Length
+            $size    = (Get-Item "C:\V2RfcTest\default.html").Length
             $hasSync = (Get-Content "C:\V2RfcTest\default.html" -Raw) -match "sync:"
-            Write-Host "✅ default.html updated: $size bytes | sync comment present: $hasSync"
-            # Recycle app pool — flushes IIS kernel/output cache so new file is served
+            Write-Host "✅ default.html: $size bytes | sync comment: $hasSync"
             & C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
             Write-Host "✅ V2RfcTestPool recycled — IIS cache cleared"
           }
-
           Remove-PSSession $s
           Write-Host "Done — sap-api.v2retail.net now serves latest portal"
