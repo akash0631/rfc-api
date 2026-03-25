@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Web.Http;
 using SAP.Middleware.Connector;
+using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Finance
 {
@@ -22,7 +23,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 
             try
             {
-                var dest = RfcDestinationManager.GetDestination(SAPConfig.DestinationName);
+                var rfcPar = BaseController.rfcConfigparameters();
+                var dest = RfcDestinationManager.GetDestination(rfcPar);
                 var repo = dest.Repository;
                 var func = repo.CreateFunction("ZPO_MODIFICATION");
 
