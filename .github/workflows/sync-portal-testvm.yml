@@ -1,4 +1,4 @@
-name: Sync Portal HTML via test-vm → .36
+name: Sync Portal HTML via test-vm -> .36
 on:
   workflow_dispatch:
   push:
@@ -16,39 +16,47 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Copy portal HTML via SMB admin share, then recycle app pool
+      - name: Copy portal HTML via SMB admin share
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
 
-          # ── Step 1: mount admin share on .36 via net use ────────────────────
-          Write-Host "=== Mounting \\192.168.151.36\C$ ==="
+          # Mount admin share on .36
+          Write-Host "Mounting \\192.168.151.36\C$"
           $netResult = & cmd /c "net use \\192.168.151.36\C$ vrl@55555 /user:V2DC-ADDVERB\Administrator" 2>&1
           Write-Host "net use result: $netResult"
           if ($LASTEXITCODE -ne 0 -and $netResult -notmatch 'already been connected') {
             throw "net use failed (exit $LASTEXITCODE): $netResult"
           }
 
-          # ── Step 2: direct file copy via UNC — no serialisation limit ───────
+          # Direct file copy via UNC path
           $src  = "$env:GITHUB_WORKSPACE\portal\rfc_hub.html"
           $dest = "\\192.168.151.36\C$\V2RfcTest\default.html"
-          Write-Host "Copying $src → $dest"
+          Write-Host "Copying $src to $dest"
           Copy-Item $src $dest -Force
-          Write-Host "Copy complete."
+          $size = (Get-Item $dest).Length
+          Write-Host "Copy complete: $size bytes"
 
-          # ── Step 3: disconnect admin share ──────────────────────────────────
+          # Disconnect admin share
           & cmd /c "net use \\192.168.151.36\C$ /delete /yes" 2>&1 | Out-Null
+          Write-Host "Admin share disconnected"
 
-          # ── Step 4: PS-Remote to verify + recycle app pool ──────────────────
+      - name: Recycle IIS app pool via PS-Remote
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+
           $pass = ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force
           $cred = New-Object PSCredential('V2DC-ADDVERB\Administrator', $pass)
           $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -ErrorAction Stop
+
           Invoke-Command -Session $s -ScriptBlock {
-            $size    = (Get-Item "C:\V2RfcTest\default.html").Length
-            $hasSync = (Get-Content "C:\V2RfcTest\default.html" -Raw) -match "sync:"
-            Write-Host "✅ default.html: $size bytes | sync comment: $hasSync"
+            $size = (Get-Item 'C:\V2RfcTest\default.html').Length
+            $hasSync = (Get-Content 'C:\V2RfcTest\default.html' -Raw) -match 'sync:'
+            Write-Host "[OK] default.html: $size bytes | sync comment: $hasSync"
             & C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
-            Write-Host "✅ V2RfcTestPool recycled — IIS cache cleared"
+            Write-Host "[OK] V2RfcTestPool recycled - IIS cache cleared"
           }
+
           Remove-PSSession $s
-          Write-Host "Done — sap-api.v2retail.net now serves latest portal"
+          Write-Host "Done - sap-api.v2retail.net now serves latest portal"
