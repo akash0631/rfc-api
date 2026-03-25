@@ -830,7 +830,7 @@ async function registerJob() {
   catch(e) { toast('Invalid JSON params'); return; }
   if (!rfcName||!tableName) { toast('RFC name and table required'); return; }
   const r = await fetch('/sync/register', {method:'POST',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
     body:JSON.stringify({rfcName,tableName,label,params})});
   if (r.ok) {
     toast('✅ Registered '+rfcName);
@@ -1177,7 +1177,7 @@ async function submitColumns() {
   document.getElementById('colBtn').innerHTML='<span class="spin"></span> Pushing to GitHub...';
   document.getElementById('colErr').style.display='none';
   try {
-    const r = await fetch('/columns',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tableName:table,operations})});
+    const r = await fetch('/columns',{method:'POST',headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},body:JSON.stringify({tableName:table,operations})});
     const d = await r.json();
     if (!r.ok) throw new Error(d.error||'Failed');
     showColResult(d, operations);
@@ -1355,6 +1355,11 @@ const SWAGGER_HTML = `<!DOCTYPE html>
 // ─── Worker handler ───────────────────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
+    // OPTIONS preflight — must be first so CORS works for all routes
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Max-Age':'86400'}});
+    }
+
     const url = new URL(request.url);
     // Strip /pipeline prefix when served via sap-api.v2retail.net/pipeline/* custom route
     // so all existing pathname checks (/deploy, /status/*, etc.) work unchanged
@@ -1379,7 +1384,7 @@ export default {
       const sapEnv   = formData.get('env')||'dev';
 
       if (!file) return new Response(JSON.stringify({error:'No file uploaded'}),
-        {status:400, headers:{'Content-Type':'application/json'}});
+        {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
 
       const jobId = crypto.randomUUID();
       const initialJob = {status:'running', steps:[], started:new Date().toISOString()};
@@ -1400,11 +1405,11 @@ export default {
         }
       } catch(e) {
         return new Response(JSON.stringify({error:'Failed to read file: '+e.message}),
-          {status:400, headers:{'Content-Type':'application/json'}});
+          {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
       if (text.length < 50 && docxImages.length === 0) {
         return new Response(JSON.stringify({error:'Empty docx — no text or images found'}),
-          {status:400, headers:{'Content-Type':'application/json'}});
+          {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
 
       // Run pipeline in background (non-blocking)
@@ -1420,7 +1425,7 @@ export default {
     if (match && request.method === 'GET') {
       const job = await env.RFC_JOBS.get(match[1]);
       if (!job) return new Response(JSON.stringify({error:'Job not found'}),
-        {status:404, headers:{'Content-Type':'application/json'}});
+        {status:404, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       return new Response(job, {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
 
@@ -1430,23 +1435,17 @@ export default {
         const body = await request.json();
         const { tableName, operations } = body;
         if (!tableName) return new Response(JSON.stringify({error:'tableName required'}),
-          {status:400,headers:{'Content-Type':'application/json'}});
+          {status:400,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
         if (!operations || !operations.length) return new Response(JSON.stringify({error:'operations required'}),
-          {status:400,headers:{'Content-Type':'application/json'}});
+          {status:400,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
         const result = await manageColumns(tableName, operations, env.GITHUB_TOKEN);
         return new Response(JSON.stringify(result),
           {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       } catch(e) {
         return new Response(JSON.stringify({error:e.message}),
-          {status:500,headers:{'Content-Type':'application/json'}});
+          {status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
     }
-
-    // OPTIONS preflight
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,GET','Access-Control-Allow-Headers':'Content-Type'}});
-    }
-
 
     // ── SYNC ROUTES ───────────────────────────────────────────────────────────
 
@@ -1461,15 +1460,15 @@ export default {
         const { rfcName, tableName, label, params } = await request.json();
         if (!rfcName || !tableName)
           return new Response(JSON.stringify({error:'rfcName and tableName required'}),
-            {status:400, headers:{'Content-Type':'application/json'}});
+            {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
         const job = { rfcName, tableName, label: label||rfcName, params: params||{},
           enabled: true, registeredAt: new Date().toISOString() };
         await env.RFC_JOBS.put(`sync_job:${rfcName}`, JSON.stringify(job));
         return new Response(JSON.stringify({ok:true,job}),
-          {headers:{'Content-Type':'application/json'}});
+          {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       } catch(e) {
         return new Response(JSON.stringify({error:e.message}),
-          {status:500, headers:{'Content-Type':'application/json'}});
+          {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
     }
 
@@ -1492,7 +1491,7 @@ export default {
       const rfcName = syncRunMatch[1];
       const raw = await env.RFC_JOBS.get(`sync_job:${rfcName}`);
       if (!raw) return new Response(JSON.stringify({error:'Job not found'}),
-        {status:404, headers:{'Content-Type':'application/json'}});
+        {status:404, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       // Set a trigger key — IIS SyncController /api/Sync/poll picks this up within 1 min
       await env.RFC_JOBS.put(`sync_trigger:${rfcName}`,
         new Date().toISOString(), { expirationTtl: 300 });
@@ -1527,7 +1526,7 @@ export default {
       await env.RFC_JOBS.delete(`sync_job:${rfcName}`);
       await env.RFC_JOBS.delete(`sync_result:${rfcName}`);
       return new Response(JSON.stringify({ok:true}),
-        {headers:{'Content-Type':'application/json'}});
+        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
 
     // GET /explore → RFC Explorer
@@ -1546,15 +1545,15 @@ export default {
         const { rfcName, tableName, label, params } = await request.json();
         if (!rfcName || !tableName)
           return new Response(JSON.stringify({error:'rfcName and tableName required'}),
-            {status:400, headers:{'Content-Type':'application/json'}});
+            {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
         const job = { rfcName, tableName, label: label||rfcName, params: params||{},
           enabled: true, registeredAt: new Date().toISOString() };
         await env.RFC_JOBS.put(`sync_job:${rfcName}`, JSON.stringify(job));
         return new Response(JSON.stringify({ok:true,job}),
-          {headers:{'Content-Type':'application/json'}});
+          {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       } catch(e) {
         return new Response(JSON.stringify({error:e.message}),
-          {status:500, headers:{'Content-Type':'application/json'}});
+          {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
     }
 
@@ -1957,7 +1956,7 @@ init();
       const CF_ACCOUNT = 'bab06c93e17ae71cae3c11b4cc40240b';
       const CF_KEY = env.CLOUDFLARE_API_KEY;
       const CF_EMAIL = 'Akash@v2kart.com';
-      const h = {'X-Auth-Key':CF_KEY,'X-Auth-Email':CF_EMAIL,'Content-Type':'application/json'};
+      const h = {'X-Auth-Key':CF_KEY,'X-Auth-Email':CF_EMAIL,'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
       const TUNNEL_ID = '7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3';
       
       try {
@@ -1983,9 +1982,9 @@ init();
         }
         
         return new Response(JSON.stringify({zones, cnameResults:results}),
-          {headers:{'Content-Type':'application/json'}});
+          {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       } catch(e) {
-        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json'}});
+        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
     }
 
@@ -1996,17 +1995,17 @@ init();
       try {
         const r = await fetch(testUrl, {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
+          headers: {'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
           body: JSON.stringify({PO_NO:'4500001234',DELV_DATE:'20260401'}),
           signal: AbortSignal.timeout(15000)
         });
         const txt = await r.text();
         return new Response(JSON.stringify({
           tunnelUrl: testUrl, httpStatus: r.status, response: txt
-        }), {headers:{'Content-Type':'application/json'}});
+        }), {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       } catch(e) {
         return new Response(JSON.stringify({error:e.message, tunnelUrl:testUrl}),
-          {status:500, headers:{'Content-Type':'application/json'}});
+          {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
     }
 
@@ -2016,11 +2015,11 @@ init();
       const CF_KEY     = env.CLOUDFLARE_API_KEY || env.CF_API_KEY || env.CLOUDFLARE_API_TOKEN;
       const CF_EMAIL   = 'Akash@v2kart.com';
       if (!CF_KEY) return new Response(JSON.stringify({error:'CLOUDFLARE_API_KEY secret not set on worker'}),
-        {status:500, headers:{'Content-Type':'application/json'}});
+        {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       try {
         const TUNNEL_NAME = 'v2-sap-api';
         // Global API Key auth (X-Auth-Key + X-Auth-Email)
-        const h = {'X-Auth-Key':CF_KEY,'X-Auth-Email':CF_EMAIL,'Content-Type':'application/json'};
+        const h = {'X-Auth-Key':CF_KEY,'X-Auth-Email':CF_EMAIL,'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
         
         // Check existing
         let listR = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false`, {headers:h});
@@ -2035,7 +2034,7 @@ init();
             {method:'POST', headers:h, body:JSON.stringify({name:TUNNEL_NAME, config_src:'cloudflare'})});
           let cd = await cr.json();
           if (!cd.success) return new Response(JSON.stringify({error:'create failed', detail:cd}),
-            {status:500, headers:{'Content-Type':'application/json'}});
+            {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
           tunnelId = cd.result.id;
         }
         
@@ -2043,7 +2042,7 @@ init();
         let tr = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/cfd_tunnel/${tunnelId}/token`, {headers:h});
         let td = await tr.json();
         if (!td.success) return new Response(JSON.stringify({error:'token failed', detail:td, listDetail:listD}),
-          {status:500, headers:{'Content-Type':'application/json'}});
+          {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
         tunnelToken = td.result;
         
         // Set ingress
@@ -2056,9 +2055,9 @@ init();
           tunnelToken,
           tunnelUrl: `https://${tunnelId}.cfargotunnel.com`,
           listApiResponse: listD
-        }), {headers:{'Content-Type':'application/json'}});
+        }), {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       } catch(e) {
-        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json'}});
+        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
     }
 
@@ -2072,7 +2071,7 @@ init();
       try {
         const body = await request.json();
         const { filename, content } = body;
-        if (!content) return new Response(JSON.stringify({error:'content required'}),{status:400,headers:{'Content-Type':'application/json'}});
+        if (!content) return new Response(JSON.stringify({error:'content required'}),{status:400,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
 
         // Generate job ID
         const jobId = crypto.randomUUID().replace(/-/g,'').substring(0,12);
@@ -2090,7 +2089,7 @@ init();
           headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}
         });
       } catch(e) {
-        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json'}});
+        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       }
     }
 
@@ -2113,7 +2112,7 @@ init();
         const iisUrl = `${IIS_HOST}/api/${route}`;
         const iisResp = await fetch(iisUrl, {
           method:'POST',
-          headers:{'Content-Type':'application/json'},
+          headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
           body: JSON.stringify(params || {}),
           signal: AbortSignal.timeout(60000)
         });
@@ -2383,7 +2382,7 @@ async function doFetch() {
   try {
     const r = await fetch(RELAY+'/relay-rfc', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
       body: JSON.stringify({
         rfc: sel.value,
         params,
@@ -2440,7 +2439,7 @@ onRfcChange();
       return new Response(html, {headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-cache'}});
     }
 
-    return new Response('Not Found', {status:404});
+    return new Response('Not Found', {status:404, headers:{'Access-Control-Allow-Origin':'*'}});
   }
 };
 
