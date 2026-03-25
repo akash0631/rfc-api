@@ -55,7 +55,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
             {
                 return Ok(new { Status = "E", Message = ex.Message });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
                 return Ok(new { Status = "E", Message = ex.Message });
             }

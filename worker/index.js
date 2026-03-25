@@ -268,7 +268,7 @@ Namespace: Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 Class: ${spec.rfcName}Controller : BaseController
 Route: [HttpPost] [Route("api/${spec.rfcName}")]
 Request model class at bottom of file.
-Error handling: RfcAbapException, CommunicationException, Exception → {Status:"E",Message:ex.Message}
+Error handling: RfcAbapException, RfcCommunicationException, Exception → {Status:"E",Message:ex.Message}
 Check EX_RETURN after invoke — if TYPE=="E" return error.
 
 MANDATORY SAP CONNECTOR PATTERN — copy exactly, no variations:

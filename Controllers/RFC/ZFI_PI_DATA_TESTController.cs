@@ -81,7 +81,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 };
                 return Request.CreateResponse(HttpStatusCode.OK, errorResponse);
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
                 var errorResponse = new
                 {

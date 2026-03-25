@@ -80,7 +80,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     Message = ex.Message
                 });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
                 return Ok(new
                 {
