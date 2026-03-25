@@ -242,11 +242,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
   <div class="tab" data-tab="pipeline"><span class="dot"></span> Pipeline</div>
 </div>
-  <div class="tab" onclick="window.open('https://sap-api.v2retail.net/swagger/ui/index','_blank')" style="cursor:pointer"><span class="dot" style="background:#22c55e"></span> API Explorer (Swagger) ↗</div>
-  <div class="tab" data-tab="generator"><span class="dot"></span> RFC Generator</div>
-  <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
-  <div class="tab" data-tab="pipeline"><span class="dot"></span> Pipeline</div>
-</div>
 
 <!-- ════════════════════════════════════════════════════════════════
      OVERVIEW TAB
@@ -269,9 +264,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
     </a>
     <p style="font-size:11px;color:var(--muted);margin-top:10px">Try any endpoint directly — fill parameters and hit Execute. Auto-updates when new RFCs are deployed.</p>
   </div>
+</div><!-- end #tab-overview -->
 
 <!-- ════════════════════════════════════════════════════════════════
-     RFC EXPLORER TAB
+     RFC GENERATOR TAB
 ════════════════════════════════════════════════════════════════ -->
 <div id="tab-generator" class="section">
   <div class="gen-hero">
@@ -506,7 +502,7 @@ document.querySelectorAll('.tab').forEach(function(tab) {
 // BUILD OVERVIEW TABLE
 // ═══════════════════════════════════════════════════════════
 (function() {
-  document.getElementById('ctrl-count-stat').textContent = '125';
+  document.getElementById('ctrl-count').textContent = '46';
   document.getElementById('rfc-count').textContent = '';
 })();
 
@@ -522,7 +518,9 @@ document.querySelectorAll('.tab').forEach(function(tab) {
 // ═══════════════════════════════════════════════════════════
 // runRFC removed
 
-// escHtml removed
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
 
 // ═══════════════════════════════════════════════════════════
 // RFC GENERATOR
