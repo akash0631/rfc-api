@@ -20,7 +20,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.GateEntry_LOT_Putway
         [Route("api/ZVND_PUT01_HU_VAL_RFC")]
         public async Task<IHttpActionResult> ZVND_PUT01_HU_VAL_RFC([FromBody] ZVND_PUT01_HU_VAL_RFCRequest request)
         {
-            return await Task.Run(() =>
+            return await Task.Run<IHttpActionResult>(() =>
             {
                 try
                 {
