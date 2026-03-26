@@ -6,8 +6,8 @@
 const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'master';
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
-const IIS_HOST         = 'https://sap-api.v2retail.net';  // sap-api.v2retail.net → CF Tunnel → .36:9292
-const GH_WORKFLOW_ID   = '251170501';  // deploy-iis-testvm.yml (Build on windows-latest, deploy via test-vm SMB)
+const IIS_HOST         = 'http://192.168.151.46:8888';
+const GH_WORKFLOW_ID   = '245608998';  // deploy-test-vm.yml
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
@@ -15,12 +15,11 @@ const SAP_ENVS = {
   production: { fn: 'rfcConfigparametersproduction', host: '192.168.144.170', client: '600' },
 };
 const FOLDER_MAP = {
-  Finance:'Controllers/RFC', GateEntry:'Controllers/RFC',
-  Vendor:'Controllers/RFC', HUCreation:'Controllers/RFC',
-  FabricPutway:'Controllers/RFC', HRMS:'Controllers/RFC',
-  NSO:'Controllers/RFC', PaperlessPicklist:'Controllers/RFC',
-  Sampling:'Controllers/RFC', VehicleLoading:'Controllers/RFC',
-  DC_Routing:'Controllers/RFC', Inbound:'Controllers/RFC'
+  Finance:'Controllers/Finance', GateEntry:'Controllers/GateEntry_LOT_Putway',
+  Vendor:'Controllers/Vendor_SRM_Routing', HUCreation:'Controllers/HU_Creation',
+  FabricPutway:'Controllers/FMS_FABRIC_PUTWAY', HRMS:'Controllers/HRMS',
+  NSO:'Controllers/NSO', PaperlessPicklist:'Controllers/PaperlessPicklist',
+  Sampling:'Controllers/Sampling', VehicleLoading:'Controllers/Vehicle_Loading',
 };
 const USINGS = `using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
@@ -39,8 +38,8 @@ using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;`;
 // Reads ZIP entries to find word/document.xml and strips XML tags
 async function extractDocxText(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
-  const entries = await parseZipAll(bytes);
-  let text = '';
+  const entries = await parseZip(bytes);
+  var text = '';
   const docXml = entries['word/document.xml'];
   if (docXml) {
     const xml = new TextDecoder().decode(docXml);
@@ -55,14 +54,15 @@ async function extractDocxText(arrayBuffer) {
   const images = [];
   for (const [name, data] of Object.entries(entries)) {
     if (name.startsWith('word/media/') && (name.endsWith('.png')||name.endsWith('.jpg')||name.endsWith('.jpeg'))) {
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(data)));
-      images.push({ b64, mime: name.endsWith('.png')?'image/png':'image/jpeg' });
+      const arr = new Uint8Array(data);
+      var b64 = ''; for (var i=0;i<arr.length;i++) b64+=String.fromCharCode(arr[i]);
+      images.push({ b64: btoa(b64), mime: name.endsWith('.png')?'image/png':'image/jpeg' });
     }
   }
   return { text, images };
 }
 
-async function parseZipAll(bytes) {
+async function parseZip(bytes) {
   const entries = {};
   // Find End of Central Directory
   let eocd = -1;
@@ -155,94 +155,37 @@ async function claude(prompt, apiKey, maxTokens=2500) {
 }
 
 // ─── Parse RFC spec from text ─────────────────────────────────────────────────
-async function parseRfc(text, apiKey, filename='', images=[]) {
-  const filenameHint = filename ? `\nHint: The filename is "${filename}" — use this to infer the RFC name if not explicit in the document.` : '';
-  // Build message content — use images if text is short (image-based SAP docx)
-  let msgContent;
-  if (images && images.length > 0 && text.length < 200) {
-    msgContent = [
-      ...images.map(img => ({type:'image',source:{type:'base64',media_type:img.mime,data:img.b64}})),
-      {type:'text',text:`You are parsing SAP Function Builder screenshots for V2 Retail.
-Extract the RFC specification from these images and return ONLY valid JSON:
-{
-  "rfcName": "RFC function name visible in the screenshots e.g. ZPO_DD_UPD_RFC",
-  "description": "one-line description of what this RFC does",
-  "category": "one of: Finance,GateEntry,Vendor,HUCreation,FabricPutway,HRMS,NSO,PaperlessPicklist,Sampling,VehicleLoading",
-  "importParams": [{"name":"PARAM_NAME","sapType":"SAP_TYPE","description":"what it is"}],
-  "outputType": "table OR return_only",
-  "outputTableName": "TABLE param name or null",
-  "outputFields": [{"fieldName":"FIELD","sapType":"TYPE","length":"LENGTH"}],
-  "suggestedSqlTable": "ET_RFCNAME"
-}
-${filenameHint}`}
-    ];
+async function parseRfc(text, apiKey, filename, images) {
+  images = images || [];
+  var hint = filename ? ('\nHint: filename is "' + filename + '" - use to infer RFC name.') : '';
+  var jsonSchema = '{\n  "rfcName": "RFC function name e.g. ZADVANCE_PAYMENT_RFC",\n  "description": "one-line description",\n  "category": "Finance or GateEntry or Vendor or HUCreation or FabricPutway or HRMS or NSO or PaperlessPicklist or Sampling or VehicleLoading",\n  "importParams": [{"name":"PARAM","sapType":"TYPE","description":"desc"}],\n  "outputType": "table OR return_only",\n  "outputTableName": "TABLE name or null",\n  "outputFields": [{"fieldName":"F","sapType":"T","length":"L"}],\n  "suggestedSqlTable": "ET_RFCNAME"\n}';
+  var textPrompt = 'You are parsing a SAP RFC specification for V2 Retail. Return ONLY valid JSON:\n' + jsonSchema + '\nRFC Document:\n' + text.slice(0, 5000) + hint;
+  var imgPrompt = 'Parse SAP Function Builder screenshots. Return ONLY valid JSON:\n' + jsonSchema + hint;
+
+  var msgs;
+  if (images.length > 0 && text.length < 200) {
+    var parts = images.map(function(img) {
+      return {type:'image', source:{type:'base64', media_type:img.mime, data:img.b64}};
+    });
+    parts.push({type:'text', text:imgPrompt});
+    msgs = [{role:'user', content:parts}];
   } else {
-    msgContent = `You are parsing a SAP RFC specification document for V2 Retail.
-Extract the following and return ONLY valid JSON (no markdown, no explanation):
-{
-  "rfcName": "RFC function name from the document e.g. ZVND_GATELOT2_PICKLIST_VAL_RFC",
-  "description": "one-line description",
-  "category": "one of: Finance,GateEntry,Vendor,HUCreation,FabricPutway,HRMS,NSO,PaperlessPicklist,Sampling,VehicleLoading",
-  "importParams": [{"name":"PARAM","sapType":"TYPE","description":"what it is"}],
-  "outputType": "table OR return_only",
-  "outputTableName": "TABLE param name or null",
-  "outputFields": [{"fieldName":"F","sapType":"T","length":"L"}],
-  "suggestedSqlTable": "ET_RFCNAME (ET_ prefix, no _RFC suffix)"
-}
-RFC Document:
-${text.slice(0,5000)}${filenameHint}`;
+    msgs = [{role:'user', content:textPrompt}];
   }
-  
-  const r2 = await fetch('https://api.anthropic.com/v1/messages',{
+
+  var res = await fetch('https://api.anthropic.com/v1/messages', {
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,
-      messages:[{role:'user',content:msgContent}]})
+    body:JSON.stringify({model:'claude-sonnet-4-20250514', max_tokens:800, messages:msgs})
   });
-  const d2 = await r2.json();
-  if (!r2.ok) throw new Error(d2.error?.message||'Claude API error');
-  const raw = d2.content?.find(b=>b.type==='text')?.text||'';
+  var d = await res.json();
+  if (!res.ok) throw new Error((d.error && d.error.message) || 'Claude API error');
+  var raw = '';
+  if (d.content) { for (var i=0;i<d.content.length;i++) { if (d.content[i].type==='text') { raw=d.content[i].text; break; } } }
   return JSON.parse(raw.replace(/```json\n?/g,'').replace(/```/g,'').trim());
 }
 
 
-// ─── Parse MULTIPLE RFCs from one document ────────────────────────────────────
-async function parseMultipleRfcs(text, apiKey, filename='', images=[]) {
-  const filenameHint = filename ? `\nHint: The filename is "${filename}".` : '';
-  const msgContent = `You are parsing a SAP RFC specification document for V2 Retail.
-This document may contain ONE or MULTIPLE RFC definitions.
-Extract ALL RFCs found and return ONLY a valid JSON array (no markdown, no explanation):
-[
-  {
-    "rfcName": "EXACT RFC function name e.g. ZVND_GATELOT2_PICKLIST_VAL_RFC",
-    "description": "one-line description of what this RFC does",
-    "category": "one of: Finance,GateEntry,Vendor,HUCreation,FabricPutway,HRMS,NSO,PaperlessPicklist,Sampling,VehicleLoading",
-    "importParams": [{"name":"PARAM","sapType":"TYPE","description":"what it is"}],
-    "outputType": "table OR return_only",
-    "outputTableName": "TABLE export param name or null",
-    "outputFields": [{"fieldName":"F","sapType":"T","length":"L"}],
-    "suggestedSqlTable": "ET_RFCNAME"
-  }
-]
-Return an ARRAY even if only one RFC is found. Never return an object, always an array.
-RFC Document:
-${text.slice(0,8000)}${filenameHint}`;
-
-  const r = await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,
-      messages:[{role:'user',content:msgContent}]})
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error?.message||'Claude API error');
-  const raw = d.content?.find(b=>b.type==='text')?.text||'';
-  const parsed = JSON.parse(raw.replace(/```json\n?/g,'').replace(/```/g,'').trim());
-  // Ensure array
-  return Array.isArray(parsed) ? parsed : [parsed];
-}
-
-// ─── Generate C# controller ───────────────────────────────────────────────────
 async function genController(spec, sapEnv, apiKey) {
   const env = SAP_ENVS[sapEnv];
   const importBlock = spec.importParams?.map(p=>`- ${p.name} (SAP TYPE: ${p.sapType})`).join('\n')||'(none)';
@@ -268,7 +211,7 @@ Namespace: Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 Class: ${spec.rfcName}Controller : BaseController
 Route: [HttpPost] [Route("api/${spec.rfcName}")]
 Request model class at bottom of file.
-Error handling: RfcAbapException, RfcCommunicationException, Exception → {Status:"E",Message:ex.Message}
+Error handling: RfcAbapException, CommunicationException, Exception → {Status:"E",Message:ex.Message}
 Check EX_RETURN after invoke — if TYPE=="E" return error.
 
 MANDATORY SAP CONNECTOR PATTERN — copy exactly, no variations:
@@ -289,7 +232,7 @@ Return ONLY raw C#. No markdown.`, apiKey, 2500);
 
 // ─── Push controller to GitHub ────────────────────────────────────────────────
 async function pushController(spec, code, sapEnv, token) {
-  const folder = FOLDER_MAP[spec.category]||'Controllers/RFC';
+  const folder = FOLDER_MAP[spec.category]||'Controllers/NSO';
   const fp = `${folder}/${spec.rfcName}Controller.cs`;
   const {sha} = await ghGet(fp, token);
   return {
@@ -348,110 +291,135 @@ async function updateSwagger(spec, sapEnv, token) {
 
 // ─── Full pipeline ────────────────────────────────────────────────────────────
 async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
-  const apiKey  = env.ANTHROPIC_API_KEY;
-  const ghToken = env.GITHUB_TOKEN;
-  const kv      = env.RFC_JOBS;
-  const RELAY   = 'https://sap-api.v2retail.net';
-  const DAB_URL = 'https://my-dab-app.azurewebsites.net';
-
-  const TOTAL_STEPS = 9; // parse, controller, github, deploy, sql_create, data_sync, dab, dab_verify, swagger
+  const apiKey   = env.ANTHROPIC_API_KEY;
+  const ghToken  = env.GITHUB_TOKEN;
+  const kv       = env.RFC_JOBS;
   const log = async (step, status, detail='') => {
     const job = JSON.parse(await kv.get(jobId)||'{}');
     job.steps = job.steps||[];
     const existing = job.steps.find(s=>s.step===step);
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
-    // Only mark complete when we have all steps finished (done at the very end of pipeline)
-    // Never auto-complete mid-pipeline
+    if (status==='done'||status==='error') {
+      const allDone = job.steps.every(s=>s.status==='done'||s.status==='error');
+      if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
+    }
     await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
   };
 
-  // ── STEP 1: Parse RFC document (supports multiple RFCs in one doc) ─────
-  await log('parse','running','Extracting RFC spec(s) with Claude AI...');
-  let specs;
-  try { specs = await parseMultipleRfcs(text, apiKey, filename, images); }
-  catch(e) { await log('parse','error',e.message); return; }
-  const rfcCount = specs.length;
-  await log('parse','done', rfcCount > 1
-    ? `Found ${rfcCount} RFCs: ${specs.map(s=>s.rfcName).join(', ')}`
-    : `${specs[0].rfcName} · ${specs[0].category}`);
-
-  // ── STEPS 2–3: Generate + push controller for EACH RFC ─────────────────
-  const deployedRfcs = [];
-  for (let i = 0; i < specs.length; i++) {
-    const spec = specs[i];
-    const suffix = rfcCount > 1 ? ` (${i+1}/${rfcCount}: ${spec.rfcName})` : '';
+  try {
+    // Step 1: Parse
+    await log('parse','running','Extracting RFC spec with Claude AI...');
+    let spec;
+    try { spec = await parseRfc(text, apiKey, filename, images); }
+    catch(e) { await log('parse','error',e.message); return; }
+    await log('parse','done',`${spec.rfcName} · ${spec.category}`);
 
     // Step 2: Generate controller
-    await log('controller','running',`Generating controller${suffix}...`);
-    let ctrlCode;
-    try { ctrlCode = await genController(spec, sapEnv, apiKey); }
-    catch(e) { await log('controller','error',`${spec.rfcName}: ${e.message}`); return; }
-    await log('controller', i < specs.length-1 ? 'running' : 'done',
-      `${spec.rfcName}: ${ctrlCode.split('\n').length} lines`);
+    await log('controller','running','Generating ASP.NET C# controller...');
+    let code;
+    try { code = await genController(spec, sapEnv, apiKey); }
+    catch(e) { await log('controller','error',e.message); return; }
+    await log('controller','done',`${code.split('\n').length} lines generated`);
 
-    // Step 3: Push to GitHub
-    await log('github','running',`Pushing ${spec.rfcName} to GitHub${suffix}...`);
+    // Step 3: Push controller
+    await log('github','running','Pushing controller to GitHub...');
     let ctrlResult;
-    try { ctrlResult = await pushController(spec, ctrlCode, sapEnv, ghToken); }
-    catch(e) { await log('github','error',`${spec.rfcName}: ${e.message}`); return; }
-    await log('github', i < specs.length-1 ? 'running' : 'done',
-      `${spec.rfcName}: ${ctrlResult.commitSha.slice(0,8)}`);
+    try { ctrlResult = await pushController(spec, code, sapEnv, ghToken); }
+    catch(e) { await log('github','error',e.message); return; }
+    await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha})`);
 
-    deployedRfcs.push({ spec, ctrlResult });
-    if (i < specs.length - 1) await sleep(1500); // small gap between pushes
-  }
+    // Step 4: Trigger IIS deploy via GitHub Actions
+    await log('deploy','running','Triggering build + deploy on VM-CRM (.46)...');
+    try {
+      // Dispatch workflow
+      const dispatchRes = await fetch(
+        `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${GH_WORKFLOW_ID}/dispatches`,
+        { method:'POST',
+          headers:{ Authorization:`token ${ghToken}`, Accept:'application/vnd.github+json',
+            'Content-Type':'application/json', 'User-Agent':'V2-RFC-Pipeline' },
+          body: JSON.stringify({ref: GITHUB_BRANCH}) }
+      );
+      if (!dispatchRes.ok && dispatchRes.status !== 204)
+        throw new Error(`Workflow dispatch HTTP ${dispatchRes.status}`);
 
-  // Use first RFC spec for downstream steps (DAB, SQL, Swagger use first RFC)
-  const spec = specs[0];
-  const ctrlResult = deployedRfcs[0].ctrlResult;
+      // Wait briefly then find the new running run
+      await sleep(8000);
+      let runId = null;
+      for (let i = 0; i < 15 && !runId; i++) {
+        await sleep(4000);
+        const runsRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=5&event=workflow_dispatch&branch=${GITHUB_BRANCH}`,
+          { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+        );
+        const runs = await runsRes.json();
+        const fresh = runs.workflow_runs?.find(r => r.status !== 'completed');
+        if (fresh) runId = fresh.id;
+      }
+      if (!runId) throw new Error('Could not find workflow run after dispatch');
+      await log('deploy','running',`Build started · run #${runId}`);
 
-  // ── STEP 4: Trigger IIS Deploy (non-blocking — GitHub push already triggers it) ──
-  // The push to Controllers/** in step 3 already auto-triggers deploy-iis.yml.
-  // We dispatch separately as backup and record the run URL, then continue immediately.
-  await log('deploy','running','Dispatching IIS build + deploy...');
-  try {
-    // Dispatch the workflow
-    await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${GH_WORKFLOW_ID}/dispatches`,
-      { method:'POST',
-        headers:{ Authorization:`token ${ghToken}`, Accept:'application/vnd.github+json',
-          'Content-Type':'application/json', 'User-Agent':'V2-RFC-Pipeline' },
-        body: JSON.stringify({ref: GITHUB_BRANCH}) }
-    );
-    await sleep(5000);
-    // Find the new run (don't block waiting for it to finish)
-    const runsRes = await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=3&event=workflow_dispatch`,
-      { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-    );
-    const runs = await runsRes.json();
-    const fresh = runs.workflow_runs?.[0];
-    const runUrl = fresh ? `https://github.com/${GITHUB_REPO}/actions/runs/${fresh.id}` : '';
-    const allEndpoints = deployedRfcs.map(r=>`sap-api.v2retail.net/api/${r.spec.rfcName}`).join(', ');
-    await log('deploy','done',`Deploy triggered ✓ ${allEndpoints}`);
+      // Poll until completed (max ~8 min = 96 × 5s)
+      let deployed = false;
+      for (let i = 0; i < 96; i++) {
+        await sleep(5000);
+        const runRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
+          { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+        );
+        const run = await runRes.json();
+        if (run.status === 'completed') {
+          if (run.conclusion === 'success') {
+            await log('deploy','done',`Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
+            deployed = true;
+          } else {
+            throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
+          }
+          break;
+        }
+        // Show current step name while waiting
+        try {
+          const jobsRes = await fetch(
+            `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}/jobs`,
+            { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+          );
+          const jobs = await jobsRes.json();
+          const cur = jobs.jobs?.[0]?.steps?.find(s => s.status === 'in_progress')?.name;
+          if (cur) await log('deploy','running',`${cur} (run #${runId})`);
+        } catch(_) {}
+      }
+      if (!deployed) throw new Error('Deployment timed out');
+    } catch(e) { await log('deploy','error',e.message); return; }
+
+    // Step 5: Register DAB
+    await log('dab','running','Registering entity in DAB config...');
+    let dabResult;
+    try { dabResult = await registerDab(spec, ghToken); }
+    catch(e) { await log('dab','error',e.message); return; }
+    await log('dab','done',`${dabResult.endpoint}`);
+
+    // Step 6: Update Swagger
+    await log('swagger','running','Updating Swagger documentation...');
+    try { await updateSwagger(spec, sapEnv, ghToken); }
+    catch(e) { await log('swagger','error',e.message); }
+    await log('swagger','done','Endpoint card added to portal');
+
+    // Final: write summary
+    const job = JSON.parse(await kv.get(jobId)||'{}');
+    job.status  = 'complete';
+    job.rfcName  = spec.rfcName;
+    job.rfcApi   = `${IIS_HOST}/api/${spec.rfcName}`;
+    job.dataLake = dabResult.endpoint;
+    job.swagger  = `${IIS_HOST}/swagger/ui/index`;
+    job.commit   = ctrlResult.commitUrl;
+    await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
+
   } catch(e) {
-    // Non-fatal — GitHub push already triggers deploy via path filter
-    await log('deploy','done',`Triggered via GitHub push (path filter) · sap-api.v2retail.net`);
+    const job = JSON.parse(await kv.get(jobId)||'{}');
+    job.status='error'; job.error=e.message;
+    await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
   }
-
-
-  // ── Final: write job summary ────────────────────────────────────────────
-  const sqlTable = spec.suggestedSqlTable || `ET_${spec.rfcName.replace(/_RFC$/,'')}`;
-  const finalJob = JSON.parse(await kv.get(jobId)||'{}');
-  finalJob.status    = 'complete';
-  finalJob.rfcName   = specs.map(s=>s.rfcName).join(', ');
-  finalJob.rfcNames  = specs.map(s=>s.rfcName);
-  finalJob.rfcApis   = deployedRfcs.map(r=>`https://sap-api.v2retail.net/api/${r.spec.rfcName}/Post`);
-  finalJob.rfcApi    = `https://sap-api.v2retail.net/api/${spec.rfcName}/Post`;
-  finalJob.dataLake  = `https://my-dab-app.azurewebsites.net/api/${sqlTable}`;
-  finalJob.sqlTable  = sqlTable;
-  finalJob.swagger   = `https://v2-rfc-portal.pages.dev/rfc_hub`;
-  finalJob.commit    = ctrlResult.commitUrl;
-  await kv.put(jobId, JSON.stringify(finalJob), {expirationTtl:86400});
 }
-
-
 
 
 // ─── Manage Data Lake Columns ─────────────────────────────────────────────────
@@ -830,7 +798,7 @@ async function registerJob() {
   catch(e) { toast('Invalid JSON params'); return; }
   if (!rfcName||!tableName) { toast('RFC name and table required'); return; }
   const r = await fetch('/sync/register', {method:'POST',
-    headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
+    headers:{'Content-Type':'application/json'},
     body:JSON.stringify({rfcName,tableName,label,params})});
   if (r.ok) {
     toast('✅ Registered '+rfcName);
@@ -974,7 +942,7 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
   <div class="nav" style="display:flex;align-items:center;gap:4px">
     <a id="tab-deploy" class="tab-link active" href="javascript:void(0)" onclick="showTab('deploy')">⚡ Deploy RFC</a>
     <a id="tab-columns" class="tab-link" href="javascript:void(0)" onclick="showTab('columns')">🗃️ Manage Columns</a>
-    <a href="https://v2-rfc-portal.pages.dev/rfc_hub" target="_blank" style="margin-left:8px">RFC Portal →</a>
+    <a href="/swagger" style="margin-left:8px">Swagger →</a>
   </div>
 </div>
 
@@ -1046,10 +1014,10 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
     <div class="card">
       <div class="ct">Pipeline Progress</div>
       <div class="steps" id="steps">
-        <div class="step" id="s-parse"><div class="step-icon">○</div><div><div>Parse RFC document(s)</div><div class="step-detail" style="font-size:11px;color:#888">Detects single or multiple RFCs automatically</div></div></div>
-        <div class="step" id="s-controller"><div class="step-icon">○</div><div><div>Generate C# controller(s)</div><div class="step-detail" style="font-size:11px;color:#888">One controller per RFC found</div></div></div>
-        <div class="step" id="s-github"><div class="step-icon">○</div><div><div>Push to GitHub</div><div class="step-detail" style="font-size:11px;color:#888">Triggers auto-deploy via path filter</div></div></div>
-        <div class="step" id="s-deploy"><div class="step-icon">○</div><div><div>Build &amp; Deploy to IIS (.36 — V2DC-ADDVERB)</div></div></div>
+        <div class="step" id="s-parse"><div class="step-icon">○</div><div><div>Parse RFC document</div></div></div>
+        <div class="step" id="s-controller"><div class="step-icon">○</div><div><div>Generate ASP.NET controller</div></div></div>
+        <div class="step" id="s-github"><div class="step-icon">○</div><div><div>Push to GitHub</div></div></div>
+        <div class="step" id="s-deploy"><div class="step-icon">○</div><div><div>Build &amp; Deploy to IIS (.46)</div></div></div>
         <div class="step" id="s-dab"><div class="step-icon">○</div><div><div>Register in Azure DAB</div></div></div>
         <div class="step" id="s-swagger"><div class="step-icon">○</div><div><div>Update Swagger docs</div></div></div>
       </div>
@@ -1177,7 +1145,7 @@ async function submitColumns() {
   document.getElementById('colBtn').innerHTML='<span class="spin"></span> Pushing to GitHub...';
   document.getElementById('colErr').style.display='none';
   try {
-    const r = await fetch('/columns',{method:'POST',headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},body:JSON.stringify({tableName:table,operations})});
+    const r = await fetch('/columns',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tableName:table,operations})});
     const d = await r.json();
     if (!r.ok) throw new Error(d.error||'Failed');
     showColResult(d, operations);
@@ -1303,23 +1271,12 @@ window.pollStatus = function pollStatus(jobId) {
 function showResult(job) {
   document.getElementById('progress-section').style.display='none';
   document.getElementById('result-section').style.display='block';
-  const rfcNames = job.rfcNames || [job.rfcName || 'RFC'];
-  const rfcApis  = job.rfcApis  || [job.rfcApi].filter(Boolean);
-  const count = rfcNames.length;
-  document.getElementById('resultTitle').textContent =
-    count > 1 ? (count + ' RFCs Deployed!') : (rfcNames[0] || 'RFC') + ' Deployed!';
-  document.getElementById('resultSub').textContent =
-    count > 1
-      ? (count + ' REST APIs are now live on sap-api.v2retail.net')
-      : 'Your RFC is now a live REST API with data lake access';
-  let epHtml = '';
-  if (rfcApis.length > 0) {
-    epHtml += '<span>Live API Endpoints:</span>';
-    rfcApis.forEach(api => { epHtml += '<div style="font-size:12px;margin:2px 0">' + api + '</div>'; });
-  }
-  epHtml += '<span style="margin-top:8px">Data Lake REST API (Azure DAB)</span>' + (job.dataLake||'') +
+  document.getElementById('resultTitle').textContent = (job.rfcName||'RFC') + ' Deployed!';
+  document.getElementById('resultSub').textContent = 'Your RFC is now a live REST API with data lake access';
+  document.getElementById('epBox').innerHTML =
+    '<span>RFC API (live on IIS)</span>' + (job.rfcApi||'') +
+    '<span style="margin-top:8px">Data Lake REST API (Azure DAB)</span>' + (job.dataLake||'') +
     '?$filter=FIELD eq \'value\'&$top=100';
-  document.getElementById('epBox').innerHTML = epHtml;
   const chips = document.getElementById('chips');
   chips.innerHTML = '';
   if (job.commit) chips.innerHTML += '<a class="chip g" href="'+job.commit+'" target="_blank">✓ GitHub commit</a>';
@@ -1346,7 +1303,7 @@ function reset() {
 // ─── Swagger redirect page ────────────────────────────────────────────────────
 const SWAGGER_HTML = `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<meta http-equiv="refresh" content="0;url=https://v2-rfc-portal.pages.dev/rfc_hub">
+<meta http-equiv="refresh" content="0;url=https://v2-rfc-portal.pages.dev/swagger">
 <title>Redirecting to Swagger...</title></head>
 <body style="font-family:monospace;display:grid;place-items:center;height:100vh;background:#0f172a;color:#9aa5d4">
 <p>→ Redirecting to Swagger UI...</p>
@@ -1355,36 +1312,26 @@ const SWAGGER_HTML = `<!DOCTYPE html>
 // ─── Worker handler ───────────────────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
-    // OPTIONS preflight — must be first so CORS works for all routes
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization','Access-Control-Max-Age':'86400'}});
-    }
-
     const url = new URL(request.url);
-    // Strip /pipeline prefix when served via sap-api.v2retail.net/pipeline/* custom route
-    // so all existing pathname checks (/deploy, /status/*, etc.) work unchanged
-    const pathname = url.pathname.startsWith('/pipeline')
-      ? url.pathname.slice(9) || '/'   // '/pipeline/deploy' → '/deploy', '/pipeline' → '/'
-      : url.pathname;
 
     // GET / → upload UI
-    if (pathname === '/' && request.method === 'GET') {
+    if (url.pathname === '/' && request.method === 'GET') {
       return new Response(HTML, {headers:{'Content-Type':'text/html;charset=utf-8'}});
     }
 
     // GET /swagger → redirect
-    if (pathname === '/swagger') {
+    if (url.pathname === '/swagger') {
       return new Response(SWAGGER_HTML, {headers:{'Content-Type':'text/html;charset=utf-8'}});
     }
 
     // POST /deploy → start pipeline
-    if (pathname === '/deploy' && request.method === 'POST') {
+    if (url.pathname === '/deploy' && request.method === 'POST') {
       const formData = await request.formData();
       const file     = formData.get('file');
       const sapEnv   = formData.get('env')||'dev';
 
       if (!file) return new Response(JSON.stringify({error:'No file uploaded'}),
-        {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+        {status:400, headers:{'Content-Type':'application/json'}});
 
       const jobId = crypto.randomUUID();
       const initialJob = {status:'running', steps:[], started:new Date().toISOString()};
@@ -1405,11 +1352,7 @@ export default {
         }
       } catch(e) {
         return new Response(JSON.stringify({error:'Failed to read file: '+e.message}),
-          {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      }
-      if (text.length < 50 && docxImages.length === 0) {
-        return new Response(JSON.stringify({error:'Empty docx — no text or images found'}),
-          {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+          {status:400, headers:{'Content-Type':'application/json'}});
       }
 
       // Run pipeline in background (non-blocking)
@@ -1421,59 +1364,65 @@ export default {
     }
 
     // GET /status/:jobId
-    const match = pathname.match(/^\/status\/(.+)$/);
+    const match = url.pathname.match(/^\/status\/(.+)$/);
     if (match && request.method === 'GET') {
       const job = await env.RFC_JOBS.get(match[1]);
       if (!job) return new Response(JSON.stringify({error:'Job not found'}),
-        {status:404, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+        {status:404, headers:{'Content-Type':'application/json'}});
       return new Response(job, {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
 
     // POST /columns → manage data lake columns
-    if (pathname === '/columns' && request.method === 'POST') {
+    if (url.pathname === '/columns' && request.method === 'POST') {
       try {
         const body = await request.json();
         const { tableName, operations } = body;
         if (!tableName) return new Response(JSON.stringify({error:'tableName required'}),
-          {status:400,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+          {status:400,headers:{'Content-Type':'application/json'}});
         if (!operations || !operations.length) return new Response(JSON.stringify({error:'operations required'}),
-          {status:400,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+          {status:400,headers:{'Content-Type':'application/json'}});
         const result = await manageColumns(tableName, operations, env.GITHUB_TOKEN);
         return new Response(JSON.stringify(result),
           {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       } catch(e) {
         return new Response(JSON.stringify({error:e.message}),
-          {status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+          {status:500,headers:{'Content-Type':'application/json'}});
       }
     }
+
+    // OPTIONS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,GET','Access-Control-Allow-Headers':'Content-Type'}});
+    }
+
 
     // ── SYNC ROUTES ───────────────────────────────────────────────────────────
 
     // GET /sync → dashboard UI
-    if (pathname === '/sync' && request.method === 'GET') {
+    if (url.pathname === '/sync' && request.method === 'GET') {
       return new Response(SYNC_HTML, {headers:{'Content-Type':'text/html;charset=utf-8'}});
     }
 
     // POST /sync/register → add a new sync job
-    if (pathname === '/sync/register' && request.method === 'POST') {
+    if (url.pathname === '/sync/register' && request.method === 'POST') {
       try {
         const { rfcName, tableName, label, params } = await request.json();
         if (!rfcName || !tableName)
           return new Response(JSON.stringify({error:'rfcName and tableName required'}),
-            {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+            {status:400, headers:{'Content-Type':'application/json'}});
         const job = { rfcName, tableName, label: label||rfcName, params: params||{},
           enabled: true, registeredAt: new Date().toISOString() };
         await env.RFC_JOBS.put(`sync_job:${rfcName}`, JSON.stringify(job));
         return new Response(JSON.stringify({ok:true,job}),
-          {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+          {headers:{'Content-Type':'application/json'}});
       } catch(e) {
         return new Response(JSON.stringify({error:e.message}),
-          {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+          {status:500, headers:{'Content-Type':'application/json'}});
       }
     }
 
     // GET /sync/jobs → list all jobs with last results
-    if (pathname === '/sync/jobs' && request.method === 'GET') {
+    if (url.pathname === '/sync/jobs' && request.method === 'GET') {
       const list = await env.RFC_JOBS.list({prefix:'sync_job:'});
       const jobs = await Promise.all(list.keys.map(async k => {
         const job  = JSON.parse(await env.RFC_JOBS.get(k.name) || '{}');
@@ -1486,12 +1435,12 @@ export default {
     }
 
     // POST /sync/run/:rfcName → queue trigger in KV (IIS polls and picks up)
-    const syncRunMatch = pathname.match(/^\/sync\/run\/(.+)$/);
+    const syncRunMatch = url.pathname.match(/^\/sync\/run\/(.+)$/);
     if (syncRunMatch && request.method === 'POST') {
       const rfcName = syncRunMatch[1];
       const raw = await env.RFC_JOBS.get(`sync_job:${rfcName}`);
       if (!raw) return new Response(JSON.stringify({error:'Job not found'}),
-        {status:404, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+        {status:404, headers:{'Content-Type':'application/json'}});
       // Set a trigger key — IIS SyncController /api/Sync/poll picks this up within 1 min
       await env.RFC_JOBS.put(`sync_trigger:${rfcName}`,
         new Date().toISOString(), { expirationTtl: 300 });
@@ -1503,7 +1452,7 @@ export default {
     }
 
     // POST /sync/run-all → queue all triggers
-    if (pathname === '/sync/run-all' && request.method === 'POST') {
+    if (url.pathname === '/sync/run-all' && request.method === 'POST') {
       const list = await env.RFC_JOBS.list({prefix:'sync_job:'});
       const queued = [];
       for (const key of list.keys) {
@@ -1520,13 +1469,13 @@ export default {
     }
 
     // DELETE /sync/delete/:rfcName → remove job
-    const syncDelMatch = pathname.match(/^\/sync\/delete\/(.+)$/);
+    const syncDelMatch = url.pathname.match(/^\/sync\/delete\/(.+)$/);
     if (syncDelMatch && request.method === 'DELETE') {
       const rfcName = syncDelMatch[1];
       await env.RFC_JOBS.delete(`sync_job:${rfcName}`);
       await env.RFC_JOBS.delete(`sync_result:${rfcName}`);
       return new Response(JSON.stringify({ok:true}),
-        {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+        {headers:{'Content-Type':'application/json'}});
     }
 
     // GET /explore → RFC Explorer
@@ -1535,30 +1484,30 @@ export default {
     // ── SYNC ROUTES ───────────────────────────────────────────────────────────
 
     // GET /sync → dashboard UI
-    if (pathname === '/sync' && request.method === 'GET') {
+    if (url.pathname === '/sync' && request.method === 'GET') {
       return new Response(SYNC_HTML, {headers:{'Content-Type':'text/html;charset=utf-8'}});
     }
 
     // POST /sync/register → add a new sync job
-    if (pathname === '/sync/register' && request.method === 'POST') {
+    if (url.pathname === '/sync/register' && request.method === 'POST') {
       try {
         const { rfcName, tableName, label, params } = await request.json();
         if (!rfcName || !tableName)
           return new Response(JSON.stringify({error:'rfcName and tableName required'}),
-            {status:400, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+            {status:400, headers:{'Content-Type':'application/json'}});
         const job = { rfcName, tableName, label: label||rfcName, params: params||{},
           enabled: true, registeredAt: new Date().toISOString() };
         await env.RFC_JOBS.put(`sync_job:${rfcName}`, JSON.stringify(job));
         return new Response(JSON.stringify({ok:true,job}),
-          {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+          {headers:{'Content-Type':'application/json'}});
       } catch(e) {
         return new Response(JSON.stringify({error:e.message}),
-          {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+          {status:500, headers:{'Content-Type':'application/json'}});
       }
     }
 
     // GET /sync/jobs → list all jobs with last results
-    if (pathname === '/sync/jobs' && request.method === 'GET') {
+    if (url.pathname === '/sync/jobs' && request.method === 'GET') {
       const list = await env.RFC_JOBS.list({prefix:'sync_job:'});
       const jobs = await Promise.all(list.keys.map(async k => {
         const job  = JSON.parse(await env.RFC_JOBS.get(k.name) || '{}');
@@ -1571,7 +1520,7 @@ export default {
     }
 
     // GET /explore → RFC Explorer (light theme)
-    if (pathname === '/explore' || pathname === '/explore/') {
+    if (url.pathname === '/explore' || url.pathname === '/explore/') {
       const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1948,130 +1897,17 @@ init();
       return new Response(html, {headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-cache'}});
     }
 
-
-
-
-    // ── GET /cf-zones → list zones + create tunnel hostname ────────────────────
-    if (pathname === '/cf-zones') {
-      const CF_ACCOUNT = 'bab06c93e17ae71cae3c11b4cc40240b';
-      const CF_KEY = env.CLOUDFLARE_API_KEY;
-      const CF_EMAIL = 'Akash@v2kart.com';
-      const h = {'X-Auth-Key':CF_KEY,'X-Auth-Email':CF_EMAIL,'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
-      const TUNNEL_ID = '7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3';
-      
-      try {
-        // List zones
-        const zr = await fetch(`https://api.cloudflare.com/client/v4/zones?account.id=${CF_ACCOUNT}&per_page=50`, {headers:h});
-        const zd = await zr.json();
-        const zones = (zd.result||[]).map(z => ({id:z.id, name:z.name, status:z.status}));
-        
-        // For each zone, try to create CNAME for tunnel
-        const results = [];
-        for (const zone of zones) {
-          // Try create CNAME: sap-api.zone.name → TUNNEL_ID.cfargotunnel.com
-          const cname = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone.id}/dns_records`, {
-            method:'POST', headers:h,
-            body: JSON.stringify({
-              type:'CNAME', name:'sap-api', 
-              content:`${TUNNEL_ID}.cfargotunnel.com`,
-              proxied:true, ttl:1
-            })
-          });
-          const cd = await cname.json();
-          results.push({zone:zone.name, cnameSuccess:cd.success, errors:cd.errors||[], record:cd.result?.name});
-        }
-        
-        return new Response(JSON.stringify({zones, cnameResults:results}),
-          {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      } catch(e) {
-        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      }
-    }
-
-    // ── GET /tunnel-test → test tunnel connectivity from worker ────────────────
-    if (pathname === '/tunnel-test') {
-      const TUNNEL_ID = '7e73cc51-9b0b-4084-8f7b-44bc9c8f31a3';
-      const testUrl = `https://${TUNNEL_ID}.cfargotunnel.com/api/ZPO_DD_UPD_RFC/Post`;
-      try {
-        const r = await fetch(testUrl, {
-          method: 'POST',
-          headers: {'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
-          body: JSON.stringify({PO_NO:'4500001234',DELV_DATE:'20260401'}),
-          signal: AbortSignal.timeout(15000)
-        });
-        const txt = await r.text();
-        return new Response(JSON.stringify({
-          tunnelUrl: testUrl, httpStatus: r.status, response: txt
-        }), {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      } catch(e) {
-        return new Response(JSON.stringify({error:e.message, tunnelUrl:testUrl}),
-          {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      }
-    }
-
-    // ── POST /tunnel-setup → create named CF tunnel (one-time setup) ──────────
-    if (pathname === '/tunnel-setup' && request.method === 'POST') {
-      const CF_ACCOUNT = 'bab06c93e17ae71cae3c11b4cc40240b';
-      const CF_KEY     = env.CLOUDFLARE_API_KEY || env.CF_API_KEY || env.CLOUDFLARE_API_TOKEN;
-      const CF_EMAIL   = 'Akash@v2kart.com';
-      if (!CF_KEY) return new Response(JSON.stringify({error:'CLOUDFLARE_API_KEY secret not set on worker'}),
-        {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      try {
-        const TUNNEL_NAME = 'v2-sap-api';
-        // Global API Key auth (X-Auth-Key + X-Auth-Email)
-        const h = {'X-Auth-Key':CF_KEY,'X-Auth-Email':CF_EMAIL,'Content-Type':'application/json','Access-Control-Allow-Origin':'*'};
-        
-        // Check existing
-        let listR = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false`, {headers:h});
-        let listD = await listR.json();
-        
-        let tunnelId, tunnelToken;
-        if (listD.result && listD.result.length > 0) {
-          tunnelId = listD.result[0].id;
-        } else {
-          // Create it
-          let cr = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/cfd_tunnel`,
-            {method:'POST', headers:h, body:JSON.stringify({name:TUNNEL_NAME, config_src:'cloudflare'})});
-          let cd = await cr.json();
-          if (!cd.success) return new Response(JSON.stringify({error:'create failed', detail:cd}),
-            {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-          tunnelId = cd.result.id;
-        }
-        
-        // Get token
-        let tr = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/cfd_tunnel/${tunnelId}/token`, {headers:h});
-        let td = await tr.json();
-        if (!td.success) return new Response(JSON.stringify({error:'token failed', detail:td, listDetail:listD}),
-          {status:500, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-        tunnelToken = td.result;
-        
-        // Set ingress
-        await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/cfd_tunnel/${tunnelId}/configurations`,
-          {method:'PUT', headers:h, body:JSON.stringify({config:{ingress:[{service:'http://localhost:9292'}]}})});
-        
-        return new Response(JSON.stringify({
-          ok: true,
-          tunnelId,
-          tunnelToken,
-          tunnelUrl: `https://${tunnelId}.cfargotunnel.com`,
-          listApiResponse: listD
-        }), {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      } catch(e) {
-        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      }
-    }
-
     // GET /sap-fetch → SAP Fetch UI
-    if (pathname === '/data-lake' || pathname === '/data-lake/') {
+    if (url.pathname === '/data-lake' || url.pathname === '/data-lake/') {
       return new Response("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/>\n  <title>V2 Retail \u2014 Data Lake API</title>\n  <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.css\"/>\n  <style>\n    :root{--v2-blue:#1A3C6E;--v2-accent:#E8401C;--v2-light:#F4F7FB;}\n    body{margin:0;font-family:'Segoe UI',sans-serif;background:var(--v2-light);}\n    #topbar{background:var(--v2-blue);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.25);}\n    .logo-text{color:#fff;font-size:20px;font-weight:700;}\n    .logo-sub{color:#a8c4e8;font-size:12px;}\n    .badge{background:var(--v2-accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600;}\n    #swagger-ui .topbar{display:none;}\n    .nav{padding:8px 28px;background:#f0f4fa;border-bottom:1px solid #dde3ee;display:flex;gap:10px;font-size:13px;align-items:center;}\n    .nav a{color:var(--v2-blue);text-decoration:none;padding:4px 12px;border-radius:4px;border:1px solid #c5d2e8;font-weight:500;}\n    .nav a:hover,.nav a.active{background:var(--v2-blue);color:#fff;border-color:var(--v2-blue);}\n    .info{background:#fff;padding:10px 28px;font-size:13px;color:#555;border-bottom:2px solid var(--v2-accent);display:flex;gap:24px;flex-wrap:wrap;}\n    .info b{color:var(--v2-blue);}\n  </style>\n</head>\n<body>\n<div id=\"topbar\">\n  <div><div class=\"logo-text\">V2 Retail \u00b7 Data Lake API</div><div class=\"logo-sub\">Azure DAB \u2192 DataV2 SQL Server @ 192.168.151.28</div></div>\n  <span class=\"badge\">82 TABLES \u00b7 LIVE</span>\n</div>\n<div class=\"nav\">\n  <a href=\"/explore\">RFC Explorer</a>\n  <a href=\"/sap-fetch\">SAP Fetch</a>\n  <a href=\"/data-lake\" class=\"active\">Data Lake</a>\n</div>\n<div class=\"info\">\n  <span>Source: <b>DataV2</b> @ 192.168.151.28</span>\n  <span>Via: <b>Azure DAB</b></span>\n  <span>Auth: <b>None</b></span>\n  <span>Protocol: <b>OData REST</b></span>\n  <span>Tables: <b>82</b></span>\n</div>\n<div id=\"swagger-ui\"></div>\n<script src=\"https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.js\"></script>\n<script>\nSwaggerUIBundle({\n  spec:{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"V2 Retail Data Lake API\",\"version\":\"1.0.0\",\"description\":\"**82 tables** from DataV2 @ 192.168.151.28. OData: $filter $top $skip $select $orderby\"},\"servers\":[{\"url\":\"https://my-dab-app.azurewebsites.net\",\"description\":\"Azure DAB \\u2014 V2 Retail Data Lake\"}],\"paths\":{\"/api/API_Master_AKA\":{\"get\":{\"tags\":[\"API\"],\"summary\":\"API_Master_AKA\",\"operationId\":\"get_API_Master_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/BIN_MOV_ART_WISE_AKA\":{\"get\":{\"tags\":[\"BIN\"],\"summary\":\"BIN_MOV_ART_WISE_AKA\",\"operationId\":\"get_BIN_MOV_ART_WISE_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/BROADER_MENU\":{\"get\":{\"tags\":[\"BROADER\"],\"summary\":\"BROADER_MENU\",\"operationId\":\"get_BROADER_MENU\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/COMPANY_STOCK_GEN_ART_CLR_MASTER_AKA\":{\"get\":{\"tags\":[\"COMPANY\"],\"summary\":\"COMPANY_STOCK_GEN_ART_CLR_MASTER_AKA\",\"operationId\":\"get_COMPANY_STOCK_GEN_ART_CLR_MASTER_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/COMPANY_STOCK_MASTER_AKA\":{\"get\":{\"tags\":[\"COMPANY\"],\"summary\":\"COMPANY_STOCK_MASTER_AKA\",\"operationId\":\"get_COMPANY_STOCK_MASTER_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_CO_MJ_ALL_BGT\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_CO_MJ_ALL_BGT\",\"operationId\":\"get_CO_BGT_AK_CO_MJ_ALL_BGT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_CO_MJ_CLR_ALL_BGT\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_CO_MJ_CLR_ALL_BGT\",\"operationId\":\"get_CO_BGT_AK_CO_MJ_CLR_ALL_BGT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_CO_MJ_FAB_ALL_BGT_AKA\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_CO_MJ_FAB_ALL_BGT_AKA\",\"operationId\":\"get_CO_BGT_AK_CO_MJ_FAB_ALL_BGT_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_CO_MJ_M_MVGR_ALL_BGT_AKA\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_CO_MJ_M_MVGR_ALL_BGT_AKA\",\"operationId\":\"get_CO_BGT_AK_CO_MJ_M_MVGR_ALL_BGT_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_CO_MJ_SZ_ALL_BGT\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_CO_MJ_SZ_ALL_BGT\",\"operationId\":\"get_CO_BGT_AK_CO_MJ_SZ_ALL_BGT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_CO_MJ_VND_ALL_BGT_AKA\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_CO_MJ_VND_ALL_BGT_AKA\",\"operationId\":\"get_CO_BGT_AK_CO_MJ_VND_ALL_BGT_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_ST_MJ_ALL_BGT\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_ST_MJ_ALL_BGT\",\"operationId\":\"get_CO_BGT_AK_ST_MJ_ALL_BGT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_ST_MJ_CLR_ALL_BGT\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_ST_MJ_CLR_ALL_BGT\",\"operationId\":\"get_CO_BGT_AK_ST_MJ_CLR_ALL_BGT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/CO_BGT_AK_ST_MJ_SZ_ALL_BGT\":{\"get\":{\"tags\":[\"CO\"],\"summary\":\"CO_BGT_AK_ST_MJ_SZ_ALL_BGT\",\"operationId\":\"get_CO_BGT_AK_ST_MJ_SZ_ALL_BGT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/C_ART_DATA\":{\"get\":{\"tags\":[\"C\"],\"summary\":\"C_ART_DATA\",\"operationId\":\"get_C_ART_DATA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/DAILY_SALE_DATA_GEN_ART_WISE\":{\"get\":{\"tags\":[\"DAILY\"],\"summary\":\"DAILY_SALE_DATA_GEN_ART_WISE\",\"operationId\":\"get_DAILY_SALE_DATA_GEN_ART_WISE\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/DAILY_SALE_DATA_GEN_CLR_WISE\":{\"get\":{\"tags\":[\"DAILY\"],\"summary\":\"DAILY_SALE_DATA_GEN_CLR_WISE\",\"operationId\":\"get_DAILY_SALE_DATA_GEN_CLR_WISE\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ ZADVANCE_PAYMENT\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ ZADVANCE_PAYMENT\",\"operationId\":\"get_ET_ ZADVANCE_PAYMENT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ADVANCE_PAYMENT\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ADVANCE_PAYMENT\",\"operationId\":\"get_ET_ADVANCE_PAYMENT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ARTICLE_GEN_CLR_WISE\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ARTICLE_GEN_CLR_WISE\",\"operationId\":\"get_ET_ARTICLE_GEN_CLR_WISE\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ART_Broader_Menu_DATA\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ART_Broader_Menu_DATA\",\"operationId\":\"get_ET_ART_Broader_Menu_DATA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_FINANCE_DOCUMENTS\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_FINANCE_DOCUMENTS\",\"operationId\":\"get_ET_FINANCE_DOCUMENTS\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_GENERATED\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_GENERATED\",\"operationId\":\"get_ET_GENERATED\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_PROJECT_OVERVIEW\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_PROJECT_OVERVIEW\",\"operationId\":\"get_ET_PROJECT_OVERVIEW\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_PUR_DATA_RPT_AKA\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_PUR_DATA_RPT_AKA\",\"operationId\":\"get_ET_PUR_DATA_RPT_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_SALES_DATA\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_SALES_DATA\",\"operationId\":\"get_ET_SALES_DATA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_Supplier_Master\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_Supplier_Master\",\"operationId\":\"get_ET_Supplier_Master\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_VARIANT_ART_WISE\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_VARIANT_ART_WISE\",\"operationId\":\"get_ET_VARIANT_ART_WISE\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_VEND_DEDUCTION\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_VEND_DEDUCTION\",\"operationId\":\"get_ET_VEND_DEDUCTION\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_VEND_DEDUCTION_AKA\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_VEND_DEDUCTION_AKA\",\"operationId\":\"get_ET_VEND_DEDUCTION_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_VEND_PAY\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_VEND_PAY\",\"operationId\":\"get_ET_VEND_PAY\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZADVANCE_PAYMENT\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZADVANCE_PAYMENT\",\"operationId\":\"get_ET_ZADVANCE_PAYMENT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZART_BAR_DETAIL_RFC\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZART_BAR_DETAIL_RFC\",\"operationId\":\"get_ET_ZART_BAR_DETAIL_RFC\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZFBL1N_PAYMENT_RFC\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZFBL1N_PAYMENT_RFC\",\"operationId\":\"get_ET_ZFBL1N_PAYMENT_RFC\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZFI_FB65_DISCOUNT_RFC\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZFI_FB65_DISCOUNT_RFC\",\"operationId\":\"get_ET_ZFI_FB65_DISCOUNT_RFC\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZGET_STORE_MASTER\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZGET_STORE_MASTER\",\"operationId\":\"get_ET_ZGET_STORE_MASTER\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZMC_SIZE_MASTER_RFC\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZMC_SIZE_MASTER_RFC\",\"operationId\":\"get_ET_ZMC_SIZE_MASTER_RFC\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZMM_CITY_TRNS_RFC\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZMM_CITY_TRNS_RFC\",\"operationId\":\"get_ET_ZMM_CITY_TRNS_RFC\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZPO_MODIFICATION\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZPO_MODIFICATION\",\"operationId\":\"get_ET_ZPO_MODIFICATION\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZPO_MODIFICATION_RFC_AKA\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZPO_MODIFICATION_RFC_AKA\",\"operationId\":\"get_ET_ZPO_MODIFICATION_RFC_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZPO_MODIFY_REASON\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZPO_MODIFY_REASON\",\"operationId\":\"get_ET_ZPO_MODIFY_REASON\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZSRM_ROUTING_LOG_RFC\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZSRM_ROUTING_LOG_RFC\",\"operationId\":\"get_ET_ZSRM_ROUTING_LOG_RFC\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ET_ZTEST\":{\"get\":{\"tags\":[\"ET\"],\"summary\":\"ET_ZTEST\",\"operationId\":\"get_ET_ZTEST\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/GET_VV_ART_DATA_AKA\":{\"get\":{\"tags\":[\"GET\"],\"summary\":\"GET_VV_ART_DATA_AKA\",\"operationId\":\"get_GET_VV_ART_DATA_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/HHT_VERIENT_ART\":{\"get\":{\"tags\":[\"HHT\"],\"summary\":\"HHT_VERIENT_ART\",\"operationId\":\"get_HHT_VERIENT_ART\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_DC_MJ_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_DC_MJ_AKA\",\"operationId\":\"get_INVT_DC_MJ_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_DC_MJ_CAT_VND_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_DC_MJ_CAT_VND_AKA\",\"operationId\":\"get_INVT_DC_MJ_CAT_VND_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_CLR_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_CLR_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_CLR_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_FAB_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_FAB_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_FAB_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_MACRO_MVGR_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_MACRO_MVGR_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_MACRO_MVGR_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_MICRO_MVGR_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_MICRO_MVGR_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_MICRO_MVGR_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_MRP_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_MRP_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_MRP_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_RNG_SEG_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_RNG_SEG_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_RNG_SEG_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_SIZE_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_SIZE_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_SIZE_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/INVT_ST_MJ_CAT_VND_AKA\":{\"get\":{\"tags\":[\"INVT\"],\"summary\":\"INVT_ST_MJ_CAT_VND_AKA\",\"operationId\":\"get_INVT_ST_MJ_CAT_VND_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/Issue_Tracker\":{\"get\":{\"tags\":[\"Issue\"],\"summary\":\"Issue_Tracker\",\"operationId\":\"get_Issue_Tracker\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/Karma_Detailed_Report\":{\"get\":{\"tags\":[\"Karma\"],\"summary\":\"Karma_Detailed_Report\",\"operationId\":\"get_Karma_Detailed_Report\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/Karma_Summary_Report\":{\"get\":{\"tags\":[\"Karma\"],\"summary\":\"Karma_Summary_Report\",\"operationId\":\"get_Karma_Summary_Report\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/L_ARTICLE_Sheet1\":{\"get\":{\"tags\":[\"L\"],\"summary\":\"L_ARTICLE_Sheet1\",\"operationId\":\"get_L_ARTICLE_Sheet1\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/MRDC_VAR_ART_AKA\":{\"get\":{\"tags\":[\"MRDC\"],\"summary\":\"MRDC_VAR_ART_AKA\",\"operationId\":\"get_MRDC_VAR_ART_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/MSA_STOCK_DATA_AKA\":{\"get\":{\"tags\":[\"MSA\"],\"summary\":\"MSA_STOCK_DATA_AKA\",\"operationId\":\"get_MSA_STOCK_DATA_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/PO_DATA_AKA\":{\"get\":{\"tags\":[\"PO\"],\"summary\":\"PO_DATA_AKA\",\"operationId\":\"get_PO_DATA_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/Product_Master\":{\"get\":{\"tags\":[\"Product\"],\"summary\":\"Product_Master\",\"operationId\":\"get_Product_Master\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/RETAIL_BAR_CODE_AKA\":{\"get\":{\"tags\":[\"RETAIL\"],\"summary\":\"RETAIL_BAR_CODE_AKA\",\"operationId\":\"get_RETAIL_BAR_CODE_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ROI_TREND_DATA_AKA\":{\"get\":{\"tags\":[\"ROI\"],\"summary\":\"ROI_TREND_DATA_AKA\",\"operationId\":\"get_ROI_TREND_DATA_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/SALE_DATA_CM_AKA\":{\"get\":{\"tags\":[\"SALE\"],\"summary\":\"SALE_DATA_CM_AKA\",\"operationId\":\"get_SALE_DATA_CM_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/SALE_DATA_L_2_YEAR_MONTH_AKA\":{\"get\":{\"tags\":[\"SALE\"],\"summary\":\"SALE_DATA_L_2_YEAR_MONTH_AKA\",\"operationId\":\"get_SALE_DATA_L_2_YEAR_MONTH_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/STORE_MAJ_CAT_BUDGET_FIXTURE_AKA\":{\"get\":{\"tags\":[\"STORE\"],\"summary\":\"STORE_MAJ_CAT_BUDGET_FIXTURE_AKA\",\"operationId\":\"get_STORE_MAJ_CAT_BUDGET_FIXTURE_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/STORE_PLANT_MASTER_AKA\":{\"get\":{\"tags\":[\"STORE\"],\"summary\":\"STORE_PLANT_MASTER_AKA\",\"operationId\":\"get_STORE_PLANT_MASTER_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/Sale_Data_L_2Years_MAJ_CAT_aka\":{\"get\":{\"tags\":[\"Sale\"],\"summary\":\"Sale_Data_L_2Years_MAJ_CAT_aka\",\"operationId\":\"get_Sale_Data_L_2Years_MAJ_CAT_aka\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/Sale_Data_L_2Years_STORE_aka\":{\"get\":{\"tags\":[\"Sale\"],\"summary\":\"Sale_Data_L_2Years_STORE_aka\",\"operationId\":\"get_Sale_Data_L_2Years_STORE_aka\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/TBL_16_RETAIL_GND_BGT_FORMAT_Sheet1\":{\"get\":{\"tags\":[\"TBL\"],\"summary\":\"TBL_16_RETAIL_GND_BGT_FORMAT_Sheet1\",\"operationId\":\"get_TBL_16_RETAIL_GND_BGT_FORMAT_Sheet1\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/TNA_REPORT\":{\"get\":{\"tags\":[\"TNA\"],\"summary\":\"TNA_REPORT\",\"operationId\":\"get_TNA_REPORT\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/Task_Tracker\":{\"get\":{\"tags\":[\"Task\"],\"summary\":\"Task_Tracker\",\"operationId\":\"get_Task_Tracker\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/VIEW_SALE_GEN_CLR_ART_WISE\":{\"get\":{\"tags\":[\"VIEW\"],\"summary\":\"VIEW_SALE_GEN_CLR_ART_WISE\",\"operationId\":\"get_VIEW_SALE_GEN_CLR_ART_WISE\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/VW_ET_SALES_DATA_AKA\":{\"get\":{\"tags\":[\"VW\"],\"summary\":\"VW_ET_SALES_DATA_AKA\",\"operationId\":\"get_VW_ET_SALES_DATA_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/VW_GRC_REPORT_AKA\":{\"get\":{\"tags\":[\"VW\"],\"summary\":\"VW_GRC_REPORT_AKA\",\"operationId\":\"get_VW_GRC_REPORT_AKA\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/VW_GRC_REPORT_NEW\":{\"get\":{\"tags\":[\"VW\"],\"summary\":\"VW_GRC_REPORT_NEW\",\"operationId\":\"get_VW_GRC_REPORT_NEW\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/VW_LYSP_DAY_MAPPING\":{\"get\":{\"tags\":[\"VW\"],\"summary\":\"VW_LYSP_DAY_MAPPING\",\"operationId\":\"get_VW_LYSP_DAY_MAPPING\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/ZSRM_VEND_PAYMENT_INFO\":{\"get\":{\"tags\":[\"ZSRM\"],\"summary\":\"ZSRM_VEND_PAYMENT_INFO\",\"operationId\":\"get_ZSRM_VEND_PAYMENT_INFO\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}},\"/api/vw_PO_PENDING_New\":{\"get\":{\"tags\":[\"vw\"],\"summary\":\"vw_PO_PENDING_New\",\"operationId\":\"get_vw_PO_PENDING_New\",\"parameters\":[{\"name\":\"$filter\",\"in\":\"query\",\"schema\":{\"type\":\"string\"},\"description\":\"e.g. `STORE_CODE eq 'DL01'`\"},{\"name\":\"$top\",\"in\":\"query\",\"schema\":{\"type\":\"integer\",\"default\":100}},{\"name\":\"$skip\",\"in\":\"query\",\"schema\":{\"type\":\"integer\"}},{\"name\":\"$select\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}},{\"name\":\"$orderby\",\"in\":\"query\",\"schema\":{\"type\":\"string\"}}],\"responses\":{\"200\":{\"description\":\"OK\",\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\"}}}}}}}}},\n  dom_id:'#swagger-ui',\n  deepLinking:true,\n  defaultModelsExpandDepth:-1,\n  defaultModelExpandDepth:1,\n  docExpansion:'none',\n  filter:true,\n  tryItOutEnabled:true,\n  persistAuthorization:true,\n  layout:'BaseLayout'\n});\n</script>\n</body>\n</html>", {headers:{'Content-Type':'text/html','Cache-Control':'public,max-age=300'}});
     }
 
         // ── POST /deploy → docx → Claude → C# controller → GitHub push ──────────
-    if (pathname === '/deploy' && request.method === 'POST') {
+    if (url.pathname === '/deploy' && request.method === 'POST') {
       try {
         const body = await request.json();
         const { filename, content } = body;
-        if (!content) return new Response(JSON.stringify({error:'content required'}),{status:400,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+        if (!content) return new Response(JSON.stringify({error:'content required'}),{status:400,headers:{'Content-Type':'application/json'}});
 
         // Generate job ID
         const jobId = crypto.randomUUID().replace(/-/g,'').substring(0,12);
@@ -2089,56 +1925,19 @@ init();
           headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}
         });
       } catch(e) {
-        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+        return new Response(JSON.stringify({error:e.message}),{status:500,headers:{'Content-Type':'application/json'}});
       }
     }
-
-
-    // ── POST /relay-rfc → forward to IIS via CF tunnel → return SAP response ────
-    if (pathname === '/relay-rfc' && request.method === 'POST') {
-      try {
-        const body = await request.json();
-        const { rfc, params } = body;
-        if (!rfc) return new Response(JSON.stringify({error:'rfc required'}),
-          {status:400,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-        const rfcRouteMap = {
-          'ZPO_DD_UPD_RFC':'ZPO_DD_UPD_RFC/Post',
-          'ZPO_MODIFICATION':'ZPO_MODIFICATION/Execute',
-          'ZADVANCE_PAYMENT_RFC':'ZADVANCE_PAYMENT_RFC/Post',
-          'ZSALES_MOP_RFC':'ZSALES_MOP_RFC/Post',
-          'ZPO_MODIFICATION_RFC':'ZPO_MODIFICATION/Execute',
-        };
-        const route = rfcRouteMap[rfc] || (rfc + '/Post');
-        const iisUrl = `${IIS_HOST}/api/${route}`;
-        const iisResp = await fetch(iisUrl, {
-          method:'POST',
-          headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
-          body: JSON.stringify(params || {}),
-          signal: AbortSignal.timeout(60000)
-        });
-        const raw = await iisResp.text();
-        let data; try { data = JSON.parse(raw); } catch { data = {raw}; }
-        const tableKey = data?.Data ? Object.keys(data.Data)[0] : null;
-        const fetched = tableKey && Array.isArray(data.Data[tableKey]) ? data.Data[tableKey].length : 1;
-        return new Response(JSON.stringify({
-          ok:iisResp.ok, status:iisResp.status, rfc, fetched, stored:0, data
-        }), {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      } catch(e) {
-        return new Response(JSON.stringify({error:e.message}),
-          {status:500,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
-      }
-    }
-
 
     // ── GET /status/{jobId} → poll deployment progress ────────────────────────
-    if (pathname.startsWith('/status/')) {
-      const jobId = pathname.split('/status/')[1];
+    if (url.pathname.startsWith('/status/')) {
+      const jobId = url.pathname.split('/status/')[1];
       const data = await env.RFC_KV.get(`job:${jobId}`);
       if (!data) return new Response(JSON.stringify({error:'job not found'}),{status:404,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
       return new Response(data, {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
 
-        if (pathname === '/sap-fetch' || pathname === '/sap-fetch/') {
+        if (url.pathname === '/sap-fetch' || url.pathname === '/sap-fetch/') {
       const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2194,7 +1993,7 @@ input::placeholder{color:var(--dim)}
 </head>
 <body>
 <div class="top">
-  <div class="brand"><div class="bdot"></div>V2 Retail · SAP Fetch <span class="badge">V2DC-ADDVERB @ 192.168.151.36</span></div>
+  <div class="brand"><div class="bdot"></div>V2 Retail · SAP Fetch <span class="badge">claudetestv2 @ 192.168.151.46</span></div>
   <div style="color:#94a3b8;font-size:12px">Relay: v2-rfc-relay.azurewebsites.net</div>
 </div>
 
@@ -2382,7 +2181,7 @@ async function doFetch() {
   try {
     const r = await fetch(RELAY+'/relay-rfc', {
       method: 'POST',
-      headers: {'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
+      headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         rfc: sel.value,
         params,
@@ -2439,7 +2238,7 @@ onRfcChange();
       return new Response(html, {headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-cache'}});
     }
 
-    return new Response('Not Found', {status:404, headers:{'Access-Control-Allow-Origin':'*'}});
+    return new Response('Not Found', {status:404});
   }
 };
 
