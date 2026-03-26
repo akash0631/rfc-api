@@ -18,18 +18,10 @@ const FOLDER_MAP = {
   NSO:'Controllers/NSO', PaperlessPicklist:'Controllers/PaperlessPicklist',
   Sampling:'Controllers/Sampling', VehicleLoading:'Controllers/Vehicle_Loading',
 };
-const USINGS = `using SAP.Middleware.Connector;
-using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Net.Http;
-using System.Threading.Tasks;
-using System.Web.Http;
-using Vendor_Application_MVC.Controllers;
+const USINGS = `
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
