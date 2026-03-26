@@ -1,0 +1,14 @@
+name: TestRFC_1774516693354
+on:
+  push:
+    paths:
+      - '.github/workflows/test_rfc_1774516693354.yml'
+jobs:
+  test:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Test ZFI_PI_DATA_RFC endpoint
+        shell: cmd
+        run: |
+          powershell -NoProfile -Command "& {{$pass=ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force;$cred=New-Object PSCredential('V2DC-ADDVERB\\Administrator',$pass);$s=New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop;Write-Host '=== Connected ===';Invoke-Command -Session $s -ScriptBlock {{Write-Host '=== Testing ZFI_PI_DATA_RFC (60s timeout) ===';try{{$body='{"IT_POSTING_LOW":"","IT_POSTING_HIGH":"","FISCAL_YEAR":"2026"}';$r=Invoke-WebRequest 'http://localhost:9292/api/ZFI_PI_DATA_RFC/Post' -Method POST -Body $body -ContentType 'application/json' -UseBasicParsing -TimeoutSec 60;Write-Host 'STATUS:' $r.StatusCode;Write-Host 'BODY:' $r.Content}}catch{{Write-Host 'ERROR:' $_.Exception.Message}};Write-Host '=== Check all routes ===';try{{$r2=Invoke-WebRequest 'http://localhost:9292/swagger/docs/v1' -UseBasicParsing -TimeoutSec 10;$sw=$r2.Content;$idx=$sw.IndexOf('ZFI_PI');if($idx -ge 0){{Write-Host 'SWAGGER_FOUND: ZFI_PI_DATA_RFC is in swagger at index' $idx}}else{{Write-Host 'SWAGGER_NOT_FOUND: ZFI_PI_DATA_RFC not in swagger docs'}}}}catch{{Write-Host 'SWAGGER_ERR:' $_.Exception.Message}}}};Remove-PSSession $s}}"
+          echo Done: %ERRORLEVEL%
