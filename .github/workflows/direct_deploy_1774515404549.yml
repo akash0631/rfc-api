@@ -1,0 +1,14 @@
+name: DirectDeploy_1774515404549
+on:
+  push:
+    paths:
+      - '.github/workflows/direct_deploy_1774515404549.yml'
+jobs:
+  deploy:
+    runs-on: [self-hosted, test-vm]
+    steps:
+      - name: Deploy ZFI_PI_DATA_RFC directly on .36
+        shell: cmd
+        run: |
+          powershell -NoProfile -Command "& {{$pass=ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force;$cred=New-Object PSCredential('V2DC-ADDVERB\\Administrator',$pass);$s=New-PSSession -ComputerName 192.168.151.36 -Credential $cred -EA Stop;Write-Host '=== Connected to .36 ===';Invoke-Command -Session $s -ScriptBlock {{Write-Host '=== Pulling latest code ===';cd 'C:\actions-runner\_work\rfc-api\rfc-api';git pull origin master 2>&1;Write-Host '=== Running MSBuild ===';$msbuild='C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe';if(-not(Test-Path $msbuild)){{$msbuild='C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe'}};& $msbuild 'D:\V2 Projects\Vendor_SRM_Routing_Application\Vendor_SRM_Routing_Application.sln' /p:Configuration=Release /p:Platform='Any CPU' /t:Build /m /v:minimal 2>&1;Write-Host '=== Copying DLLs ===';$src='D:\V2 Projects\Vendor_SRM_Routing_Application\bin\Release';$dst='C:\V2RfcTest\bin';Copy-Item "$src\*.dll" $dst -Force -EA SilentlyContinue;Copy-Item "$src\*.pdb" $dst -Force -EA SilentlyContinue;Write-Host '=== Recycling pool ===';C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool;Start-Sleep 5;Write-Host '=== Testing endpoint ===';try{{$r=Invoke-WebRequest 'http://localhost:9292/api/ZFI_PI_DATA_RFC/Post' -Method POST -Body '{{"IT_POSTING_LOW":""}}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15;Write-Host 'RESULT:' $r.StatusCode $r.Content.Substring(0,[Math]::Min(200,$r.Content.Length))}}catch{{Write-Host 'TEST_ERROR:' $_.Exception.Message}}}};Remove-PSSession $s}}"
+          echo Exit: %ERRORLEVEL%
