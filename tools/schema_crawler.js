@@ -163,7 +163,7 @@ async function crawl() {
         try {
           const dc = dateCols[0].name;
           const dr = await pool.request().query(
-            `SELECT MIN([${dc}]) as min_date, MAX([${dc}]) as max_date FROM [${TABLE_NAME}] WITH(NOLOCK)`
+            "SELECT MIN([" + dc + "]) as min_date, MAX([" + dc + "]) as max_date FROM [" + TABLE_NAME + "] WITH(NOLOCK)"
           );
           const row = dr.recordset[0];
           if (row.min_date) {
