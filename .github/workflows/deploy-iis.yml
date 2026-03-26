@@ -5,97 +5,86 @@ on:
     paths:
       - 'Controllers/**'
       - 'Models/**'
+
 jobs:
-  deploy:
-    runs-on: [self-hosted, iis]
+  build:
+    runs-on: windows-latest
+    name: NuGet restore + MSBuild on GitHub runner
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
       - name: NuGet restore
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Continue'
-          # Find nuget
-          $nuget = 'C:\nuget.exe'
-          if (-not (Test-Path $nuget)) {
-            Write-Host "Downloading nuget.exe..."
-            Invoke-WebRequest 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile $nuget
-          }
-          & $nuget restore 'Vendor_SRM_Routing_Application.sln' -NonInteractive
-          Write-Host "NuGet restore done"
+        run: nuget restore Vendor_SRM_Routing_Application.sln
+        shell: cmd
 
       - name: MSBuild compile
+        shell: cmd
+        run: msbuild Vendor_SRM_Routing_Application.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /v:minimal
+
+      - name: Upload compiled bin as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iis-bin
+          path: |
+            **/bin/*.dll
+            **/bin/*.pdb
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    runs-on: [self-hosted, test-vm]
+    name: Copy DLL to .36 via SMB + recycle pool
+    needs: build
+    steps:
+      - name: Download compiled bin artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: iis-bin
+          path: bin-artifact
+
+      - name: Copy DLL to .36 via SMB + recycle pool
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          # Find MSBuild from VS 2019
-          $candidates = @(
-            'C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe',
-            'C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\MSBuild\Current\Bin\MSBuild.exe',
-            'C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe',
-            'C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
-          )
-          $msBuild = $null
-          foreach ($c in $candidates) {
-            if (Test-Path $c) { $msBuild = $c; break }
+          Write-Host "Mounting \\192.168.151.36\C$"
+          $netResult = & cmd /c "net use \\192.168.151.36\C$ vrl@55555 /user:V2DC-ADDVERB\Administrator" 2>&1
+          Write-Host "net use result: $netResult"
+          if ($LASTEXITCODE -ne 0 -and $netResult -notmatch 'already been connected') {
+            throw "net use failed: $netResult"
           }
-          if (-not $msBuild) {
-            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-            if (Test-Path $vswhere) {
-              $msBuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
-            }
+          $dest = "\\192.168.151.36\C$\V2RfcTest\bin"
+          $dlls = Get-ChildItem -Path "bin-artifact" -Recurse -Filter "*.dll"
+          $copied = 0
+          foreach ($dll in $dlls) {
+            Copy-Item $dll.FullName "$dest\$($dll.Name)" -Force
+            Write-Host "Copied: $($dll.Name)"
+            $copied++
           }
-          if (-not $msBuild) { throw "MSBuild not found on this machine" }
-          Write-Host "MSBuild: $msBuild"
-          & $msBuild 'Vendor_SRM_Routing_Application.sln' /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /v:minimal
-          Write-Host "Build complete"
+          Write-Host "Copied $copied DLL(s) to $dest"
+          & cmd /c "net use \\192.168.151.36\C$ /delete /yes" 2>&1 | Out-Null
 
-      - name: Copy DLL to IIS and recycle pool
+      - name: Recycle IIS pool via PS-Remote
         shell: powershell
         run: |
-          $ErrorActionPreference = 'Continue'
-          $pubDir = 'C:\V2RfcTest'
-
-          # Find freshly compiled DLL from this checkout's build output
-          $appDll = Get-ChildItem '.' -Recurse -Filter 'Vendor_SRM_Routing_Application.dll' -ErrorAction SilentlyContinue |
-                    Where-Object { $_.DirectoryName -notlike '*obj*' } |
-                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
-
-          if ($appDll) {
-            $srcBin = Split-Path $appDll.FullName
-            Write-Host "Copying from: $srcBin ($($appDll.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))"
-            Copy-Item "$srcBin\*.dll" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-            Copy-Item "$srcBin\*.pdb" "$pubDir\bin\" -Force -ErrorAction SilentlyContinue
-            Write-Host "DLL copy complete"
-          } else {
-            Write-Host "WARNING: No compiled DLL found in checkout — IIS keeps existing DLLs"
+          $pass = ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force
+          $cred = New-Object PSCredential('V2DC-ADDVERB\Administrator', $pass)
+          $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -ErrorAction Stop
+          Invoke-Command -Session $s -ScriptBlock {
+            & C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
+            Write-Host "[OK] V2RfcTestPool recycled"
+            Start-Sleep 5
+            try {
+              $r = Invoke-WebRequest 'http://localhost:9292/api/ZPO_DD_UPD_RFC/Post' -Method POST -Body '{"PO_NO":"5100001680","DELV_DATE":"20260401"}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
+              Write-Host "[OK] Health check: $($r.Content.Substring(0, [Math]::Min(80, $r.Content.Length)))"
+            } catch {
+              Write-Host "[WARN] Health check: $_"
+            }
           }
-
-          # Fix Web.config to SAP Dev
-          $wc = "$pubDir\Web.config"
-          if (Test-Path $wc) {
-            $c = Get-Content $wc -Raw
-            $c = $c -replace '192\.168\.144\.170', '192.168.144.174'
-            $c = $c -replace 'value=""600""', 'value=""210""'
-            Set-Content $wc $c -Encoding UTF8
-            Write-Host "Web.config: SAP Dev enabled"
-          }
-
-          # Recycle app pool
-          $ap = 'C:\Windows\System32\inetsrv\appcmd.exe'
-          if (Test-Path $ap) {
-            & $ap recycle apppool /apppool.name:V2RfcTestPool 2>&1 | Write-Host
-          }
-          Start-Sleep 8
-
-          # Quick health check
-          try {
-            $r = Invoke-WebRequest 'http://localhost:9292/api/ZPO_DD_UPD_RFC/Post' -Method POST -Body '{"PO_NO":"5100001680","DELV_DATE":"20260401"}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
-            Write-Host "Health check OK: $($r.Content.Substring(0,[Math]::Min(100,$r.Content.Length)))"
-          } catch {
-            Write-Host "Health check failed (may be normal): $_"
-          }
-          exit 0
+          Remove-PSSession $s
+          Write-Host "Done"
