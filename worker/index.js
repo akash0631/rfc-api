@@ -1367,7 +1367,7 @@ export default {
     if (match && request.method === 'GET') {
       const job = await env.RFC_JOBS.get(match[1]);
       if (!job) return new Response(JSON.stringify({error:'Job not found'}),
-        {status:404, headers:{'Content-Type':'application/json'}});
+        {status:404, headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'}});
       return new Response(job, {headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'}});
     }
 
@@ -1439,7 +1439,7 @@ export default {
       const rfcName = syncRunMatch[1];
       const raw = await env.RFC_JOBS.get(`sync_job:${rfcName}`);
       if (!raw) return new Response(JSON.stringify({error:'Job not found'}),
-        {status:404, headers:{'Content-Type':'application/json'}});
+        {status:404, headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'}});
       // Set a trigger key — IIS SyncController /api/Sync/poll picks this up within 1 min
       await env.RFC_JOBS.put(`sync_trigger:${rfcName}`,
         new Date().toISOString(), { expirationTtl: 300 });
