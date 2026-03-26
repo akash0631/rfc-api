@@ -1240,7 +1240,7 @@ function updateStep(id, status, detail) {
 window.pollStatus = function pollStatus(jobId) {
   pollTimer = setInterval(async () => {
     try {
-      const r = await fetch('/status/'+jobId);
+      const r = await fetch('/pipeline/status/'+jobId);
       const job = await r.json();
       (job.steps||[]).forEach(s => updateStep(s.step, s.status, s.detail));
       if (job.status==='complete') {
@@ -1358,7 +1358,7 @@ export default {
     }
 
     // GET /status/:jobId
-    const match = url.pathname.match(/^\/status\/(.+)$/);
+   const match = url.pathname.match(/^\/(?:pipeline\/)?status\/(.+)$/);
     if (match && request.method === 'GET') {
       const job = await env.RFC_JOBS.get(match[1]);
       if (!job) return new Response(JSON.stringify({error:'Job not found'}),
