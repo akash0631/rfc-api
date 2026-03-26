@@ -31,80 +31,88 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_PI_DATA_RFC");
 
-                // Set IT_POSTING_LOW table parameter
-                IRfcTable postingLowTable = myfun.GetTable("IT_POSTING_LOW");
+                // Set IT_POSTING_LOW table
+                IRfcTable itPostingLow = myfun.GetTable("IT_POSTING_LOW");
                 if (request.IT_POSTING_LOW != null)
                 {
                     foreach (var item in request.IT_POSTING_LOW)
                     {
-                        IRfcStructure row = postingLowTable.Metadata.LineType.CreateStructure();
-                        foreach (var prop in item.GetType().GetProperties())
+                        itPostingLow.Append();
+                        var fields = typeof(PostingDateRange).GetProperties();
+                        foreach (var field in fields)
                         {
-                            var value = prop.GetValue(item);
+                            var value = field.GetValue(item);
                             if (value != null)
                             {
-                                row.SetValue(prop.Name, value.ToString());
+                                itPostingLow.SetValue(field.Name, value.ToString());
                             }
                         }
-                        postingLowTable.Append(row);
                     }
                 }
 
-                // Set IT_POSTING_HIGH table parameter
-                IRfcTable postingHighTable = myfun.GetTable("IT_POSTING_HIGH");
+                // Set IT_POSTING_HIGH table
+                IRfcTable itPostingHigh = myfun.GetTable("IT_POSTING_HIGH");
                 if (request.IT_POSTING_HIGH != null)
                 {
                     foreach (var item in request.IT_POSTING_HIGH)
                     {
-                        IRfcStructure row = postingHighTable.Metadata.LineType.CreateStructure();
-                        foreach (var prop in item.GetType().GetProperties())
+                        itPostingHigh.Append();
+                        var fields = typeof(PostingDateRange).GetProperties();
+                        foreach (var field in fields)
                         {
-                            var value = prop.GetValue(item);
+                            var value = field.GetValue(item);
                             if (value != null)
                             {
-                                row.SetValue(prop.Name, value.ToString());
+                                itPostingHigh.SetValue(field.Name, value.ToString());
                             }
                         }
-                        postingHighTable.Append(row);
                     }
                 }
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                if (EX_RETURN.GetValue("TYPE").ToString() == "E")
+
+                if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
                 {
                     return Request.CreateResponse(HttpStatusCode.OK, new
                     {
                         Status = "E",
-                        Message = EX_RETURN.GetValue("MESSAGE").ToString()
+                        Message = EX_RETURN.GetString("MESSAGE")
                     });
                 }
 
-                IRfcTable finalTable = myfun.GetTable("IT_FINAL");
-                var finalData = finalTable.AsEnumerable().Select(row => 
-                {
-                    var result = new Dictionary<string, object>();
-                    for (int i = 0; i < row.Metadata.FieldCount; i++)
-                    {
-                        var field = row.Metadata[i];
-                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
-                        {
-                            result[field.Name] = row.GetValue(i);
-                        }
-                    }
-                    return result;
-                }).ToList();
+                IRfcTable tbl = myfun.GetTable("IT_FINAL");
+                var itFinalData = new List<Dictionary<string, object>>();
 
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                if (tbl != null)
+                {
+                    foreach (IRfcStructure row in tbl)
+                    {
+                        var rowData = new Dictionary<string, object>();
+                        for (int i = 0; i < row.Metadata.FieldCount; i++)
+                        {
+                            var field = row.Metadata[i];
+                            if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                            {
+                                rowData[field.Name] = row.GetString(field.Name);
+                            }
+                        }
+                        itFinalData.Add(rowData);
+                    }
+                }
+
+                var response = new
                 {
                     Status = "S",
                     Message = "Success",
                     Data = new
                     {
-                        IT_FINAL = finalData
+                        IT_FINAL = itFinalData
                     }
-                });
+                };
+
+                return Request.CreateResponse(HttpStatusCode.OK, response);
             }
             catch (RfcAbapException ex)
             {
@@ -114,7 +122,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                     Message = ex.Message
                 });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
                 return Request.CreateResponse(HttpStatusCode.OK, new
                 {
@@ -135,7 +143,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 
     public class ZFI_PI_DATA_RFCRequest
     {
-        public List<object> IT_POSTING_LOW { get; set; }
-        public List<object> IT_POSTING_HIGH { get; set; }
+        public List<PostingDateRange> IT_POSTING_LOW { get; set; }
+        public List<PostingDateRange> IT_POSTING_HIGH { get; set; }
+    }
+
+    public class PostingDateRange
+    {
+        public string SIGN { get; set; }
+        public string OPTION { get; set; }
+        public string LOW { get; set; }
+        public string HIGH { get; set; }
     }
 }
