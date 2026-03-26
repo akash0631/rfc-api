@@ -6,23 +6,16 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
-using SAP.Middleware.Connector;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Threading.Tasks;
-using System.Web.Http;
-using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
 {
+    [HttpPost]
+    [Route("api/ZWM_HU_MVT_SAVE_RFC")]
     public class ZWM_HU_MVT_SAVE_RFCController : BaseController
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_SAVE_RFC")]
-        public async Task<HttpResponseMessage> SaveHUMovement(ZWM_HU_MVT_SAVE_RFCRequest request)
+        public HttpResponseMessage SaveHUMovement(ZWM_HU_MVT_SAVE_RFC_Request request)
         {
             try
             {
@@ -35,19 +28,43 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
                     });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_USER) || 
-                    string.IsNullOrEmpty(request.IM_PLANT) || 
-                    string.IsNullOrEmpty(request.IM_BIN) || 
-                    string.IsNullOrEmpty(request.IM_HU))
+                if (string.IsNullOrEmpty(request.IM_USER))
                 {
                     return Request.CreateResponse(HttpStatusCode.BadRequest, new
                     {
                         Status = "E",
-                        Message = "All fields (IM_USER, IM_PLANT, IM_BIN, IM_HU) are required"
+                        Message = "IM_USER is required"
                     });
                 }
 
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                if (string.IsNullOrEmpty(request.IM_PLANT))
+                {
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "IM_PLANT is required"
+                    });
+                }
+
+                if (string.IsNullOrEmpty(request.IM_BIN))
+                {
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "IM_BIN is required"
+                    });
+                }
+
+                if (string.IsNullOrEmpty(request.IM_HU))
+                {
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "IM_HU is required"
+                    });
+                }
+
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZWM_HU_MVT_SAVE_RFC");
@@ -75,21 +92,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
 
                 return Request.CreateResponse(HttpStatusCode.OK, new
                 {
-                    Status = returnType,
+                    Status = "S",
                     Message = returnMessage
                 });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
                 });
             }
-            catch (RfcCommunicationException ex)
+            catch (CommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -97,7 +114,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -106,7 +123,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
         }
     }
 
-    public class ZWM_HU_MVT_SAVE_RFCRequest
+    public class ZWM_HU_MVT_SAVE_RFC_Request
     {
         public string IM_USER { get; set; }
         public string IM_PLANT { get; set; }
