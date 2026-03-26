@@ -361,6 +361,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
           if (run.conclusion === 'success') {
             await log('deploy','done',`Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
             deployed = true;
+            try{const _ej=JSON.parse(await kv.get(jobId)||'{}');_ej.rfcName=spec.rfcName;_ej.rfcApi=IIS_HOST+'/api/'+spec.rfcName;await kv.put(jobId,JSON.stringify(_ej),{expirationTtl:86400});}catch(_){}
           } else {
             throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
           }
