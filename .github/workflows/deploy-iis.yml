@@ -22,6 +22,9 @@ jobs:
           nuget restore Vendor_SRM_Routing_Application.sln
           echo NuGet done: %ERRORLEVEL%
 
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
       - name: MSBuild compile
         shell: cmd
         run: |
