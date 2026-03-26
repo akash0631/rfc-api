@@ -6,15 +6,6 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
-using SAP.Middleware.Connector;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Threading.Tasks;
-using System.Web.Http;
-using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
 {
