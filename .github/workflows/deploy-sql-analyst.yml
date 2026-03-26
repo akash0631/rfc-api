@@ -1,0 +1,21 @@
+name: Deploy v2-sql-analyst Worker
+
+on:
+  push:
+    paths:
+      - 'workers/v2-sql-analyst/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Cloudflare Workers
+        run: |
+          npx wrangler@latest deploy workers/v2-sql-analyst/index.js \
+            --name v2-sql-analyst \
+            --compatibility-date 2024-01-01 \
+            --keep-vars
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
