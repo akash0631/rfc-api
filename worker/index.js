@@ -1330,7 +1330,7 @@ export default {
       const sapEnv   = formData.get('env')||'dev';
 
       if (!file) return new Response(JSON.stringify({error:'No file uploaded'}),
-        {status:400, headers:{...CORS,'Content-Type':'application/json'}});
+        {status:400, headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'}});
 
       const jobId = crypto.randomUUID();
       const initialJob = {status:'running', steps:[], started:new Date().toISOString()};
@@ -1368,7 +1368,7 @@ export default {
       const job = await env.RFC_JOBS.get(match[1]);
       if (!job) return new Response(JSON.stringify({error:'Job not found'}),
         {status:404, headers:{'Content-Type':'application/json'}});
-      return new Response(job, {headers:{...CORS,'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
+      return new Response(job, {headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'}});
     }
 
     // POST /columns → manage data lake columns
@@ -2237,7 +2237,7 @@ onRfcChange();
       return new Response(html, {headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-cache'}});
     }
 
-    return new Response('Not Found', {status:404, headers:CORS});
+    return new Response('Not Found', {status:404, headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'}});
   }
 };
 
