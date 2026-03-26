@@ -17,155 +17,120 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZFI_PI_DATA_RFC")]
-        public IHttpActionResult PostInvoiceData([FromBody] ZFI_PI_DATA_RFCRequest request)
+        public IHttpActionResult ProcessFinancePostingInvoiceData([FromBody] ZFI_PI_DATA_RFC_Request request)
         {
             try
             {
-                if (request == null)
-                {
-                    return Json(new { Status = "E", Message = "Request cannot be null" });
-                }
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_PI_DATA_RFC");
 
-                // Set TABLE parameters
-                if (request.IT_POSTING_LOW != null && request.IT_POSTING_LOW.Any())
+                // Set IT_POSTING_LOW table
+                IRfcTable itPostingLow = myfun.GetTable("IT_POSTING_LOW");
+                if (request.IT_POSTING_LOW != null)
                 {
-                    IRfcTable tblPostingLow = myfun.GetTable("IT_POSTING_LOW");
                     foreach (var item in request.IT_POSTING_LOW)
                     {
-                        tblPostingLow.Append();
-                        var row = tblPostingLow.CurrentRow;
+                        IRfcStructure row = itPostingLow.Metadata.LineType.CreateStructure();
                         var properties = item.GetType().GetProperties();
                         foreach (var prop in properties)
                         {
-                            var value = prop.GetValue(item);
-                            if (value != null)
+                            if (row.Metadata.Contains(prop.Name))
                             {
-                                row.SetValue(prop.Name, value.ToString());
+                                row.SetValue(prop.Name, prop.GetValue(item));
                             }
                         }
+                        itPostingLow.Append(row);
                     }
                 }
 
-                if (request.IT_POSTING_HIGH != null && request.IT_POSTING_HIGH.Any())
+                // Set IT_POSTING_HIGH table
+                IRfcTable itPostingHigh = myfun.GetTable("IT_POSTING_HIGH");
+                if (request.IT_POSTING_HIGH != null)
                 {
-                    IRfcTable tblPostingHigh = myfun.GetTable("IT_POSTING_HIGH");
                     foreach (var item in request.IT_POSTING_HIGH)
                     {
-                        tblPostingHigh.Append();
-                        var row = tblPostingHigh.CurrentRow;
+                        IRfcStructure row = itPostingHigh.Metadata.LineType.CreateStructure();
                         var properties = item.GetType().GetProperties();
                         foreach (var prop in properties)
                         {
-                            var value = prop.GetValue(item);
-                            if (value != null)
+                            if (row.Metadata.Contains(prop.Name))
                             {
-                                row.SetValue(prop.Name, value.ToString());
+                                row.SetValue(prop.Name, prop.GetValue(item));
                             }
                         }
+                        itPostingHigh.Append(row);
                     }
                 }
-
-                // Set scalar parameters
-                if (!string.IsNullOrEmpty(request.INV_DOC_NO))
-                    myfun.SetValue("INV_DOC_NO", request.INV_DOC_NO);
-                
-                if (!string.IsNullOrEmpty(request.FISCAL_YEAR))
-                    myfun.SetValue("FISCAL_YEAR", request.FISCAL_YEAR);
-                
-                if (!string.IsNullOrEmpty(request.DOCUMENT_DATE))
-                    myfun.SetValue("DOCUMENT_DATE", request.DOCUMENT_DATE);
-                
-                if (!string.IsNullOrEmpty(request.POSTING_DATE))
-                    myfun.SetValue("POSTING_DATE", request.POSTING_DATE);
-                
-                if (!string.IsNullOrEmpty(request.REFERENCE))
-                    myfun.SetValue("REFERENCE", request.REFERENCE);
-                
-                if (!string.IsNullOrEmpty(request.INVOICING_PARTY))
-                    myfun.SetValue("INVOICING_PARTY", request.INVOICING_PARTY);
-                
-                if (!string.IsNullOrEmpty(request.GROSS_INV_AMNT))
-                    myfun.SetValue("GROSS_INV_AMNT", request.GROSS_INV_AMNT);
-                
-                if (!string.IsNullOrEmpty(request.VALUE_ADDED_TAX))
-                    myfun.SetValue("VALUE_ADDED_TAX", request.VALUE_ADDED_TAX);
-                
-                if (!string.IsNullOrEmpty(request.TAX_CODE))
-                    myfun.SetValue("TAX_CODE", request.TAX_CODE);
-                
-                if (!string.IsNullOrEmpty(request.PURCHASING_DOC))
-                    myfun.SetValue("PURCHASING_DOC", request.PURCHASING_DOC);
-                
-                if (!string.IsNullOrEmpty(request.REFERENCE_DOC))
-                    myfun.SetValue("REFERENCE_DOC", request.REFERENCE_DOC);
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
                 
-                if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return Json(new { Status = "E", Message = EX_RETURN.GetString("MESSAGE") });
+                    return Ok(new
+                    {
+                        Status = "E",
+                        Message = EX_RETURN.GetString("MESSAGE")
+                    });
                 }
 
-                IRfcTable tblFinal = myfun.GetTable("IT_FINAL");
-                var finalData = tblFinal.AsEnumerable().Select(row =>
+                IRfcTable tbl = myfun.GetTable("IT_FINAL");
+                var itFinalData = tbl.AsEnumerable().Select(row =>
                 {
-                    var dict = new Dictionary<string, object>();
-                    for (int i = 0; i < row.Metadata.FieldCount; i++)
+                    var record = new Dictionary<string, object>();
+                    foreach (var field in row.Metadata.FieldMetadata)
                     {
-                        var fieldName = row.Metadata.GetName(i);
-                        var fieldMetadata = row.Metadata.GetFieldMetadata(fieldName);
-                        
-                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
+                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            dict[fieldName] = row.GetValue(fieldName);
+                            record[field.Name] = row.GetValue(field.Name);
                         }
                     }
-                    return dict;
+                    return record;
                 }).ToList();
 
-                return Json(new
+                return Ok(new
                 {
                     Status = "S",
-                    Message = "Invoice data posted successfully",
-                    Data = new { IT_FINAL = finalData }
+                    Message = "Success",
+                    Data = new
+                    {
+                        IT_FINAL = itFinalData
+                    }
                 });
             }
             catch (RfcAbapException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (Exception ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Ok(new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
         }
     }
 
-    public class ZFI_PI_DATA_RFCRequest
+    public class ZFI_PI_DATA_RFC_Request
     {
-        public List<object> IT_POSTING_LOW { get; set; }
-        public List<object> IT_POSTING_HIGH { get; set; }
-        public string INV_DOC_NO { get; set; }
-        public string FISCAL_YEAR { get; set; }
-        public string DOCUMENT_DATE { get; set; }
-        public string POSTING_DATE { get; set; }
-        public string REFERENCE { get; set; }
-        public string INVOICING_PARTY { get; set; }
-        public string GROSS_INV_AMNT { get; set; }
-        public string VALUE_ADDED_TAX { get; set; }
-        public string TAX_CODE { get; set; }
-        public string PURCHASING_DOC { get; set; }
-        public string REFERENCE_DOC { get; set; }
+        public List<dynamic> IT_POSTING_LOW { get; set; }
+        public List<dynamic> IT_POSTING_HIGH { get; set; }
     }
 }
