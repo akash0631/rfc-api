@@ -17,29 +17,35 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZFI_PI_DATA_RFC")]
-        public IHttpActionResult ProcessPurchaseInvoiceData(ZFI_PI_DATA_Request request)
+        public IHttpActionResult PostInvoiceData([FromBody] ZFI_PI_DATA_RFCRequest request)
         {
             try
             {
+                if (request == null)
+                {
+                    return Json(new { Status = "E", Message = "Request cannot be null" });
+                }
+
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_PI_DATA_RFC");
 
-                // Set table parameters
+                // Set TABLE parameters
                 if (request.IT_POSTING_LOW != null && request.IT_POSTING_LOW.Any())
                 {
-                    IRfcTable postingLowTable = myfun.GetTable("IT_POSTING_LOW");
+                    IRfcTable tblPostingLow = myfun.GetTable("IT_POSTING_LOW");
                     foreach (var item in request.IT_POSTING_LOW)
                     {
-                        postingLowTable.Append();
+                        tblPostingLow.Append();
+                        var row = tblPostingLow.CurrentRow;
                         var properties = item.GetType().GetProperties();
                         foreach (var prop in properties)
                         {
                             var value = prop.GetValue(item);
                             if (value != null)
                             {
-                                postingLowTable.SetValue(prop.Name, value);
+                                row.SetValue(prop.Name, value.ToString());
                             }
                         }
                     }
@@ -47,17 +53,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
                 if (request.IT_POSTING_HIGH != null && request.IT_POSTING_HIGH.Any())
                 {
-                    IRfcTable postingHighTable = myfun.GetTable("IT_POSTING_HIGH");
+                    IRfcTable tblPostingHigh = myfun.GetTable("IT_POSTING_HIGH");
                     foreach (var item in request.IT_POSTING_HIGH)
                     {
-                        postingHighTable.Append();
+                        tblPostingHigh.Append();
+                        var row = tblPostingHigh.CurrentRow;
                         var properties = item.GetType().GetProperties();
                         foreach (var prop in properties)
                         {
                             var value = prop.GetValue(item);
                             if (value != null)
                             {
-                                postingHighTable.SetValue(prop.Name, value);
+                                row.SetValue(prop.Name, value.ToString());
                             }
                         }
                     }
@@ -82,11 +89,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 if (!string.IsNullOrEmpty(request.INVOICING_PARTY))
                     myfun.SetValue("INVOICING_PARTY", request.INVOICING_PARTY);
                 
-                if (request.GROSS_INV_AMNT.HasValue)
-                    myfun.SetValue("GROSS_INV_AMNT", request.GROSS_INV_AMNT.Value);
+                if (!string.IsNullOrEmpty(request.GROSS_INV_AMNT))
+                    myfun.SetValue("GROSS_INV_AMNT", request.GROSS_INV_AMNT);
                 
-                if (request.VALUE_ADDED_TAX.HasValue)
-                    myfun.SetValue("VALUE_ADDED_TAX", request.VALUE_ADDED_TAX.Value);
+                if (!string.IsNullOrEmpty(request.VALUE_ADDED_TAX))
+                    myfun.SetValue("VALUE_ADDED_TAX", request.VALUE_ADDED_TAX);
                 
                 if (!string.IsNullOrEmpty(request.TAX_CODE))
                     myfun.SetValue("TAX_CODE", request.TAX_CODE);
@@ -100,77 +107,52 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-
+                
                 if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return Ok(new
-                    {
-                        Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE"),
-                        Data = new { IT_FINAL = new List<object>() }
-                    });
+                    return Json(new { Status = "E", Message = EX_RETURN.GetString("MESSAGE") });
                 }
 
-                IRfcTable itFinalTable = myfun.GetTable("IT_FINAL");
-                var resultData = new List<Dictionary<string, object>>();
-
-                if (itFinalTable != null)
+                IRfcTable tblFinal = myfun.GetTable("IT_FINAL");
+                var finalData = tblFinal.AsEnumerable().Select(row =>
                 {
-                    resultData = itFinalTable.AsEnumerable().Select(row =>
+                    var dict = new Dictionary<string, object>();
+                    for (int i = 0; i < row.Metadata.FieldCount; i++)
                     {
-                        var rowDict = new Dictionary<string, object>();
-                        var metadata = row.GetMetadata();
+                        var fieldName = row.Metadata.GetName(i);
+                        var fieldMetadata = row.Metadata.GetFieldMetadata(fieldName);
                         
-                        for (int i = 0; i < metadata.FieldCount; i++)
+                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
                         {
-                            var fieldMetadata = metadata[i];
-                            if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
-                            {
-                                var fieldName = fieldMetadata.Name;
-                                var fieldValue = row.GetValue(fieldName);
-                                rowDict[fieldName] = fieldValue;
-                            }
+                            dict[fieldName] = row.GetValue(fieldName);
                         }
-                        
-                        return rowDict;
-                    }).ToList();
-                }
+                    }
+                    return dict;
+                }).ToList();
 
-                return Ok(new
+                return Json(new
                 {
                     Status = "S",
-                    Message = "Purchase invoice data processed successfully",
-                    Data = new { IT_FINAL = resultData }
+                    Message = "Invoice data posted successfully",
+                    Data = new { IT_FINAL = finalData }
                 });
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
         }
     }
 
-    public class ZFI_PI_DATA_Request
+    public class ZFI_PI_DATA_RFCRequest
     {
         public List<object> IT_POSTING_LOW { get; set; }
         public List<object> IT_POSTING_HIGH { get; set; }
@@ -180,8 +162,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
         public string POSTING_DATE { get; set; }
         public string REFERENCE { get; set; }
         public string INVOICING_PARTY { get; set; }
-        public decimal? GROSS_INV_AMNT { get; set; }
-        public decimal? VALUE_ADDED_TAX { get; set; }
+        public string GROSS_INV_AMNT { get; set; }
+        public string VALUE_ADDED_TAX { get; set; }
         public string TAX_CODE { get; set; }
         public string PURCHASING_DOC { get; set; }
         public string REFERENCE_DOC { get; set; }
