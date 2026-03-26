@@ -23,8 +23,8 @@ module.exports = {
   cloudflare: {
     accountId: '33b6cfffad5dd935e73e9061a56f1506',
     pagesProject: 'v2-rfc-portal',
-    portalUrl: 'https://v2-rfc-portal.pages.dev',
-    swaggerUrl: 'https://v2-rfc-portal.pages.dev/swagger',
+    portalUrl: 'https://sap-api.v2retail.net',
+    swaggerUrl: 'https://sap-api.v2retail.net/swagger',
   },
   anthropic: {
     model: 'claude-sonnet-4-20250514',
