@@ -1297,7 +1297,7 @@ function reset() {
 // ─── Swagger redirect page ────────────────────────────────────────────────────
 const SWAGGER_HTML = `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<meta http-equiv="refresh" content="0;url=https://v2-rfc-portal.pages.dev/swagger">
+<meta http-equiv="refresh" content="0;url=https://sap-api.v2retail.net/swagger">
 <title>Redirecting to Swagger...</title></head>
 <body style="font-family:monospace;display:grid;place-items:center;height:100vh;background:#0f172a;color:#9aa5d4">
 <p>→ Redirecting to Swagger UI...</p>
