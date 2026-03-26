@@ -133,6 +133,19 @@ async function crawl() {
       console.log(`[CRAWLER] Progress: ${i+1}/${tables.length} tables | ${elapsed}s elapsed`);
     }
 
+    // Save checkpoint every 50 tables
+    if ((i + 1) % 50 === 0) {
+      const checkpoint = {
+        checkpoint: true,
+        tables_done: i + 1,
+        tables_total: tables.length,
+        generated_at: new Date().toISOString(),
+        tables: audit
+      };
+      fs.writeFileSync('C:\\V2SqlProxy\\schema_checkpoint.json', JSON.stringify(checkpoint, null, 2));
+      console.log(`[CRAWLER] >>> Checkpoint saved: ${i+1} tables done <<<`);
+    }
+
     // Identify date/datetime columns
     const dateCols = cols.filter(c => ['date','datetime','datetime2','smalldatetime'].includes(c.type));
     // Identify amount/value columns  
