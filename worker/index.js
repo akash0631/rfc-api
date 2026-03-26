@@ -190,7 +190,7 @@ Extract the following and return ONLY valid JSON (no markdown, no explanation):
   "suggestedSqlTable": "ET_RFCNAME (ET_ prefix, no _RFC suffix)"
 }
 RFC Document:
-\${text.slice(0,5000)}\${filenameHint}`;
+${text.slice(0,5000)}${filenameHint}`;
   }
   
   const r2 = await fetch('https://api.anthropic.com/v1/messages',{
