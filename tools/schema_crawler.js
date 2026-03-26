@@ -128,7 +128,7 @@ async function crawl() {
     const rowCount = parseInt(ROW_COUNT) || 0;
     const cols = columnsByTable[TABLE_NAME] || [];
     
-    if ((i + 1) % 50 === 0 || i < 5) {
+    if ((i + 1) % 25 === 0 || i < 5) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
       console.log(`[CRAWLER] Progress: ${i+1}/${tables.length} tables | ${elapsed}s elapsed`);
     }
@@ -144,13 +144,14 @@ async function crawl() {
 
     if (rowCount > 0) {
       // Get date range from first date column found
-      if (dateCols.length > 0) {
+      // Skip date range scan for large tables (>5M rows) - too slow
+      const skipDateScan = rowCount > 5000000;
+      if (dateCols.length > 0 && !skipDateScan) {
         try {
           const dc = dateCols[0].name;
-          const dr = await pool.request().query(`
-            SELECT MIN([${dc}]) as min_date, MAX([${dc}]) as max_date 
-            FROM [${TABLE_NAME}] WITH(NOLOCK)
-          `);
+          const dr = await pool.request().query(
+            \`SELECT MIN([\${dc}]) as min_date, MAX([\${dc}]) as max_date FROM [\${TABLE_NAME}] WITH(NOLOCK)\`
+          );
           const row = dr.recordset[0];
           if (row.min_date) {
             dateRange = {
@@ -160,13 +161,15 @@ async function crawl() {
             };
           }
         } catch(e) { /* skip if date query fails */ }
+      } else if (dateCols.length > 0 && skipDateScan) {
+        dateRange = { column: dateCols[0].name, min_date: 'skipped_large_table', max_date: 'skipped_large_table' };
       }
 
       // Get 5 sample rows (skip if table is >500M rows to avoid timeout)
-      const tooLarge = rowCount > 500000000;
+      const tooLarge = rowCount > 10000000;
       try {
         if (!tooLarge) {
-        const sr = await pool.request().query(`SELECT TOP 5 * FROM [${TABLE_NAME}] WITH(NOLOCK)`);
+        const sr = await pool.request().query(`SELECT TOP 2 * FROM [${TABLE_NAME}] WITH(NOLOCK)`);
         sampleRows = sr.recordset.map(row => {
           const clean = {};
           for (const [k, v] of Object.entries(row)) {
