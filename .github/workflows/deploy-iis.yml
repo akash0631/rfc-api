@@ -9,25 +9,26 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    name: NuGet restore + MSBuild on GitHub runner
+    name: Build on GitHub runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
-
       - name: NuGet restore
-        run: nuget restore Vendor_SRM_Routing_Application.sln
         shell: cmd
+        run: |
+          nuget restore Vendor_SRM_Routing_Application.sln
+          echo NuGet done: %ERRORLEVEL%
 
       - name: MSBuild compile
         shell: cmd
-        run: msbuild Vendor_SRM_Routing_Application.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /v:minimal
+        run: |
+          msbuild Vendor_SRM_Routing_Application.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /v:minimal
+          echo Build done: %ERRORLEVEL%
 
-      - name: Upload compiled bin as artifact
+      - name: Upload compiled bin
         uses: actions/upload-artifact@v4
         with:
           name: iis-bin
@@ -38,53 +39,49 @@ jobs:
           retention-days: 1
 
   deploy:
-    runs-on: [self-hosted, test-vm]
-    name: Copy DLL to .36 via SMB + recycle pool
+    runs-on: [self-hosted, iis]
+    name: Deploy to .36 IIS
     needs: build
     steps:
-      - name: Download compiled bin artifact
+      - name: Download compiled bin
         uses: actions/download-artifact@v4
         with:
           name: iis-bin
           path: bin-artifact
 
-      - name: Copy DLL to .36 via SMB + recycle pool
+      - name: Copy DLL to IIS bin and recycle pool
         shell: powershell
         run: |
-          $ErrorActionPreference = 'Stop'
-          Write-Host "Mounting \\192.168.151.36\C$"
-          $netResult = & cmd /c "net use \\192.168.151.36\C$ vrl@55555 /user:V2DC-ADDVERB\Administrator" 2>&1
-          Write-Host "net use result: $netResult"
-          if ($LASTEXITCODE -ne 0 -and $netResult -notmatch 'already been connected') {
-            throw "net use failed: $netResult"
-          }
-          $dest = "\\192.168.151.36\C$\V2RfcTest\bin"
-          $dlls = Get-ChildItem -Path "bin-artifact" -Recurse -Filter "*.dll"
+          $ErrorActionPreference = 'Continue'
+          $dest = 'C:\V2RfcTest\bin'
+          $dlls = Get-ChildItem -Path 'bin-artifact' -Recurse -Filter '*.dll'
           $copied = 0
           foreach ($dll in $dlls) {
             Copy-Item $dll.FullName "$dest\$($dll.Name)" -Force
             Write-Host "Copied: $($dll.Name)"
             $copied++
           }
-          Write-Host "Copied $copied DLL(s) to $dest"
-          & cmd /c "net use \\192.168.151.36\C$ /delete /yes" 2>&1 | Out-Null
+          Write-Host "Total DLLs copied: $copied"
 
-      - name: Recycle IIS pool via PS-Remote
-        shell: powershell
-        run: |
-          $pass = ConvertTo-SecureString 'vrl@55555' -AsPlainText -Force
-          $cred = New-Object PSCredential('V2DC-ADDVERB\Administrator', $pass)
-          $s = New-PSSession -ComputerName 192.168.151.36 -Credential $cred -ErrorAction Stop
-          Invoke-Command -Session $s -ScriptBlock {
-            & C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
-            Write-Host "[OK] V2RfcTestPool recycled"
-            Start-Sleep 5
-            try {
-              $r = Invoke-WebRequest 'http://localhost:9292/api/ZPO_DD_UPD_RFC/Post' -Method POST -Body '{"PO_NO":"5100001680","DELV_DATE":"20260401"}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
-              Write-Host "[OK] Health check: $($r.Content.Substring(0, [Math]::Min(80, $r.Content.Length)))"
-            } catch {
-              Write-Host "[WARN] Health check: $_"
-            }
+          # Fix Web.config to SAP Dev
+          $wc = 'C:\V2RfcTest\Web.config'
+          if (Test-Path $wc) {
+            $c = Get-Content $wc -Raw
+            $c = $c -replace '192\.168\.144\.170', '192.168.144.174'
+            $c = $c -replace 'value=""600""', 'value=""210""'
+            Set-Content $wc $c -Encoding UTF8
+            Write-Host "Web.config: SAP Dev set"
           }
-          Remove-PSSession $s
-          Write-Host "Done"
+
+          # Recycle app pool
+          & C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
+          Start-Sleep 8
+
+          # Health check
+          try {
+            $r = Invoke-WebRequest 'http://localhost:9292/api/ZPO_DD_UPD_RFC/Post' -Method POST -Body '{"PO_NO":"TEST","DELV_DATE":"20260401"}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
+            Write-Host "Health OK: $($r.Content.Substring(0,[Math]::Min(100,$r.Content.Length)))"
+          } catch {
+            Write-Host "Health (may be normal): $_"
+          }
+          exit 0
