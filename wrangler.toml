@@ -13,17 +13,18 @@ GITHUB_REPO = "akash0631/rfc-api"
 GITHUB_BRANCH = "master"
 DAB_APP_URL = "https://my-dab-app.azurewebsites.net"
 CF_PAGES_URL = "https://v2-rfc-portal.pages.dev"
+GH_WORKFLOW_ID = "245504825"
+IIS_HOST = "https://sap-api.v2retail.net"
+IIS_BASE = "https://sap-api.v2retail.net/api"
+DAB_BASE = "https://my-dab-app.azurewebsites.net/api"
 
 # Secrets (set via: wrangler secret put ANTHROPIC_API_KEY)
-# ANTHROPIC_API_KEY   ← set as secret
-# GITHUB_TOKEN        ← set as secret
+# ANTHROPIC_API_KEY   - set as secret
+# GITHUB_TOKEN        - set as secret
 
-# Custom domain route — makes worker accessible via sap-api.v2retail.net/pipeline/*
-# This routes around the corporate firewall block on *.workers.dev
 [[routes]]
 pattern = "sap-api.v2retail.net/pipeline*"
 zone_name = "v2retail.net"
 
-# Data Lake CRON — runs daily at 02:00 IST (20:30 UTC)
 [triggers]
 crons = ["30 20 * * *"]
