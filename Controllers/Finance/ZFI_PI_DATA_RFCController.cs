@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZFI_PI_DATA_RFC")]
-        public IHttpActionResult GetFinancePIData(ZFI_PI_DATA_RFCRequest request)
+        public IHttpActionResult GetFinancePIData(ZFI_PI_DATA_RFC_Request request)
         {
             try
             {
@@ -39,32 +39,32 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     {
                         Status = "E",
                         Message = EX_RETURN.GetString("MESSAGE"),
-                        Data = new { IT_FINAL = new List<dynamic>() }
+                        Data = new { IT_FINAL = new List<object>() }
                     });
                 }
 
-                IRfcTable itFinalTable = myfun.GetTable("IT_FINAL");
-                
-                var itFinalData = itFinalTable.AsEnumerable().Select(row =>
+                IRfcTable tbl = myfun.GetTable("IT_FINAL");
+                var itFinalData = tbl.AsEnumerable().Select(row =>
                 {
                     var rowData = new Dictionary<string, object>();
                     var metadata = row.GetMetadata();
                     
                     for (int i = 0; i < metadata.FieldCount; i++)
                     {
-                        var field = metadata.GetField(i);
-                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                        var fieldMetadata = metadata[i];
+                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
                         {
-                            rowData[field.Name] = row.GetValue(field.Name);
+                            rowData[fieldMetadata.Name] = row.GetValue(fieldMetadata.Name);
                         }
                     }
+                    
                     return rowData;
                 }).ToList();
 
                 return Ok(new
                 {
                     Status = "S",
-                    Message = "Data retrieved successfully",
+                    Message = "Success",
                     Data = new { IT_FINAL = itFinalData }
                 });
             }
@@ -74,7 +74,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { IT_FINAL = new List<dynamic>() }
+                    Data = new { IT_FINAL = new List<object>() }
                 });
             }
             catch (RfcCommunicationException ex)
@@ -83,7 +83,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { IT_FINAL = new List<dynamic>() }
+                    Data = new { IT_FINAL = new List<object>() }
                 });
             }
             catch (Exception ex)
@@ -92,13 +92,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { IT_FINAL = new List<dynamic>() }
+                    Data = new { IT_FINAL = new List<object>() }
                 });
             }
         }
     }
 
-    public class ZFI_PI_DATA_RFCRequest
+    public class ZFI_PI_DATA_RFC_Request
     {
         public string IT_POSTING_LOW { get; set; }
         public string IT_POSTING_HIGH { get; set; }
