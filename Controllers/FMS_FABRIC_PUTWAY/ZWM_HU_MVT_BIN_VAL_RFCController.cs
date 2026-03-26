@@ -69,15 +69,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
                 };
                 return Request.CreateResponse(HttpStatusCode.OK, errorResponse);
             }
-            catch (CommunicationException ex)
-            {
-                var errorResponse = new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                };
-                return Request.CreateResponse(HttpStatusCode.OK, errorResponse);
-            }
+          
             catch (Exception ex)
             {
                 var errorResponse = new
