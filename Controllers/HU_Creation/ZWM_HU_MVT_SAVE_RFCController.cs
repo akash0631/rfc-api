@@ -1,4 +1,11 @@
-using FMS_Fabric_Putway_Api.Models;
+using SAP.Middleware.Connector;
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Web.Http;
+using Vendor_Application_MVC.Controllers;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
@@ -8,22 +15,36 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
-using Vendor_SRM_Routing_Application.Models.HU_Creation;
-using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
-namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
+namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
 {
     public class ZWM_HU_MVT_SAVE_RFCController : BaseController
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_SAVE_RFC")]
-        public async Task<IHttpActionResult> SaveHUMovement([FromBody] ZWM_HU_MVT_SAVE_RFC_Request request)
+        public async Task<HttpResponseMessage> SaveHUMovement(ZWM_HU_MVT_SAVE_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Json(new { Status = "E", Message = "Request cannot be null" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "Request cannot be null"
+                    });
+                }
+
+                if (string.IsNullOrEmpty(request.IM_USER) || 
+                    string.IsNullOrEmpty(request.IM_PLANT) || 
+                    string.IsNullOrEmpty(request.IM_BIN) || 
+                    string.IsNullOrEmpty(request.IM_HU))
+                {
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "All fields (IM_USER, IM_PLANT, IM_BIN, IM_HU) are required"
+                    });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -31,10 +52,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZWM_HU_MVT_SAVE_RFC");
 
-                myfun.SetValue("IM_USER", request.IM_USER ?? string.Empty);
-                myfun.SetValue("IM_PLANT", request.IM_PLANT ?? string.Empty);
-                myfun.SetValue("IM_BIN", request.IM_BIN ?? string.Empty);
-                myfun.SetValue("IM_HU", request.IM_HU ?? string.Empty);
+                myfun.SetValue("IM_USER", request.IM_USER);
+                myfun.SetValue("IM_PLANT", request.IM_PLANT);
+                myfun.SetValue("IM_BIN", request.IM_BIN);
+                myfun.SetValue("IM_HU", request.IM_HU);
 
                 myfun.Invoke(dest);
 
@@ -45,27 +66,47 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 
                 if (returnType == "E")
                 {
-                    return Json(new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    {
+                        Status = "E",
+                        Message = returnMessage
+                    });
                 }
 
-                return Json(new { Status = "S", Message = returnMessage });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = returnType,
+                    Message = returnMessage
+                });
             }
             catch (RfcAbapException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (Exception ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
         }
     }
 
-    public class ZWM_HU_MVT_SAVE_RFC_Request
+    public class ZWM_HU_MVT_SAVE_RFCRequest
     {
         public string IM_USER { get; set; }
         public string IM_PLANT { get; set; }
