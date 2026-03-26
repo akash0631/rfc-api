@@ -19,10 +19,12 @@ const fs  = require('fs');
 const CONFIG = {
   server:   '192.168.151.28',
   database: 'DataV2',
+  user:     'datalake',
+  password: 'lQn@t-rm#W*NG7',
   port:     1433,
   options:  {
     trustServerCertificate: true,
-    trustedConnection:      true,
+    encrypt:                false,
     connectTimeout:         30000,
     requestTimeout:         120000
   }
