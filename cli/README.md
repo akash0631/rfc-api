@@ -75,7 +75,7 @@ v2rfc env production
 | RFC API endpoint | IIS on V2DC-ADDVERB | `POST /api/{RFC_NAME}` |
 | Data pipeline project | `akash0631/rfc-api/DataPipelines/` | Run .exe to load SQL |
 | DAB entity | `dab-config.json` → Azure | `GET https://my-dab-app.azurewebsites.net/api/{TABLE}` |
-| Swagger card | `v2_sap_api_explorer.html` | `https://v2-rfc-portal.pages.dev/swagger` |
+| Swagger card | `v2_sap_api_explorer.html` | `https://sap-api.v2retail.net/swagger` |
 
 ---
 
