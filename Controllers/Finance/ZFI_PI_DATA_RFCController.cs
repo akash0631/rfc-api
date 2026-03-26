@@ -6,106 +6,140 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
+using System.Linq;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Finance
 {
+    [RoutePrefix("api")]
     public class ZFI_PI_DATA_RFCController : BaseController
     {
         [HttpPost]
-        [Route("api/ZFI_PI_DATA_RFC")]
-        public async Task<HttpResponseMessage> GetFinancePIData([FromBody] ZFI_PI_DATA_Request request)
+        [Route("ZFI_PI_DATA_RFC")]
+        public IHttpActionResult ProcessFinancialPostingInterface(ZFI_PI_DATA_RFCRequest request)
         {
             try
             {
-                if (request == null || string.IsNullOrEmpty(request.IM_DATE))
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "IM_DATE parameter is required",
-                        Data = new { ET_PI_DATA = new List<object>() }
-                    });
-                }
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_PI_DATA_RFC");
 
-                myfun.SetValue("IM_DATE", request.IM_DATE);
+                if (request.IT_POSTING_LOW != null && request.IT_POSTING_LOW.Count > 0)
+                {
+                    IRfcTable postingLowTable = myfun.GetTable("IT_POSTING_LOW");
+                    foreach (var item in request.IT_POSTING_LOW)
+                    {
+                        var row = postingLowTable.Metadata.LineType.CreateStructure();
+                        foreach (var prop in item.GetType().GetProperties())
+                        {
+                            if (row.Metadata.Contains(prop.Name.ToUpper()))
+                            {
+                                var value = prop.GetValue(item);
+                                if (value != null)
+                                {
+                                    row.SetValue(prop.Name.ToUpper(), value.ToString());
+                                }
+                            }
+                        }
+                        postingLowTable.Append(row);
+                    }
+                }
+
+                if (request.IT_POSTING_HIGH != null && request.IT_POSTING_HIGH.Count > 0)
+                {
+                    IRfcTable postingHighTable = myfun.GetTable("IT_POSTING_HIGH");
+                    foreach (var item in request.IT_POSTING_HIGH)
+                    {
+                        var row = postingHighTable.Metadata.LineType.CreateStructure();
+                        foreach (var prop in item.GetType().GetProperties())
+                        {
+                            if (row.Metadata.Contains(prop.Name.ToUpper()))
+                            {
+                                var value = prop.GetValue(item);
+                                if (value != null)
+                                {
+                                    row.SetValue(prop.Name.ToUpper(), value.ToString());
+                                }
+                            }
+                        }
+                        postingHighTable.Append(row);
+                    }
+                }
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+                
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
 
-                if (EX_RETURN["TYPE"].ToString() == "E")
+                if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    return Ok(new
                     {
                         Status = "E",
-                        Message = EX_RETURN["MESSAGE"].ToString(),
-                        Data = new { ET_PI_DATA = new List<object>() }
+                        Message = returnMessage
                     });
                 }
 
-                IRfcTable tbl = myfun.GetTable("ET_PI_DATA");
-                var piData = new List<Dictionary<string, object>>();
+                IRfcTable resultTable = myfun.GetTable("IT_FINAL");
+                var finalData = new List<Dictionary<string, object>>();
 
-                foreach (IRfcStructure row in tbl.AsEnumerable())
+                foreach (IRfcStructure row in resultTable.AsEnumerable())
                 {
-                    var rowDict = new Dictionary<string, object>();
-                    for (int i = 0; i < row.Count; i++)
+                    var rowData = new Dictionary<string, object>();
+                    for (int i = 0; i < row.Metadata.FieldCount; i++)
                     {
-                        var fieldName = row.GetMetadata().FieldMetadata[i].Name;
-                        var fieldMetadata = row.GetMetadata().FieldMetadata[i];
-                        
-                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
+                        var field = row.Metadata[i];
+                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            rowDict[fieldName] = row[fieldName]?.ToString() ?? "";
+                            var value = row.GetValue(field.Name);
+                            rowData[field.Name] = value;
                         }
                     }
-                    piData.Add(rowDict);
+                    finalData.Add(rowData);
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Ok(new
                 {
                     Status = "S",
-                    Message = "Finance PI data retrieved successfully",
-                    Data = new { ET_PI_DATA = piData }
+                    Message = returnMessage,
+                    Data = new
+                    {
+                        IT_FINAL = finalData
+                    }
                 });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message,
-                    Data = new { ET_PI_DATA = new List<object>() }
+                    Message = ex.Message
                 });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message,
-                    Data = new { ET_PI_DATA = new List<object>() }
+                    Message = ex.Message
                 });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message,
-                    Data = new { ET_PI_DATA = new List<object>() }
+                    Message = ex.Message
                 });
             }
         }
     }
 
-    public class ZFI_PI_DATA_Request
+    public class ZFI_PI_DATA_RFCRequest
     {
-        public string IM_DATE { get; set; }
+        public List<dynamic> IT_POSTING_LOW { get; set; }
+        public List<dynamic> IT_POSTING_HIGH { get; set; }
     }
 }
