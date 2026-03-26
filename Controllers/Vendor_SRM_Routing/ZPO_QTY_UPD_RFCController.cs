@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZPO_QTY_UPD_RFC")]
-        public IHttpActionResult ZPO_QTY_UPD_RFC(ZPO_QTY_UPD_RFC_Request request)
+        public IHttpActionResult ZPO_QTY_UPD_RFC(ZPO_QTY_UPD_RFCRequest request)
         {
             try
             {
@@ -26,30 +26,37 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZPO_QTY_UPD_RFC");
 
-                IRfcTable itDataTable = myfun.GetTable("IT_DATA");
-                if (request.IT_DATA != null && request.IT_DATA.Any())
+                IRfcTable IT_DATA = myfun.GetTable("IT_DATA");
+                if (request.IT_DATA != null)
                 {
                     foreach (var item in request.IT_DATA)
                     {
-                        itDataTable.Append();
-                        itDataTable.SetValue("EBELN", item.EBELN);
-                        itDataTable.SetValue("EBELP", item.EBELP);
-                        itDataTable.SetValue("MENGE", item.MENGE);
+                        IRfcStructure row = IT_DATA.Metadata.LineType.CreateStructure();
+                        for (int i = 0; i < IT_DATA.Metadata.LineType.FieldCount; i++)
+                        {
+                            string fieldName = IT_DATA.Metadata.LineType[i].Name;
+                            var property = item.GetType().GetProperty(fieldName);
+                            if (property != null)
+                            {
+                                row.SetValue(fieldName, property.GetValue(item) ?? "");
+                            }
+                        }
+                        IT_DATA.Append(row);
                     }
                 }
 
                 myfun.Invoke(dest);
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string type = EX_RETURN.GetString("TYPE");
-                string message = EX_RETURN.GetString("MESSAGE");
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
 
-                if (type == "E")
+                if (returnType == "E")
                 {
-                    return Ok(new { Status = "E", Message = message });
+                    return Ok(new { Status = "E", Message = returnMessage });
                 }
 
-                return Ok(new { Status = type, Message = message });
+                return Ok(new { Status = "S", Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
@@ -66,15 +73,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
         }
     }
 
-    public class ZPO_QTY_UPD_RFC_Request
+    public class ZPO_QTY_UPD_RFCRequest
     {
-        public List<ZST_PO_IMP_QTY> IT_DATA { get; set; }
-    }
-
-    public class ZST_PO_IMP_QTY
-    {
-        public string EBELN { get; set; }
-        public string EBELP { get; set; }
-        public decimal MENGE { get; set; }
+        public List<dynamic> IT_DATA { get; set; }
     }
 }
