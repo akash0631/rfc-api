@@ -19,10 +19,13 @@ const fs  = require('fs');
 const CONFIG = {
   server:   '192.168.151.28',
   database: 'DataV2',
-  user:     'sa',
-  password: 'vrl@55555',
   port:     1433,
-  options:  { trustServerCertificate: true, connectTimeout: 30000, requestTimeout: 120000 }
+  options:  {
+    trustServerCertificate: true,
+    trustedConnection:      true,
+    connectTimeout:         30000,
+    requestTimeout:         120000
+  }
 };
 
 // ── Category keyword maps ──────────────────────────────────────
