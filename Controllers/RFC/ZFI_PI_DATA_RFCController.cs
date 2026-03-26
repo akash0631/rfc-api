@@ -33,16 +33,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     foreach (var item in request.IT_POSTING_LOW)
                     {
-                        IRfcStructure row = itPostingLow.Metadata.LineType.CreateStructure();
-                        var properties = item.GetType().GetProperties();
-                        foreach (var prop in properties)
+                        itPostingLow.Append();
+                        foreach (var kvp in item)
                         {
-                            if (row.Metadata.Contains(prop.Name))
-                            {
-                                row.SetValue(prop.Name, prop.GetValue(item));
-                            }
+                            try { itPostingLow.SetValue(kvp.Key, kvp.Value != null ? kvp.Value.ToString() : ""); }
+                            catch { /* skip unknown fields */ }
                         }
-                        itPostingLow.Append(row);
                     }
                 }
 
@@ -52,86 +48,50 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     foreach (var item in request.IT_POSTING_HIGH)
                     {
-                        IRfcStructure row = itPostingHigh.Metadata.LineType.CreateStructure();
-                        var properties = item.GetType().GetProperties();
-                        foreach (var prop in properties)
+                        itPostingHigh.Append();
+                        foreach (var kvp in item)
                         {
-                            if (row.Metadata.Contains(prop.Name))
-                            {
-                                row.SetValue(prop.Name, prop.GetValue(item));
-                            }
+                            try { itPostingHigh.SetValue(kvp.Key, kvp.Value != null ? kvp.Value.ToString() : ""); }
+                            catch { /* skip unknown fields */ }
                         }
-                        itPostingHigh.Append(row);
                     }
                 }
 
                 myfun.Invoke(dest);
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                
+
                 if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return Ok(new
-                    {
-                        Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE")
-                    });
+                    return Ok(new { Status = "E", Message = EX_RETURN.GetString("MESSAGE") });
                 }
 
                 IRfcTable tbl = myfun.GetTable("IT_FINAL");
                 var itFinalData = tbl.AsEnumerable().Select(row =>
                 {
                     var record = new Dictionary<string, object>();
-                    foreach (var field in row.Metadata.FieldMetadata)
+                    for (int i = 0; i < row.ElementCount; i++)
                     {
+                        RfcFieldMetadata field = row.Metadata[i];
                         if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            record[field.Name] = row.GetValue(field.Name);
+                            record[field.Name] = row.GetString(field.Name);
                         }
                     }
                     return record;
                 }).ToList();
 
-                return Ok(new
-                {
-                    Status = "S",
-                    Message = "Success",
-                    Data = new
-                    {
-                        IT_FINAL = itFinalData
-                    }
-                });
+                return Ok(new { Status = "S", Message = "Success", Data = new { IT_FINAL = itFinalData } });
             }
-            catch (RfcAbapException ex)
-            {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
-            }
-            catch (RfcCommunicationException ex)
-            {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
-            }
-            catch (Exception ex)
-            {
-                return Ok(new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
-            }
+            catch (RfcAbapException ex) { return Ok(new { Status = "E", Message = ex.Message }); }
+            catch (RfcCommunicationException ex) { return Ok(new { Status = "E", Message = ex.Message }); }
+            catch (Exception ex) { return Ok(new { Status = "E", Message = ex.Message }); }
         }
     }
 
     public class ZFI_PI_DATA_RFC_Request
     {
-        public List<dynamic> IT_POSTING_LOW { get; set; }
-        public List<dynamic> IT_POSTING_HIGH { get; set; }
+        public List<Dictionary<string, object>> IT_POSTING_LOW { get; set; }
+        public List<Dictionary<string, object>> IT_POSTING_HIGH { get; set; }
     }
 }
