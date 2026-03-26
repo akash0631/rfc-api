@@ -1,7 +1,4 @@
-/Controllers.PaperlessPicklist**
- * V2 Retail · RFC Pipeline Worker
- * Upload RFC .docx → Parse → Generate → Push GitHub → Live API
- */
+
 
 const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'master';
