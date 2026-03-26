@@ -1,4 +1,4 @@
-/**
+/Controllers.PaperlessPicklist**
  * V2 Retail · RFC Pipeline Worker
  * Upload RFC .docx → Parse → Generate → Push GitHub → Live API
  */
@@ -21,7 +21,14 @@ const FOLDER_MAP = {
   NSO:'Controllers/NSO', PaperlessPicklist:'Controllers/PaperlessPicklist',
   Sampling:'Controllers/Sampling', VehicleLoading:'Controllers/Vehicle_Loading',
 };
-const USINGS = `using FMS_Fabric_Putway_Api.Models;
+const USINGS = `using SAP.Middleware.Connector;
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Web.Http;
+using Vendor_Application_MVC.Controllers;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
@@ -31,8 +38,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
-using Vendor_SRM_Routing_Application.Models.HU_Creation;
-using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;`;
+`;
 
 // ─── DOCX Text Extractor (pure JS, no deps) ──────────────────────────────────
 // Reads ZIP entries to find word/document.xml and strips XML tags
@@ -201,7 +207,7 @@ Output: ${outputDesc}
 EXACT usings (copy verbatim):
 ${USINGS}
 
-Namespace: Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
+Namespace: Vendor_SRM_Routing_Application.Controllers.${spec.category||'Finance'}
 Class: ${spec.rfcName}Controller : BaseController
 Route: [HttpPost] [Route("api/${spec.rfcName}")]
 Request model class at bottom of file.
