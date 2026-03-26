@@ -1312,6 +1312,11 @@ const SWAGGER_HTML = `<!DOCTYPE html>
 // ─── Worker handler ───────────────────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
+    // OPTIONS MUST be first - before any route checks
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Access-Control-Max-Age':'86400'}});
+    }
+
     const url = new URL(request.url);
 
     // GET / → upload UI
@@ -1390,10 +1395,7 @@ export default {
       }
     }
 
-    // OPTIONS preflight
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,GET','Access-Control-Allow-Headers':'Content-Type'}});
-    }
+    // OPTIONS handled at top of handler
 
 
     // ── SYNC ROUTES ───────────────────────────────────────────────────────────
@@ -2238,7 +2240,7 @@ onRfcChange();
       return new Response(html, {headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-cache'}});
     }
 
-    return new Response('Not Found', {status:404});
+    return new Response('Not Found', {status:404, headers:{'Access-Control-Allow-Origin':'*'}});
   }
 };
 
