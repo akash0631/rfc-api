@@ -303,7 +303,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     try { spec = await parseRfc(text, apiKey, filename, images); }
     catch(e) { await log('parse','error',e.message); return; }
     await log('parse','done',`${spec.rfcName} · ${spec.category}`);
-
+try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj.rfcApi=IIS_HOST+'/api/'+spec.rfcName;await kv.put(jobId,JSON.stringify(_pj),{expirationTtl:86400});}catch(_){}
     // Step 2: Generate controller
     await log('controller','running','Generating ASP.NET C# controller...');
     let code;
@@ -319,7 +319,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha})`);
 
     // Step 4: Trigger IIS deploy via GitHub Actions
-    await log('deploy','running','Triggering build + deploy on VM-CRM (.46)...');
+    await log('deploy','running','Triggering build + deploy on IIS (.36)...');
     try {
       // Dispatch workflow
       const dispatchRes = await fetch(
@@ -1007,7 +1007,7 @@ body{background:var(--bg);font-family:var(--sans);min-height:100vh;display:flex;
         <div class="step" id="s-parse"><div class="step-icon">○</div><div><div>Parse RFC document</div></div></div>
         <div class="step" id="s-controller"><div class="step-icon">○</div><div><div>Generate ASP.NET controller</div></div></div>
         <div class="step" id="s-github"><div class="step-icon">○</div><div><div>Push to GitHub</div></div></div>
-        <div class="step" id="s-deploy"><div class="step-icon">○</div><div><div>Build &amp; Deploy to IIS (.46)</div></div></div>
+        <div class="step" id="s-deploy"><div class="step-icon">○</div><div><div>Build &amp; Deploy to IIS (.36)</div></div></div>
         <div class="step" id="s-dab"><div class="step-icon">○</div><div><div>Register in Azure DAB</div></div></div>
         <div class="step" id="s-swagger"><div class="step-icon">○</div><div><div>Update Swagger docs</div></div></div>
       </div>
@@ -1914,7 +1914,7 @@ input::placeholder{color:var(--dim)}
 </head>
 <body>
 <div class="top">
-  <div class="brand"><div class="bdot"></div>V2 Retail · SAP Fetch <span class="badge">claudetestv2 @ 192.168.151.46</span></div>
+  <div class="brand"><div class="bdot"></div>V2 Retail · SAP Fetch <span class="badge">claudetestv2 @ 192.168.151.36</span></div>
   <div style="color:#94a3b8;font-size:12px">Relay: v2-rfc-relay.azurewebsites.net</div>
 </div>
 
