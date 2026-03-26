@@ -6,9 +6,9 @@
 const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'master';
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
-const IIS_HOST         = 'http://192.168.151.46:8888';
-const GH_WORKFLOW_ID   = '245608998';  // deploy-test-vm.yml
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const IIS_HOST         = 'https://sap-api.v2retail.net';
+const GH_WORKFLOW_ID   = '245504825';  // deploy-test-vm.yml
+const sleep = ms => new Promise(r => setTimeout(r, ms));h
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
   quality:    { fn: 'rfcConfigparametersquality',    host: '192.168.144.179', client: '600' },
@@ -1324,7 +1324,7 @@ export default {
     }
 
     // POST /deploy → start pipeline
-    if (url.pathname === '/deploy' && request.method === 'POST') {
+    if ((url.pathname === '/deploy' || url.pathname === '/pipeline/deploy') && request.method === 'POST') {
       const formData = await request.formData();
       const file     = formData.get('file');
       const sapEnv   = formData.get('env')||'dev';
@@ -1902,7 +1902,7 @@ init();
     }
 
         // ── POST /deploy → docx → Claude → C# controller → GitHub push ──────────
-    if (url.pathname === '/deploy' && request.method === 'POST') {
+    if ((url.pathname === '/deploy' || url.pathname === '/pipeline/deploy') && request.method === 'POST') {
       try {
         const body = await request.json();
         const { filename, content } = body;
