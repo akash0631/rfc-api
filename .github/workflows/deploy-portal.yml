@@ -28,20 +28,3 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: bab06c93e17ae71cae3c11b4cc40240b
-
-  sync-iis:
-    runs-on: [self-hosted, iis]
-    name: Sync default.html on .36
-    needs: deploy-pages
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Copy portal HTML to IIS default.html
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Copy-Item "$env:GITHUB_WORKSPACE\portal\rfc_hub.html" "C:\V2RfcTest\default.html" -Force
-          $size = (Get-Item "C:\V2RfcTest\default.html").Length
-          Write-Host "✅ default.html updated from repo: $size bytes — sap-api.v2retail.net now in sync"
-
