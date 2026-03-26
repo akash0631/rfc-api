@@ -31,6 +31,7 @@ public class SwaggerConfig
 
                 // Use full type names as schema IDs to avoid duplicate class-name conflicts
                 c.UseFullTypeNameInSchemaIds();
+                c.RootUrl(req => "https://sap-api.v2retail.net");
 
                 // Resolve duplicate route conflicts (multiple actions on same path+method)
                 c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
