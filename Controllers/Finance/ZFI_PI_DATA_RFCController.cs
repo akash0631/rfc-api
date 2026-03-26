@@ -17,7 +17,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
     {
         [HttpPost]
         [Route("api/ZFI_PI_DATA_RFC")]
-        public IHttpActionResult GetFinancePIData(ZFI_PI_DATA_Request request)
+        public IHttpActionResult GetFinancePIData(ZFI_PI_DATA_RFCRequest request)
         {
             try
             {
@@ -25,47 +25,47 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_PI_DATA_RFC");
-                
+
                 myfun.SetValue("IT_POSTING_LOW", request.IT_POSTING_LOW);
                 myfun.SetValue("IT_POSTING_HIGH", request.IT_POSTING_HIGH);
-                
+
                 myfun.Invoke(dest);
-                
+
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                
+
                 if (EX_RETURN.GetString("TYPE") == "E")
                 {
                     return Ok(new
                     {
                         Status = "E",
                         Message = EX_RETURN.GetString("MESSAGE"),
-                        Data = new { IT_FINAL = new object[0] }
+                        Data = new { IT_FINAL = new List<dynamic>() }
                     });
                 }
+
+                IRfcTable itFinalTable = myfun.GetTable("IT_FINAL");
                 
-                IRfcTable tbl = myfun.GetTable("IT_FINAL");
-                
-                var result = tbl.AsEnumerable().Select(row =>
+                var itFinalData = itFinalTable.AsEnumerable().Select(row =>
                 {
-                    var dynamicRow = new Dictionary<string, object>();
+                    var rowData = new Dictionary<string, object>();
+                    var metadata = row.GetMetadata();
                     
-                    for (int i = 0; i < row.Metadata.FieldCount; i++)
+                    for (int i = 0; i < metadata.FieldCount; i++)
                     {
-                        var field = row.Metadata[i];
+                        var field = metadata.GetField(i);
                         if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            dynamicRow[field.Name] = row.GetValue(field.Name);
+                            rowData[field.Name] = row.GetValue(field.Name);
                         }
                     }
-                    
-                    return dynamicRow;
+                    return rowData;
                 }).ToList();
-                
+
                 return Ok(new
                 {
                     Status = "S",
-                    Message = "Success",
-                    Data = new { IT_FINAL = result }
+                    Message = "Data retrieved successfully",
+                    Data = new { IT_FINAL = itFinalData }
                 });
             }
             catch (RfcAbapException ex)
@@ -74,7 +74,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { IT_FINAL = new object[0] }
+                    Data = new { IT_FINAL = new List<dynamic>() }
                 });
             }
             catch (RfcCommunicationException ex)
@@ -83,7 +83,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { IT_FINAL = new object[0] }
+                    Data = new { IT_FINAL = new List<dynamic>() }
                 });
             }
             catch (Exception ex)
@@ -92,13 +92,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 {
                     Status = "E",
                     Message = ex.Message,
-                    Data = new { IT_FINAL = new object[0] }
+                    Data = new { IT_FINAL = new List<dynamic>() }
                 });
             }
         }
     }
-    
-    public class ZFI_PI_DATA_Request
+
+    public class ZFI_PI_DATA_RFCRequest
     {
         public string IT_POSTING_LOW { get; set; }
         public string IT_POSTING_HIGH { get; set; }
