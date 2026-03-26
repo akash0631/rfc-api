@@ -9,24 +9,14 @@ using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
 {
-    [Route("api/ZWM_HU_MVT_HU_VAL_RFC")]
     public class ZWM_HU_MVT_HU_VAL_RFCController : BaseController
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_HU_VAL_RFC")]
-        public HttpResponseMessage ZWM_HU_MVT_HU_VAL_RFC([FromBody] ZWM_HU_MVT_HU_VAL_RFCRequest request)
+        public HttpResponseMessage ZWM_HU_MVT_HU_VAL_RFC(ZWM_HU_MVT_HU_VAL_RFCRequest request)
         {
             try
             {
-                if (request == null)
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "Request cannot be null"
-                    });
-                }
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
@@ -46,7 +36,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
                     {
                         Status = "E",
                         Message = returnMessage
@@ -55,13 +45,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
 
                 return Request.CreateResponse(HttpStatusCode.OK, new
                 {
-                    Status = "S",
+                    Status = returnType,
                     Message = returnMessage
                 });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.BadRequest, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -69,7 +59,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.BadRequest, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -77,7 +67,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.BadRequest, new
                 {
                     Status = "E",
                     Message = ex.Message
