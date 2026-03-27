@@ -6,16 +6,14 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
-using System.Linq;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Finance
 {
-    [RoutePrefix("api")]
     public class ZFI_PI_DATA_RFCController : BaseController
     {
         [HttpPost]
-        [Route("ZFI_PI_DATA_RFC")]
-        public IHttpActionResult ProcessFinancialPostingInterface(ZFI_PI_DATA_RFCRequest request)
+        [Route("api/ZFI_PI_DATA_RFC")]
+        public IHttpActionResult GetFinancialPostingData([FromBody] ZFI_PI_DATA_RFC_Request request)
         {
             try
             {
@@ -24,90 +22,91 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_PI_DATA_RFC");
 
-                if (request.IT_POSTING_LOW != null && request.IT_POSTING_LOW.Count > 0)
+                if (request.IT_POSTING_LOW != null)
                 {
                     IRfcTable postingLowTable = myfun.GetTable("IT_POSTING_LOW");
                     foreach (var item in request.IT_POSTING_LOW)
                     {
-                        var row = postingLowTable.Metadata.LineType.CreateStructure();
-                        foreach (var prop in item.GetType().GetProperties())
+                        postingLowTable.Append();
+                        var itemType = item.GetType();
+                        var properties = itemType.GetProperties();
+                        foreach (var prop in properties)
                         {
-                            if (row.Metadata.Contains(prop.Name.ToUpper()))
+                            var value = prop.GetValue(item);
+                            if (value != null)
                             {
-                                var value = prop.GetValue(item);
-                                if (value != null)
-                                {
-                                    row.SetValue(prop.Name.ToUpper(), value.ToString());
-                                }
+                                postingLowTable.SetValue(prop.Name.ToUpper(), value.ToString());
                             }
                         }
-                        postingLowTable.Append(row);
                     }
                 }
 
-                if (request.IT_POSTING_HIGH != null && request.IT_POSTING_HIGH.Count > 0)
+                if (request.IT_POSTING_HIGH != null)
                 {
                     IRfcTable postingHighTable = myfun.GetTable("IT_POSTING_HIGH");
                     foreach (var item in request.IT_POSTING_HIGH)
                     {
-                        var row = postingHighTable.Metadata.LineType.CreateStructure();
-                        foreach (var prop in item.GetType().GetProperties())
+                        postingHighTable.Append();
+                        var itemType = item.GetType();
+                        var properties = itemType.GetProperties();
+                        foreach (var prop in properties)
                         {
-                            if (row.Metadata.Contains(prop.Name.ToUpper()))
+                            var value = prop.GetValue(item);
+                            if (value != null)
                             {
-                                var value = prop.GetValue(item);
-                                if (value != null)
-                                {
-                                    row.SetValue(prop.Name.ToUpper(), value.ToString());
-                                }
+                                postingHighTable.SetValue(prop.Name.ToUpper(), value.ToString());
                             }
                         }
-                        postingHighTable.Append(row);
                     }
                 }
 
                 myfun.Invoke(dest);
-
+                
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
                 
-                string returnType = EX_RETURN.GetString("TYPE");
-                string returnMessage = EX_RETURN.GetString("MESSAGE");
-
-                if (returnType == "E")
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
                     return Ok(new
                     {
                         Status = "E",
-                        Message = returnMessage
+                        Message = EX_RETURN.GetString("MESSAGE"),
+                        Data = new { IT_FINAL = new List<object>() }
                     });
                 }
 
-                IRfcTable resultTable = myfun.GetTable("IT_FINAL");
+                IRfcTable finalTable = myfun.GetTable("IT_FINAL");
                 var finalData = new List<Dictionary<string, object>>();
 
-                foreach (IRfcStructure row in resultTable.AsEnumerable())
+                if (finalTable.Count > 0)
                 {
-                    var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < row.Metadata.FieldCount; i++)
+                    var metadata = finalTable.GetElementMetadata();
+                    
+                    foreach (IRfcStructure row in finalTable)
                     {
-                        var field = row.Metadata[i];
-                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                        var rowData = new Dictionary<string, object>();
+                        
+                        for (int i = 0; i < metadata.FieldCount; i++)
                         {
-                            var value = row.GetValue(field.Name);
-                            rowData[field.Name] = value;
+                            var fieldMetadata = metadata[i];
+                            var fieldName = fieldMetadata.Name;
+                            var fieldType = fieldMetadata.DataType;
+                            
+                            if (fieldType != RfcDataType.STRUCTURE && fieldType != RfcDataType.TABLE)
+                            {
+                                var fieldValue = row.GetString(fieldName);
+                                rowData[fieldName] = fieldValue;
+                            }
                         }
+                        
+                        finalData.Add(rowData);
                     }
-                    finalData.Add(rowData);
                 }
 
                 return Ok(new
                 {
                     Status = "S",
-                    Message = returnMessage,
-                    Data = new
-                    {
-                        IT_FINAL = finalData
-                    }
+                    Message = "Success",
+                    Data = new { IT_FINAL = finalData }
                 });
             }
             catch (RfcAbapException ex)
@@ -115,7 +114,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message
+                    Message = ex.Message,
+                    Data = new { IT_FINAL = new List<object>() }
                 });
             }
             catch (RfcCommunicationException ex)
@@ -123,7 +123,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message
+                    Message = ex.Message,
+                    Data = new { IT_FINAL = new List<object>() }
                 });
             }
             catch (Exception ex)
@@ -131,13 +132,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 return Ok(new
                 {
                     Status = "E",
-                    Message = ex.Message
+                    Message = ex.Message,
+                    Data = new { IT_FINAL = new List<object>() }
                 });
             }
         }
     }
 
-    public class ZFI_PI_DATA_RFCRequest
+    public class ZFI_PI_DATA_RFC_Request
     {
         public List<dynamic> IT_POSTING_LOW { get; set; }
         public List<dynamic> IT_POSTING_HIGH { get; set; }
