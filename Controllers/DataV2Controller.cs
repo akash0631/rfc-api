@@ -20,7 +20,32 @@ namespace Vendor_SRM_Routing_Application.Controllers
     {
         private const string API_KEY    = "v2-datav2-analyst-2026";
         private const string ADMIN_KEY  = "v2-datav2-admin-2026";
-        private const string CONN_STR   = @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@99999;Connection Timeout=60;MultipleActiveResultSets=true;";
+
+        // Try multiple connection strategies
+        private static readonly string[] CONN_STRINGS = new[] {
+            @"Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connection Timeout=10;MultipleActiveResultSets=true;",
+            @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@99999;Connection Timeout=10;MultipleActiveResultSets=true;",
+            @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@55555;Connection Timeout=10;MultipleActiveResultSets=true;",
+            @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@12345;Connection Timeout=10;MultipleActiveResultSets=true;",
+            @"Server=192.168.151.28\MSSQLSERVER;Database=DataV2;Integrated Security=True;Connection Timeout=10;",
+        };
+        private static string CONN_STR = null;
+        
+        private SqlConnection GetConnection() {
+            if (CONN_STR != null) {
+                return GetConnection();
+            }
+            foreach (var cs in CONN_STRINGS) {
+                try {
+                    var conn = new SqlConnection(cs);
+                    conn.Open();
+                    conn.Close();
+                    CONN_STR = cs;
+                    return GetConnection();
+                } catch {}
+            }
+            throw new Exception("All connection strings failed for Server 28");
+        }
         private const int    MAX_ROWS   = 50000;
         private const int    TIMEOUT    = 120;
 
@@ -60,7 +85,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
         [HttpGet, Route("api/datav2/health")]
         public HttpResponseMessage Health() {
             try {
-                using (var conn = new SqlConnection(CONN_STR)) {
+                using (var conn = GetConnection()) {
                     conn.Open();
                     using (var cmd = new SqlCommand("SELECT @@SERVERNAME svr, DB_NAME() db, GETDATE() ts, (SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE') tbl_count", conn)) {
                         using (var rd = cmd.ExecuteReader()) {
@@ -98,7 +123,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 var rows = new List<Dictionary<string, object>>();
                 var cols = new List<string>();
                 var t0 = DateTime.UtcNow;
-                using (var conn = new SqlConnection(CONN_STR)) {
+                using (var conn = GetConnection()) {
                     await conn.OpenAsync();
                     using (var cmd = new SqlCommand(sql, conn) { CommandTimeout = TIMEOUT }) {
                         using (var rd = await cmd.ExecuteReaderAsync()) {
@@ -132,7 +157,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 FROM INFORMATION_SCHEMA.TABLES t WHERE t.TABLE_TYPE='BASE TABLE'" + where + " ORDER BY ROW_COUNT DESC";
             try {
                 var rows = new List<object>(); var t0 = DateTime.UtcNow;
-                using (var conn = new SqlConnection(CONN_STR)) {
+                using (var conn = GetConnection()) {
                     await conn.OpenAsync();
                     using (var cmd = new SqlCommand(sql, conn){CommandTimeout=60})
                     using (var rd = await cmd.ExecuteReaderAsync())
@@ -151,7 +176,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
             string sql = "SELECT COLUMN_NAME,DATA_TYPE,CHARACTER_MAXIMUM_LENGTH,IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='" + safe + "' ORDER BY ORDINAL_POSITION";
             try {
                 var rows = new List<object>();
-                using(var conn=new SqlConnection(CONN_STR)){
+                using(var conn=GetConnection()){
                     await conn.OpenAsync();
                     using(var cmd=new SqlCommand(sql,conn){CommandTimeout=30})
                     using(var rd=await cmd.ExecuteReaderAsync())
@@ -173,7 +198,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
             string sql = req["sql"]?.ToString()?.Trim();
             if(string.IsNullOrEmpty(sql)) return Fail("sql required");
             try {
-                using(var conn=new SqlConnection(CONN_STR)){
+                using(var conn=GetConnection()){
                     await conn.OpenAsync();
                     using(var cmd=new SqlCommand(sql,conn){CommandTimeout=TIMEOUT}){
                         int n = await cmd.ExecuteNonQueryAsync();
