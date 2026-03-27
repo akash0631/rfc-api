@@ -1,0 +1,41 @@
+name: InstallGateway_603842
+on:
+  push:
+    paths: ['.github/workflows/install_gateway_603842.yml']
+jobs:
+  run:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Download and install On-premises Data Gateway
+        shell: powershell
+        run: |
+          $dest = 'C:\GatewayInstall'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
+          # Check if already installed
+          $svc = Get-Service -Name "PBIEgwService" -ErrorAction SilentlyContinue
+          if ($svc) {
+            Write-Host "Gateway service already exists: $($svc.Status)"
+            exit 0
+          }
+
+          Write-Host "Downloading gateway installer..."
+          $url = 'https://download.microsoft.com/download/e/f/a/efa83434-c5f1-45e1-9a1e-7278dd65e855/GatewayInstall-24-10.exe'
+          $installer = "$dest\GatewayInstall.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+          Write-Host "Downloaded: $((Get-Item $installer).Length) bytes"
+
+          Write-Host "Installing silently..."
+          Start-Process -FilePath $installer -ArgumentList '/quiet', '/AcceptEULA' -Wait
+          Write-Host "Install complete"
+
+          # Check service
+          $svc2 = Get-Service -Name "PBIEgwService" -ErrorAction SilentlyContinue
+          if ($svc2) {
+            Write-Host "SUCCESS: Gateway service installed - Status: $($svc2.Status)"
+          } else {
+            Write-Host "Gateway service not found after install - checking installed apps..."
+            Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | 
+              Where-Object { $_.DisplayName -like '*Gateway*' } | 
+              Select-Object DisplayName, DisplayVersion
+          }
