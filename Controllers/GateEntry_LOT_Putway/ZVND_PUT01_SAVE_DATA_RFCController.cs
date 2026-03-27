@@ -10,60 +10,50 @@ using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
 using Vendor_SRM_Routing_Application.Models.HU_Creation;
 using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
+using Vendor_SRM_Routing_Application.Models.GateEntry_LOT_Putway;
 
 namespace Vendor_SRM_Routing_Application.Controllers.GateEntry_LOT_Putway
 {
+    /// <summary>Save Data RFC for PUT01 Inbound Process.</summary>
     public class ZVND_PUT01_SAVE_DATA_RFCController : BaseController
     {
+        /// <summary>Saves scanned HU data to SAP for PUT01. Accepts IM_USER + IT_DATA table (ZTT_PUT01_SAVE). Returns EX_RETURN.</summary>
         [HttpPost]
         [Route("api/ZVND_PUT01_SAVE_DATA_RFC")]
-        public async Task<IHttpActionResult> ZVND_PUT01_SAVE_DATA_RFC([FromBody] ZVND_PUT01_SAVE_DATA_RFCRequest request)
+        public IHttpActionResult ZVND_PUT01_SAVE_DATA_RFC([FromBody] ZVND_PUT01_SAVE_DATA_RFCRequest request)
         {
-            return await Task.Run(() =>
+            try
             {
-                try
+                RfcDestination dest = RfcDestinationManager.GetDestination("SAP");
+                IRfcFunction fn = dest.Repository.CreateFunction("ZVND_PUT01_SAVE_DATA_RFC");
+
+                fn.SetValue("IM_USER", request.IM_USER);
+
+                IRfcTable itData = fn.GetTable("IT_DATA");
+                if (request.IT_DATA != null)
                 {
-                    if (request == null)
-                        return Ok(new { Status = "E", Message = "Request cannot be null" });
-
-                    RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                    RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                    RfcRepository rfcrep = dest.Repository;
-                    IRfcFunction myfun = rfcrep.CreateFunction("ZVND_PUT01_SAVE_DATA_RFC");
-
-                    myfun.SetValue("IM_USER", request.IM_USER ?? "");
-
-                    // Populate IT_DATA table
-                    if (request.IT_DATA != null && request.IT_DATA.Count > 0)
+                    foreach (var row in request.IT_DATA)
                     {
-                        IRfcTable itData = myfun.GetTable("IT_DATA");
-                        foreach (var item in request.IT_DATA)
-                        {
-                            itData.Append();
-                            foreach (var kv in item)
-                                try { itData.SetValue(kv.Key, kv.Value?.ToString() ?? ""); } catch { }
-                        }
+                        itData.Append();
+                        itData.SetValue("ZEXT_HU",   row.HU);
+                        itData.SetValue("ZZPALETTE",  row.PALETTE);
+                        itData.SetValue("LGPLA",      row.BIN);
+                        itData.SetValue("WERKS",      row.PLANT);
+                        itData.SetValue("MENGE",      row.QTY);
                     }
-
-                    myfun.Invoke(dest);
-
-                    IRfcStructure exReturn = myfun.GetStructure("EX_RETURN");
-                    string sapType    = exReturn.GetValue("TYPE").ToString();
-                    string sapMessage = exReturn.GetValue("MESSAGE").ToString();
-
-                    return Ok(new { Status = sapType == "E" ? "E" : "S", Message = sapMessage });
                 }
-                catch (Exception ex)
-                {
-                    return Ok(new { Status = "E", Message = ex.Message });
-                }
-            });
+
+                fn.Invoke(dest);
+
+                var exReturn = fn.GetStructure("EX_RETURN");
+                return Ok(new {
+                    success = exReturn.GetValue("TYPE").ToString() != "E",
+                    data    = (object)null,
+                    message = new { TYPE=exReturn.GetValue("TYPE").ToString(), MESSAGE=exReturn.GetValue("MESSAGE").ToString() }
+                });
+            }
+            catch (RfcBaseException rfcEx) { return Content(HttpStatusCode.BadGateway, new{success=false,message=rfcEx.Message}); }
+            catch (Exception ex) { return InternalServerError(ex); }
         }
-    }
-
-    public class ZVND_PUT01_SAVE_DATA_RFCRequest
-    {
-        public string IM_USER { get; set; }
-        public List<Dictionary<string, object>> IT_DATA { get; set; }
     }
 }
