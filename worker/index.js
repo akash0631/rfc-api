@@ -290,8 +290,9 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
     if (status==='done'||status==='error') {
-      const allDone = job.steps.every(s=>s.status==='done'||s.status==='error');
-      if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
+     const TOTAL_STEPS = 6;
+const allDone = job.steps.length >= TOTAL_STEPS && job.steps.every(s=>s.status==='done'||s.status==='error');
+if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
     }
     await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
   };
