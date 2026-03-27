@@ -20,7 +20,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
     {
         private const string API_KEY    = "v2-datav2-analyst-2026";
         private const string ADMIN_KEY  = "v2-datav2-admin-2026";
-        private const string CONN_STR   = @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@55555;Connection Timeout=60;MultipleActiveResultSets=true;";
+        private const string CONN_STR   = @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@99999;Connection Timeout=60;MultipleActiveResultSets=true;";
         private const int    MAX_ROWS   = 50000;
         private const int    TIMEOUT    = 120;
 
