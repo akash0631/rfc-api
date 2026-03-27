@@ -23,7 +23,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
 
         // Try multiple connection strategies
         private static readonly string[] CONN_STRINGS = new[] {
-            @"Server=192.168.151.28;Database=DataV2;User Id=V2RDkash.agarwal;Password=vrl@99999;Connection Timeout=10;MultipleActiveResultSets=true;",
+            @"Server=192.168.151.28;Database=DataV2;User Id=V2RD\akash.agarwal;Password=vrl@99999;Connection Timeout=10;MultipleActiveResultSets=true;",
             @"Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connection Timeout=10;MultipleActiveResultSets=true;",
             @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@99999;Connection Timeout=10;MultipleActiveResultSets=true;",
             @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@55555;Connection Timeout=10;MultipleActiveResultSets=true;",
