@@ -1,4 +1,3 @@
-// PUT01 HU Validation RFC — 1774084648
 using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
 using System;
@@ -11,70 +10,53 @@ using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
 using Vendor_SRM_Routing_Application.Models.HU_Creation;
 using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
+using Vendor_SRM_Routing_Application.Models.GateEntry_LOT_Putway;
 
 namespace Vendor_SRM_Routing_Application.Controllers.GateEntry_LOT_Putway
 {
+    /// <summary>HU validation RFC for PUT01 Inbound Process.</summary>
     public class ZVND_PUT01_HU_VAL_RFCController : BaseController
     {
+        /// <summary>Validates HU for PUT01. Accepts IM_USER, IM_PLANT, IM_HU. Returns ET_DATA (ZTT_PUT01_HU).</summary>
         [HttpPost]
         [Route("api/ZVND_PUT01_HU_VAL_RFC")]
-        public async Task<IHttpActionResult> ZVND_PUT01_HU_VAL_RFC([FromBody] ZVND_PUT01_HU_VAL_RFCRequest request)
+        public IHttpActionResult ZVND_PUT01_HU_VAL_RFC([FromBody] ZVND_PUT01_HU_VAL_RFCRequest request)
         {
-            return await Task.Run<IHttpActionResult>(() =>
+            try
             {
-                try
+                RfcDestination dest = RfcDestinationManager.GetDestination("SAP");
+                IRfcFunction fn = dest.Repository.CreateFunction("ZVND_PUT01_HU_VAL_RFC");
+
+                fn.SetValue("IM_USER",  request.IM_USER);
+                fn.SetValue("IM_PLANT", request.IM_PLANT);
+                fn.SetValue("IM_HU",    request.IM_HU);
+
+                fn.Invoke(dest);
+
+                var exReturn = fn.GetStructure("EX_RETURN");
+                var etData   = fn.GetTable("ET_DATA");
+
+                var dataList = new List<object>();
+                for (int i = 0; i < etData.Count; i++)
                 {
-                    if (request == null)
-                        return Ok(new { Status = "E", Message = "Request cannot be null", Data = new { ET_DATA = new List<object>() } });
-
-                    RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                    RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                    RfcRepository rfcrep = dest.Repository;
-                    IRfcFunction myfun = rfcrep.CreateFunction("ZVND_PUT01_HU_VAL_RFC");
-
-                    myfun.SetValue("IM_USER",  request.IM_USER  ?? "");
-                    myfun.SetValue("IM_PLANT", request.IM_PLANT ?? "");
-                    myfun.SetValue("IM_HU",    request.IM_HU    ?? "");
-
-                    myfun.Invoke(dest);
-
-                    IRfcStructure exReturn = myfun.GetStructure("EX_RETURN");
-                    string sapType    = exReturn.GetValue("TYPE").ToString();
-                    string sapMessage = exReturn.GetValue("MESSAGE").ToString();
-
-                    if (sapType == "E")
-                        return Ok(new { Status = "E", Message = sapMessage, Data = new { ET_DATA = new List<object>() } });
-
-                    IRfcTable tbl = myfun.GetTable("ET_DATA");
-                    var rows = new List<Dictionary<string, object>>();
-                    for (int i = 0; i < tbl.RowCount; i++)
-                    {
-                        tbl.CurrentIndex = i;
-                        var row = new Dictionary<string, object>();
-                        var meta = tbl.Metadata.LineType;
-                        for (int j = 0; j < meta.FieldCount; j++)
-                        {
-                            var field = meta[j];
-                            if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
-                                row[field.Name] = tbl.GetValue(field.Name)?.ToString() ?? "";
-                        }
-                        rows.Add(row);
-                    }
-
-                    return Ok(new { Status = "S", Message = sapMessage, Data = new { ET_DATA = rows } });
+                    etData.CurrentIndex = i;
+                    dataList.Add(new {
+                        HU       = etData.GetValue("ZEXT_HU").ToString(),
+                        PALETTE  = etData.GetValue("ZZPALETTE")?.ToString(),
+                        PO_NO    = etData.GetValue("EBELN")?.ToString(),
+                        INV_NO   = etData.GetValue("XBLNR")?.ToString(),
+                        HU_QTY   = etData.GetValue("MENGE")?.ToString()
+                    });
                 }
-                catch (Exception ex)
-                {
-                    return Ok(new { Status = "E", Message = ex.Message, Data = new { ET_DATA = new List<object>() } });
-                }
-            });
+
+                return Ok(new {
+                    success = true,
+                    data    = dataList,
+                    message = new { TYPE=exReturn.GetValue("TYPE").ToString(), MESSAGE=exReturn.GetValue("MESSAGE").ToString() }
+                });
+            }
+            catch (RfcBaseException rfcEx) { return Content(HttpStatusCode.BadGateway, new{success=false,message=rfcEx.Message}); }
+            catch (Exception ex) { return InternalServerError(ex); }
         }
-    }
-
-    public class ZVND_PUT01_HU_VAL_RFCRequest
-    {
-        public string IM_USER  { get; set; }
-        public string IM_PLANT { get; set; }
-        public string IM_HU    { get; set; }
     }
 }
