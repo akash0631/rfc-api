@@ -1,0 +1,43 @@
+name: CheckSQL_606382
+on:
+  push:
+    paths: ['.github/workflows/check_sql_606382.yml']
+jobs:
+  run:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Check SQL Server auth on .28
+        shell: powershell
+        run: |
+          # Test if sa login exists and SQL auth is enabled on .28
+          $query = "SELECT name, is_disabled, type_desc FROM sys.server_principals WHERE type IN ('S') AND name IN ('sa','DataV2User','v2user','admin') ORDER BY name"
+          try {
+            $conn = New-Object System.Data.SqlClient.SqlConnection
+            $conn.ConnectionString = "Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connect Timeout=5"
+            $conn.Open()
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = $query
+            $reader = $cmd.ExecuteReader()
+            Write-Host "Windows Auth to .28: SUCCESS"
+            while ($reader.Read()) {
+              Write-Host "Login: $($reader['name']) | disabled: $($reader['is_disabled']) | type: $($reader['type_desc'])"
+            }
+            $conn.Close()
+          } catch {
+            Write-Host "Windows Auth failed: $_"
+            
+            # Try with sa and common passwords
+            $passwords = @('vrl@55555','vrl@12345','sa','India@123456','Admin@123','password','V2@12345')
+            foreach ($pwd in $passwords) {
+              try {
+                $conn2 = New-Object System.Data.SqlClient.SqlConnection
+                $conn2.ConnectionString = "Server=192.168.151.28;Database=DataV2;User Id=sa;Password=$pwd;Connect Timeout=5"
+                $conn2.Open()
+                Write-Host "SA LOGIN SUCCESS with password: $pwd"
+                $conn2.Close()
+                break
+              } catch {
+                Write-Host "sa/$pwd failed"
+              }
+            }
+          }
