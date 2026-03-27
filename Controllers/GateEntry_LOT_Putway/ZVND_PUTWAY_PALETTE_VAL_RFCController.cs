@@ -10,122 +10,48 @@ using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
 using Vendor_SRM_Routing_Application.Models.HU_Creation;
 using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
+using Vendor_SRM_Routing_Application.Models.GateEntry_LOT_Putway;
 
-namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
+namespace Vendor_SRM_Routing_Application.Controllers.GateEntry_LOT_Putway
 {
+    /// <summary>Palette validation RFC for GATELOT2 Inbound Process.</summary>
     public class ZVND_PUTWAY_PALETTE_VAL_RFCController : BaseController
     {
+        /// <summary>Validates palette for GATELOT2 inbound. Accepts IM_USER, IM_PLANT, IM_PICKLIST, IM_BIN, IM_PALL. Returns ET_BIN, ET_PALL, ET_BOX.</summary>
         [HttpPost]
-        public async Task<HttpResponseMessage> Post([FromBody] ZVND_PUTWAY_PALETTE_VAL_RFCRequest request)
+        [Route("api/ZVND_GATELOT2_PALETTE_VAL_RFC")]
+        public IHttpActionResult ZVND_GATELOT2_PALETTE_VAL_RFC([FromBody] ZVND_GATELOT2_PALETTE_VAL_RFCRequest request)
         {
-            return await Task.Run(() =>
+            try
             {
-                try
-                {
-                    if (request.IM_USER != null)
-                    {
-                        RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                        RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                        // Get RfcTable from SAP
-                        RfcRepository rfcrep = dest.Repository;
+                RfcDestination dest = RfcDestinationManager.GetDestination("SAP");
+                IRfcFunction fn = dest.Repository.CreateFunction("ZVND_GATELOT2_PALETTE_VAL_RFC");
 
-                        IRfcFunction myfun = null;
-                        myfun = rfcrep.CreateFunction("ZVND_PUTWAY_PALETTE_VAL_RFC");
+                fn.SetValue("IM_USER",     request.IM_USER);
+                fn.SetValue("IM_PLANT",    request.IM_PLANT);
+                fn.SetValue("IM_PICKLIST", request.IM_PICKLIST);
+                fn.SetValue("IM_BIN",      request.IM_BIN);
+                fn.SetValue("IM_PALL",     request.IM_PALL);
 
-                        myfun.SetValue("IM_USER",  request.IM_USER);
-                        myfun.SetValue("IM_PLANT", request.IM_PLANT);
-                        myfun.SetValue("IM_BIN",   request.IM_BIN);
-                        myfun.SetValue("IM_PALL",  request.IM_PALL);
+                fn.Invoke(dest);
 
-                        myfun.Invoke(dest);
+                var exReturn = fn.GetStructure("EX_RETURN");
+                var etBin    = fn.GetTable("ET_BIN");
+                var etPall   = fn.GetTable("ET_PALL");
+                var etBox    = fn.GetTable("ET_BOX");
 
-                        IRfcTable IrfTable = myfun.GetTable("ET_DATA");
+                var binList  = new List<object>(); for (int i=0;i<etBin.Count;i++){etBin.CurrentIndex=i;binList.Add(new{BIN=etBin.GetValue("LGPLA").ToString()});}
+                var pallList = new List<object>(); for (int i=0;i<etPall.Count;i++){etPall.CurrentIndex=i;pallList.Add(new{PALETTE=etPall.GetValue("ZZPALETTE").ToString()});}
+                var boxList  = new List<object>(); for (int i=0;i<etBox.Count;i++){etBox.CurrentIndex=i;boxList.Add(new{HU=etBox.GetValue("ZEXT_HU").ToString()});}
 
-                        IRfcStructure E_RETURN = myfun.GetStructure("EX_RETURN");
-
-                        string SAP_TYPE = E_RETURN.GetValue("TYPE").ToString();
-                        string SAP_Message = E_RETURN.GetValue("MESSAGE").ToString();
-
-                        if (SAP_TYPE == "E")
-                        {
-                            return Request.CreateResponse(HttpStatusCode.OK, new
-                            {
-                                Status = false,
-                                Message = "" + SAP_Message + ""
-                            });
-                        }
-                        else
-                        {
-                            var meta = IrfTable.Metadata.LineType;
-
-                            var etdata = IrfTable.AsEnumerable().Select(r =>
-                            {
-                                var d = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-
-                                for (int i = 0; i < meta.FieldCount; i++)
-                                {
-                                    var f = meta[i];
-
-                                    if (f.DataType == RfcDataType.STRUCTURE || f.DataType == RfcDataType.TABLE)
-                                        continue;
-
-                                    try
-                                    {
-                                        d[f.Name] = r.GetString(f.Name);
-                                    }
-                                    catch
-                                    {
-                                        d[f.Name] = null;
-                                    }
-                                }
-
-                                return d;
-                            }).ToList();
-
-                            return Request.CreateResponse(HttpStatusCode.OK, new
-                            {
-                                Status = true,
-                                Message = "" + SAP_Message + "",
-                                Data = new
-                                {
-                                    ET_DATA = etdata
-                                }
-                            });
-                        }
-                    }
-                    else
-                    {
-                        return Request.CreateResponse(HttpStatusCode.OK, new
-                        {
-                            Status = false,
-                            Message = "Request Not Valid"
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                    {
-                        Status = false,
-                        Message = ex.Message
-                    });
-                }
-            });
+                return Ok(new {
+                    success = true,
+                    data = new { ET_BIN=binList, ET_PALL=pallList, ET_BOX=boxList },
+                    message = new { TYPE=exReturn.GetValue("TYPE").ToString(), MESSAGE=exReturn.GetValue("MESSAGE").ToString() }
+                });
+            }
+            catch (RfcBaseException rfcEx) { return Content(HttpStatusCode.BadGateway, new{success=false,message=rfcEx.Message}); }
+            catch (Exception ex) { return InternalServerError(ex); }
         }
-    }
-
-    public class ZVND_PUTWAY_PALETTE_VAL_RFCRequest
-    {
-        /// <summary>TYPE: WWWOBJID — SAP User ID</summary>
-        public string IM_USER { get; set; }
-
-        /// <summary>TYPE: WERKS_D — Plant</summary>
-        public string IM_PLANT { get; set; }
-
-        /// <summary>TYPE: ZEXT_HU — Handling Unit / BIN reference</summary>
-        public string IM_BIN { get; set; }
-
-        /// <summary>TYPE: ZZPALETTE — Palette number to validate</summary>
-        public string IM_PALL { get; set; }
     }
 }
