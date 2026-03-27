@@ -70,9 +70,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                 var tableData = tbl.AsEnumerable().Select(row =>
                 {
                     var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < row.FieldCount; i++)
+                    for (int i = 0; i < row.Metadata.FieldCount; i++)
                     {
-                        var field = row.GetFieldMetadata(i);
+                        var field = row.Metadata[i];
                         var fieldName = field.Name;
                         var fieldValue = row.GetValue(fieldName);
                         
