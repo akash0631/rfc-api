@@ -237,6 +237,10 @@
     <Compile Include="Models\Vendor_SRM_Routing\RFCconfig.cs" />
     <Compile Include="Models\Vendor_SRM_Routing\RoutingStatusList.cs" />
     <Compile Include="Models\Vendor_SRM_Routing\Submit_Routing_Status.cs" />
+    <Compile Include="Models\GateEntry_LOT_Putway\ZVND_PUT01_HU_VAL_RFCModel.cs" />
+    <Compile Include="Models\GateEntry_LOT_Putway\ZVND_PUT01_SAVE_DATA_RFCModel.cs" />
+    <Compile Include="Models\GateEntry_LOT_Putway\ZVND_GATELOT2_PALETTE_VAL_RFCModel.cs" />
+    <Compile Include="Models\PeperlessPicklist\ZVND_GATELOT2_PICKLIST_VAL_RFCModel.cs" />
     <Compile Include="PO_Compliance\PO_COMP_GETController.cs" />
     <Compile Include="PO_Compliance\PO_COMP_POSTController.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
