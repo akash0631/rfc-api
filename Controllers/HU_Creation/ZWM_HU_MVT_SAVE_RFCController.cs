@@ -13,31 +13,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_SAVE_RFC")]
-        public HttpResponseMessage ExecuteZWM_HU_MVT_SAVE_RFC(ZWM_HU_MVT_SAVE_RFCRequest request)
+        public HttpResponseMessage SaveHUMovement(ZWM_HU_MVT_SAVE_RFCRequest request)
         {
             try
             {
-                if (request == null)
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "Request cannot be null"
-                    });
-                }
-
-                if (string.IsNullOrEmpty(request.IM_USER) || 
-                    string.IsNullOrEmpty(request.IM_PLANT) || 
-                    string.IsNullOrEmpty(request.IM_BIN) || 
-                    string.IsNullOrEmpty(request.IM_HU))
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "All parameters (IM_USER, IM_PLANT, IM_BIN, IM_HU) are required"
-                    });
-                }
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
@@ -57,7 +36,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
                     {
                         Status = "E",
                         Message = returnMessage
@@ -66,13 +45,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
 
                 return Request.CreateResponse(HttpStatusCode.OK, new
                 {
-                    Status = "S",
-                    Message = !string.IsNullOrEmpty(returnMessage) ? returnMessage : "Operation completed successfully"
+                    Status = returnType,
+                    Message = returnMessage
                 });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -80,7 +59,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -88,7 +67,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.HUCreation
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
