@@ -10,7 +10,6 @@ using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
 using Vendor_SRM_Routing_Application.Models.HU_Creation;
 using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
-using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
 
 namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 {
@@ -45,10 +44,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 return Ok(new {
                     success = true,
                     data    = dataList,
-                    message = new { TYPE=exReturn.GetValue("TYPE").ToString(), MESSAGE=exReturn.GetValue("MESSAGE").ToString() }
+                    message = new { TYPE = exReturn.GetValue("TYPE").ToString(), MESSAGE = exReturn.GetValue("MESSAGE").ToString() }
                 });
             }
-            catch (RfcBaseException rfcEx) { return Content(HttpStatusCode.BadGateway, new{success=false,message=rfcEx.Message}); }
+            catch (RfcBaseException rfcEx) { return Content(HttpStatusCode.BadGateway, new { success = false, message = rfcEx.Message }); }
             catch (Exception ex) { return InternalServerError(ex); }
         }
     }
