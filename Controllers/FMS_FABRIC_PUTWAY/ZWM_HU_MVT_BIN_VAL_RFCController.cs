@@ -49,9 +49,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
             {
                 return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
-            catch (CommunicationException ex)
-            {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+            catch (Exception commEx) { return Content(HttpStatusCode.BadGateway, new { success = false, message = commEx.Message }); });
             }
             catch (Exception ex)
             {
