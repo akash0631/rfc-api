@@ -44,7 +44,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                 var etDataList = tbl.AsEnumerable().Select(row =>
                 {
                     var rowData = new Dictionary<string, object>();
-                    for (int i = 0; i < row.FieldCount; i++)
+                    for (int i = 0; i < row.ElementCount; i++)
                     {
                         var fieldMetadata = row.GetElementMetadata(i);
                         if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
@@ -70,13 +70,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     Message = ex.Message
                 });
             }
-            catch (CommunicationException ex)
-            {
-                return Request.CreateResponse(HttpStatusCode.OK, new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+            catch (Exception commEx) { return Content(HttpStatusCode.BadGateway, new { success = false, message = commEx.Message }); });
             }
             catch (Exception ex)
             {
