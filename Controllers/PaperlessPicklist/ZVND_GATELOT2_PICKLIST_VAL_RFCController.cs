@@ -1,54 +1,97 @@
-using FMS_Fabric_Putway_Api.Models;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
-using Vendor_SRM_Routing_Application.Models.HU_Creation;
-using Vendor_SRM_Routing_Application.Models.PeperlessPicklist;
+using System.Linq;
 
 namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
 {
-    /// <summary>Picklist No validation RFC for GATELOT2 Inbound Process.</summary>
     public class ZVND_GATELOT2_PICKLIST_VAL_RFCController : BaseController
     {
-        /// <summary>Validates picklist number for GATELOT2. Accepts IM_USER, IM_PLANT. Returns ET_DATA (ZTT_PICKLIST_NO).</summary>
         [HttpPost]
         [Route("api/ZVND_GATELOT2_PICKLIST_VAL_RFC")]
-        public IHttpActionResult ZVND_GATELOT2_PICKLIST_VAL_RFC([FromBody] ZVND_GATELOT2_PICKLIST_VAL_RFCRequest request)
+        public HttpResponseMessage ZVND_GATELOT2_PICKLIST_VAL_RFC(ZVND_GATELOT2_PICKLIST_VAL_RFC_Request request)
         {
             try
             {
-                RfcDestination dest = RfcDestinationManager.GetDestination("SAP");
-                IRfcFunction fn = dest.Repository.CreateFunction("ZVND_GATELOT2_PICKLIST_VAL_RFC");
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZVND_GATELOT2_PICKLIST_VAL_RFC");
 
-                fn.SetValue("IM_USER",  request.IM_USER);
-                fn.SetValue("IM_PLANT", request.IM_PLANT);
+                myfun.SetValue("IM_USER", request.IM_USER);
+                myfun.SetValue("IM_PLANT", request.IM_PLANT);
 
-                fn.Invoke(dest);
+                myfun.Invoke(dest);
 
-                var exReturn = fn.GetStructure("EX_RETURN");
-                var etData   = fn.GetTable("ET_DATA");
-
-                var dataList = new List<object>();
-                for (int i = 0; i < etData.Count; i++)
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+                
+                if (EX_RETURN.GetString("TYPE") == "E")
                 {
-                    etData.CurrentIndex = i;
-                    dataList.Add(new { PICKLIST_NO = etData.GetValue("ZPICKLIST_NO").ToString() });
+                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    {
+                        Status = "E",
+                        Message = EX_RETURN.GetString("MESSAGE"),
+                        Data = new { ET_DATA = new List<object>() }
+                    });
                 }
 
-                return Ok(new {
-                    success = true,
-                    data    = dataList,
-                    message = new { TYPE = exReturn.GetValue("TYPE").ToString(), MESSAGE = exReturn.GetValue("MESSAGE").ToString() }
+                IRfcTable tbl = myfun.GetTable("ET_DATA");
+                var etDataList = tbl.AsEnumerable().Select(row =>
+                {
+                    var rowData = new Dictionary<string, object>();
+                    for (int i = 0; i < row.FieldCount; i++)
+                    {
+                        var fieldMetadata = row.GetElementMetadata(i);
+                        if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
+                        {
+                            rowData[fieldMetadata.Name] = row.GetValue(i);
+                        }
+                    }
+                    return rowData;
+                }).ToList();
+
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "S",
+                    Message = "Success",
+                    Data = new { ET_DATA = etDataList }
                 });
             }
-            catch (RfcBaseException rfcEx) { return Content(HttpStatusCode.BadGateway, new { success = false, message = rfcEx.Message }); }
-            catch (Exception ex) { return InternalServerError(ex); }
+            catch (RfcAbapException ex)
+            {
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
+            }
+            catch (CommunicationException ex)
+            {
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
+            }
         }
+    }
+
+    public class ZVND_GATELOT2_PICKLIST_VAL_RFC_Request
+    {
+        public string IM_USER { get; set; }
+        public string IM_PLANT { get; set; }
     }
 }
