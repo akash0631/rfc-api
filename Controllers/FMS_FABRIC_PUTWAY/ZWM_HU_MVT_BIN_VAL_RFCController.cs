@@ -13,13 +13,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_BIN_VAL_RFC")]
-        public HttpResponseMessage ZWM_HU_MVT_BIN_VAL_RFC([FromBody] ZWM_HU_MVT_BIN_VAL_RFCRequest request)
+        public HttpResponseMessage ExecuteZWM_HU_MVT_BIN_VAL_RFC([FromBody] ZWM_HU_MVT_BIN_VAL_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Invalid request data" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -35,27 +35,27 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetString("TYPE");
-                string returnMessage = EX_RETURN.GetString("MESSAGE");
+                string returnType = EX_RETURN.GetValue("TYPE").ToString();
+                string returnMessage = EX_RETURN.GetValue("MESSAGE").ToString();
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "S", Message = returnMessage });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = returnType, Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
-            catch (RfcCommunicationException ex)
+            catch (CommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
         }
     }
