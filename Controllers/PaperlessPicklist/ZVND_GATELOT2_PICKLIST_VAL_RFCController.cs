@@ -70,8 +70,6 @@ namespace Vendor_SRM_Routing_Application.Controllers.PaperlessPicklist
                     Message = ex.Message
                 });
             }
-            catch (Exception commEx) { return Content(HttpStatusCode.BadGateway, new { success = false, message = commEx.Message }); });
-            }
             catch (Exception ex)
             {
                 return Request.CreateResponse(HttpStatusCode.OK, new
