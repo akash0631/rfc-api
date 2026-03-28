@@ -3,86 +3,104 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
+using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
+using System.Linq;
 
-namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
+namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 {
-    /// <summary>Article modification PO RFC — ZMM_ART_MOD_PO_RFC</summary>
     public class ZMM_ART_MOD_PO_RFCController : BaseController
     {
-        /// <summary>
-        /// Modifies article on PO.
-        /// IMPORT table IM_INPUT: EBELN, MATNR, COLOR.
-        /// EXPORT table IM_OUTPUT: EBELN, PO_STATUS, OLD_ART, NEW_ART, ART_STATUS.
-        /// </summary>
         [HttpPost]
         [Route("api/ZMM_ART_MOD_PO_RFC")]
-        public IHttpActionResult ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFCRequest request)
+        public async Task<object> ExecuteRFC(ZMM_ART_MOD_PO_RFC_Request request)
         {
             try
             {
-                RfcDestination dest = RfcDestinationManager.GetDestination("SAP");
-                IRfcFunction fn = dest.Repository.CreateFunction("ZMM_ART_MOD_PO_RFC");
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZMM_ART_MOD_PO_RFC");
 
-                IRfcTable imInput = fn.GetTable("IM_INPUT");
-                if (request != null && request.IM_INPUT != null)
+                myfun.SetValue("EBELN", request.EBELN);
+                myfun.SetValue("MATNR", request.MATNR);
+                myfun.SetValue("COLOR", request.COLOR);
+
+                myfun.Invoke(dest);
+
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+
+                if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
                 {
-                    foreach (var row in request.IM_INPUT)
+                    return new
                     {
-                        imInput.Append();
-                        imInput.SetValue("EBELN", row.EBELN ?? "");
-                        imInput.SetValue("MATNR", row.MATNR ?? "");
-                        imInput.SetValue("COLOR", row.COLOR ?? "");
+                        Status = "E",
+                        Message = EX_RETURN.GetString("MESSAGE")
+                    };
+                }
+
+                IRfcTable tbl = myfun.GetTable("IM_OUTPUT");
+                var outputData = new List<Dictionary<string, object>>();
+
+                if (tbl != null)
+                {
+                    outputData = tbl.AsEnumerable().Select(row =>
+                    {
+                        var dict = new Dictionary<string, object>();
+                        for (int i = 0; i < row.Metadata.FieldCount; i++)
+                        {
+                            var field = row.Metadata[i];
+                            if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                            {
+                                dict[field.Name] = row.GetValue(field.Name);
+                            }
+                        }
+                        return dict;
+                    }).ToList();
+                }
+
+                return new
+                {
+                    Status = "S",
+                    Message = "Success",
+                    Data = new
+                    {
+                        IM_OUTPUT = outputData
                     }
-                }
-
-                fn.Invoke(dest);
-
-                IRfcTable imOutput = fn.GetTable("IM_OUTPUT");
-                var outputList = new List<object>();
-                for (int i = 0; i < imOutput.Count; i++)
-                {
-                    imOutput.CurrentIndex = i;
-                    outputList.Add(new
-                    {
-                        EBELN      = imOutput.GetValue("EBELN")?.ToString(),
-                        PO_STATUS  = imOutput.GetValue("PO_STATUS")?.ToString(),
-                        OLD_ART    = imOutput.GetValue("OLD_ART")?.ToString(),
-                        NEW_ART    = imOutput.GetValue("NEW_ART")?.ToString(),
-                        ART_STATUS = imOutput.GetValue("ART_STATUS")?.ToString()
-                    });
-                }
-
-                return Ok(new { success = true, data = outputList, message = "" });
+                };
             }
-            catch (RfcBaseException rfcEx)
+            catch (RfcAbapException ex)
             {
-                return Content(HttpStatusCode.BadGateway, new { success = false, message = rfcEx.Message });
+                return new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                };
+            }
+            catch (RfcCommunicationException ex)
+            {
+                return new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                };
             }
             catch (Exception ex)
             {
-                return InternalServerError(ex);
+                return new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                };
             }
         }
     }
 
-    // ─── Request models ───────────────────────────────────────────────────
-    /// <summary>Request body for ZMM_ART_MOD_PO_RFC</summary>
-    public class ZMM_ART_MOD_PO_RFCRequest
+    public class ZMM_ART_MOD_PO_RFC_Request
     {
-        /// <summary>Input table: PO + article data to modify</summary>
-        public List<ZMM_ART_MOD_InputRow> IM_INPUT { get; set; }
-    }
-
-    /// <summary>Row for IM_INPUT table</summary>
-    public class ZMM_ART_MOD_InputRow
-    {
-        /// <summary>Purchase Order number (EBELN)</summary>
-        public string EBELN  { get; set; }
-        /// <summary>Material/Article number (MATNR)</summary>
-        public string MATNR  { get; set; }
-        /// <summary>Color code</summary>
-        public string COLOR  { get; set; }
+        public string EBELN { get; set; }
+        public string MATNR { get; set; }
+        public string COLOR { get; set; }
     }
 }
