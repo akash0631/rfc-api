@@ -3,120 +3,86 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
-using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
 
-namespace Vendor_SRM_Routing_Application.Controllers.Vendor
+namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
 {
+    /// <summary>Article modification PO RFC — ZMM_ART_MOD_PO_RFC</summary>
     public class ZMM_ART_MOD_PO_RFCController : BaseController
     {
+        /// <summary>
+        /// Modifies article on PO.
+        /// IMPORT table IM_INPUT: EBELN, MATNR, COLOR.
+        /// EXPORT table IM_OUTPUT: EBELN, PO_STATUS, OLD_ART, NEW_ART, ART_STATUS.
+        /// </summary>
         [HttpPost]
         [Route("api/ZMM_ART_MOD_PO_RFC")]
-        public async Task<HttpResponseMessage> ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFC_Request request)
+        public IHttpActionResult ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFCRequest request)
         {
             try
             {
-                if (request == null)
+                RfcDestination dest = RfcDestinationManager.GetDestination("SAP");
+                IRfcFunction fn = dest.Repository.CreateFunction("ZMM_ART_MOD_PO_RFC");
+
+                IRfcTable imInput = fn.GetTable("IM_INPUT");
+                if (request != null && request.IM_INPUT != null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    foreach (var row in request.IM_INPUT)
                     {
-                        Status = "E",
-                        Message = "Request body cannot be null",
-                        Data = (object)null
-                    });
-                }
-
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                RfcRepository rfcrep = dest.Repository;
-                IRfcFunction myfun = rfcrep.CreateFunction("ZMM_ART_MOD_PO_RFC");
-
-                if (!string.IsNullOrEmpty(request.EBELN))
-                    myfun.SetValue("EBELN", request.EBELN);
-                if (!string.IsNullOrEmpty(request.MATNR))
-                    myfun.SetValue("MATNR", request.MATNR);
-                if (!string.IsNullOrEmpty(request.COLOR))
-                    myfun.SetValue("COLOR", request.COLOR);
-
-                myfun.Invoke(dest);
-
-                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-
-                if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
-                {
-                    return Request.CreateResponse(HttpStatusCode.OK, new
-                    {
-                        Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE"),
-                        Data = (object)null
-                    });
-                }
-
-                IRfcTable imOutputTable = myfun.GetTable("IM_OUTPUT");
-                var imOutputData = new List<Dictionary<string, object>>();
-
-                if (imOutputTable != null)
-                {
-                    foreach (IRfcStructure row in imOutputTable)
-                    {
-                        var rowData = new Dictionary<string, object>();
-                        for (int i = 0; i < row.Metadata.FieldCount; i++)
-                        {
-                            var fieldMetadata = row.Metadata.GetFieldMetadata(i);
-                            if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
-                            {
-                                rowData[fieldMetadata.Name] = row.GetValue(fieldMetadata.Name);
-                            }
-                        }
-                        imOutputData.Add(rowData);
+                        imInput.Append();
+                        imInput.SetValue("EBELN", row.EBELN ?? "");
+                        imInput.SetValue("MATNR", row.MATNR ?? "");
+                        imInput.SetValue("COLOR", row.COLOR ?? "");
                     }
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                fn.Invoke(dest);
+
+                IRfcTable imOutput = fn.GetTable("IM_OUTPUT");
+                var outputList = new List<object>();
+                for (int i = 0; i < imOutput.Count; i++)
                 {
-                    Status = "S",
-                    Message = "Success",
-                    Data = new
+                    imOutput.CurrentIndex = i;
+                    outputList.Add(new
                     {
-                        IM_OUTPUT = imOutputData
-                    }
-                });
+                        EBELN      = imOutput.GetValue("EBELN")?.ToString(),
+                        PO_STATUS  = imOutput.GetValue("PO_STATUS")?.ToString(),
+                        OLD_ART    = imOutput.GetValue("OLD_ART")?.ToString(),
+                        NEW_ART    = imOutput.GetValue("NEW_ART")?.ToString(),
+                        ART_STATUS = imOutput.GetValue("ART_STATUS")?.ToString()
+                    });
+                }
+
+                return Ok(new { success = true, data = outputList, message = "" });
             }
-            catch (RfcAbapException ex)
+            catch (RfcBaseException rfcEx)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
-                {
-                    Status = "E",
-                    Message = ex.Message,
-                    Data = (object)null
-                });
-            }
-            catch (RfcCommunicationException ex)
-            {
-                return Request.CreateResponse(HttpStatusCode.OK, new
-                {
-                    Status = "E",
-                    Message = ex.Message,
-                    Data = (object)null
-                });
+                return Content(HttpStatusCode.BadGateway, new { success = false, message = rfcEx.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
-                {
-                    Status = "E",
-                    Message = ex.Message,
-                    Data = (object)null
-                });
+                return InternalServerError(ex);
             }
         }
     }
 
-    public class ZMM_ART_MOD_PO_RFC_Request
+    // ─── Request models ───────────────────────────────────────────────────
+    /// <summary>Request body for ZMM_ART_MOD_PO_RFC</summary>
+    public class ZMM_ART_MOD_PO_RFCRequest
     {
-        public string EBELN { get; set; }
-        public string MATNR { get; set; }
-        public string COLOR { get; set; }
+        /// <summary>Input table: PO + article data to modify</summary>
+        public List<ZMM_ART_MOD_InputRow> IM_INPUT { get; set; }
+    }
+
+    /// <summary>Row for IM_INPUT table</summary>
+    public class ZMM_ART_MOD_InputRow
+    {
+        /// <summary>Purchase Order number (EBELN)</summary>
+        public string EBELN  { get; set; }
+        /// <summary>Material/Article number (MATNR)</summary>
+        public string MATNR  { get; set; }
+        /// <summary>Color code</summary>
+        public string COLOR  { get; set; }
     }
 }
