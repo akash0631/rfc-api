@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
-using System.Linq;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 {
@@ -14,18 +13,31 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
     {
         [HttpPost]
         [Route("api/ZMM_ART_MOD_PO_RFC")]
-        public async Task<object> ExecuteRFC(ZMM_ART_MOD_PO_RFC_Request request)
+        public async Task<HttpResponseMessage> ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFC_Request request)
         {
             try
             {
+                if (request == null)
+                {
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "Request body cannot be null",
+                        Data = (object)null
+                    });
+                }
+
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZMM_ART_MOD_PO_RFC");
 
-                myfun.SetValue("EBELN", request.EBELN);
-                myfun.SetValue("MATNR", request.MATNR);
-                myfun.SetValue("COLOR", request.COLOR);
+                if (!string.IsNullOrEmpty(request.EBELN))
+                    myfun.SetValue("EBELN", request.EBELN);
+                if (!string.IsNullOrEmpty(request.MATNR))
+                    myfun.SetValue("MATNR", request.MATNR);
+                if (!string.IsNullOrEmpty(request.COLOR))
+                    myfun.SetValue("COLOR", request.COLOR);
 
                 myfun.Invoke(dest);
 
@@ -33,66 +45,70 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 
                 if (EX_RETURN != null && EX_RETURN.GetString("TYPE") == "E")
                 {
-                    return new
+                    return Request.CreateResponse(HttpStatusCode.OK, new
                     {
                         Status = "E",
-                        Message = EX_RETURN.GetString("MESSAGE")
-                    };
+                        Message = EX_RETURN.GetString("MESSAGE"),
+                        Data = (object)null
+                    });
                 }
 
-                IRfcTable tbl = myfun.GetTable("IM_OUTPUT");
-                var outputData = new List<Dictionary<string, object>>();
+                IRfcTable imOutputTable = myfun.GetTable("IM_OUTPUT");
+                var imOutputData = new List<Dictionary<string, object>>();
 
-                if (tbl != null)
+                if (imOutputTable != null)
                 {
-                    outputData = tbl.AsEnumerable().Select(row =>
+                    foreach (IRfcStructure row in imOutputTable)
                     {
-                        var dict = new Dictionary<string, object>();
+                        var rowData = new Dictionary<string, object>();
                         for (int i = 0; i < row.Metadata.FieldCount; i++)
                         {
-                            var field = row.Metadata[i];
-                            if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                            var fieldMetadata = row.Metadata.GetFieldMetadata(i);
+                            if (fieldMetadata.DataType != RfcDataType.STRUCTURE && fieldMetadata.DataType != RfcDataType.TABLE)
                             {
-                                dict[field.Name] = row.GetValue(field.Name);
+                                rowData[fieldMetadata.Name] = row.GetValue(fieldMetadata.Name);
                             }
                         }
-                        return dict;
-                    }).ToList();
+                        imOutputData.Add(rowData);
+                    }
                 }
 
-                return new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "S",
                     Message = "Success",
                     Data = new
                     {
-                        IM_OUTPUT = outputData
+                        IM_OUTPUT = imOutputData
                     }
-                };
+                });
             }
             catch (RfcAbapException ex)
             {
-                return new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
-                    Message = ex.Message
-                };
+                    Message = ex.Message,
+                    Data = (object)null
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
-                    Message = ex.Message
-                };
+                    Message = ex.Message,
+                    Data = (object)null
+                });
             }
             catch (Exception ex)
             {
-                return new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
-                    Message = ex.Message
-                };
+                    Message = ex.Message,
+                    Data = (object)null
+                });
             }
         }
     }
