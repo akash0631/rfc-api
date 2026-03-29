@@ -9,18 +9,17 @@ using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 {
-    [RoutePrefix("api")]
     public class ZMM_ART_MOD_PO_RFCController : BaseController
     {
         [HttpPost]
-        [Route("ZMM_ART_MOD_PO_RFC")]
-        public HttpResponseMessage ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFCRequest request)
+        [Route("api/ZMM_ART_MOD_PO_RFC")]
+        public async Task<HttpResponseMessage> ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_Request request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Invalid request data" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -34,17 +33,16 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                     IRfcTable imInputTable = myfun.GetTable("IM_INPUT");
                     foreach (var inputItem in request.IM_INPUT)
                     {
-                        imInputTable.Append();
-                        imInputTable.SetValue("MANDT", inputItem.MANDT ?? "");
-                        imInputTable.SetValue("EBELN", inputItem.EBELN ?? "");
-                        imInputTable.SetValue("EBELP", inputItem.EBELP ?? "");
-                        imInputTable.SetValue("MATNR", inputItem.MATNR ?? "");
-                        imInputTable.SetValue("TXZ01", inputItem.TXZ01 ?? "");
-                        imInputTable.SetValue("MENGE", inputItem.MENGE ?? "");
-                        imInputTable.SetValue("MEINS", inputItem.MEINS ?? "");
-                        imInputTable.SetValue("NETPR", inputItem.NETPR ?? "");
-                        imInputTable.SetValue("PEINH", inputItem.PEINH ?? "");
-                        imInputTable.SetValue("BPRME", inputItem.BPRME ?? "");
+                        IStructure row = imInputTable.Metadata.LineType.CreateStructure();
+                        foreach (var property in inputItem.GetType().GetProperties())
+                        {
+                            var value = property.GetValue(inputItem);
+                            if (value != null)
+                            {
+                                row.SetValue(property.Name.ToUpper(), value.ToString());
+                            }
+                        }
+                        imInputTable.Append(row);
                     }
                 }
 
@@ -54,19 +52,16 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                     IRfcTable imOutputTable = myfun.GetTable("IM_OUTPUT");
                     foreach (var outputItem in request.IM_OUTPUT)
                     {
-                        imOutputTable.Append();
-                        imOutputTable.SetValue("MANDT", outputItem.MANDT ?? "");
-                        imOutputTable.SetValue("EBELN", outputItem.EBELN ?? "");
-                        imOutputTable.SetValue("EBELP", outputItem.EBELP ?? "");
-                        imOutputTable.SetValue("MATNR", outputItem.MATNR ?? "");
-                        imOutputTable.SetValue("TXZ01", outputItem.TXZ01 ?? "");
-                        imOutputTable.SetValue("MENGE", outputItem.MENGE ?? "");
-                        imOutputTable.SetValue("MEINS", outputItem.MEINS ?? "");
-                        imOutputTable.SetValue("NETPR", outputItem.NETPR ?? "");
-                        imOutputTable.SetValue("PEINH", outputItem.PEINH ?? "");
-                        imOutputTable.SetValue("BPRME", outputItem.BPRME ?? "");
-                        imOutputTable.SetValue("MESSAGE", outputItem.MESSAGE ?? "");
-                        imOutputTable.SetValue("TYPE", outputItem.TYPE ?? "");
+                        IStructure row = imOutputTable.Metadata.LineType.CreateStructure();
+                        foreach (var property in outputItem.GetType().GetProperties())
+                        {
+                            var value = property.GetValue(outputItem);
+                            if (value != null)
+                            {
+                                row.SetValue(property.Name.ToUpper(), value.ToString());
+                            }
+                        }
+                        imOutputTable.Append(row);
                     }
                 }
 
@@ -78,33 +73,27 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
                 }
 
-                var response = new
-                {
-                    Status = returnType,
-                    Message = returnMessage
-                };
-
-                return Request.CreateResponse(HttpStatusCode.OK, response);
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "S", Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
             }
         }
     }
 
-    public class ZMM_ART_MOD_PO_RFCRequest
+    public class ZMM_ART_MOD_PO_Request
     {
         public List<ZMM_PO_ART_TT> IM_INPUT { get; set; }
         public List<ZMM_PO_ART_OUT_TT> IM_OUTPUT { get; set; }
@@ -112,31 +101,31 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 
     public class ZMM_PO_ART_TT
     {
-        public string MANDT { get; set; }
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string TXZ01 { get; set; }
+        public string WERKS { get; set; }
+        public string LGORT { get; set; }
         public string MENGE { get; set; }
         public string MEINS { get; set; }
         public string NETPR { get; set; }
         public string PEINH { get; set; }
-        public string BPRME { get; set; }
+        public string EINDT { get; set; }
     }
 
     public class ZMM_PO_ART_OUT_TT
     {
-        public string MANDT { get; set; }
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string TXZ01 { get; set; }
+        public string WERKS { get; set; }
+        public string LGORT { get; set; }
         public string MENGE { get; set; }
         public string MEINS { get; set; }
         public string NETPR { get; set; }
         public string PEINH { get; set; }
-        public string BPRME { get; set; }
+        public string EINDT { get; set; }
         public string MESSAGE { get; set; }
-        public string TYPE { get; set; }
+        public string STATUS { get; set; }
     }
 }
