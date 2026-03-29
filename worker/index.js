@@ -4,7 +4,7 @@ const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'master';
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
 const IIS_HOST         = 'https://sap-api.v2retail.net';
-const GH_WORKFLOW_ID   = '245492878';  // deploy-test-vm.yml
+const GH_WORKFLOW_ID   = '245504825';  // deploy-test-vm.yml
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
@@ -126,14 +126,28 @@ async function ghGet(path, token) {
 }
 async function ghPut(path, content, sha, message, token) {
   const encoded = btoa(String.fromCharCode(...new Uint8Array(new TextEncoder().encode(content))));
-  const body = {message, content:encoded, branch:GITHUB_BRANCH};
+  const body = { message, content: encoded, branch: GITHUB_BRANCH };
   if (sha) body.sha = sha;
-  const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`,
-    {method:'PUT', headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json','Content-Type':'application/json','User-Agent':'V2-RFC-Pipeline'},
-     body:JSON.stringify(body)});
+
+  const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'V2-RFC-Pipeline'
+    },
+    body: JSON.stringify(body)
+  });
+
   const d = await r.json();
-  if (!r.ok) throw new Error(`GitHub PUT ${r.status}: ${d.message||JSON.stringify(d).slice(0,200)}`);
-  return {commitSha: d.commit?.sha?.slice(0,7), commitUrl:`https://github.com/${GITHUB_REPO}/commit/${d.commit?.sha}`};
+  if (!r.ok) throw new Error(`GitHub PUT ${r.status}: ${d.message || JSON.stringify(d).slice(0,200)}`);
+
+  return {
+    commitSha: d.commit?.sha,                 // full SHA for workflow matching
+    shortCommitSha: d.commit?.sha?.slice(0,7), // short SHA for UI display
+    commitUrl: `https://github.com/${GITHUB_REPO}/commit/${d.commit?.sha}`
+  };
 }
 
 // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Claude API call Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
@@ -221,9 +235,10 @@ Return ONLY raw C#. No markdown.`, apiKey, 2500);
 
 // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Push controller to GitHub Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 async function pushController(spec, code, sapEnv, token) {
-  const folder = FOLDER_MAP[spec.category]||'Controllers/NSO';
+  const folder = FOLDER_MAP[spec.category] || 'Controllers/NSO';
   const fp = `${folder}/${spec.rfcName}Controller.cs`;
-  const {sha} = await ghGet(fp, token);
+  const { sha } = await ghGet(fp, token);
+
   return {
     ...(await ghPut(fp, code, sha, `Add ${spec.rfcName} controller [${sapEnv.toUpperCase()}] via RFC Portal`, token)),
     filePath: fp
@@ -312,70 +327,137 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
     catch(e) { await log('controller','error',e.message); return; }
     await log('controller','done',`${code.split('\n').length} lines generated`);
 
-    // Step 3: Push controller
+       // Step 3: Push controller
     await log('github','running','Pushing controller to GitHub...');
     let ctrlResult;
-    try { ctrlResult = await pushController(spec, code, sapEnv, ghToken); }
-    catch(e) { await log('github','error',e.message); return; }
-    await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha})`);
+    try {
+      ctrlResult = await pushController(spec, code, sapEnv, ghToken);
+    } catch (e) {
+      await log('github','error',e.message);
+      return;
+    }
+    await log('github','done',`${ctrlResult.filePath} (${ctrlResult.shortCommitSha})`);
 
     // Step 4: Trigger IIS deploy via GitHub Actions
-    await log('deploy','running',`Finding push-triggered deploy for commit ${ctrlResult.commitSha}...`);
+    await log('deploy','running',`Finding push-triggered deploy for commit ${ctrlResult.shortCommitSha}...`);
     try {
+      await sleep(6000);
 
-     // Wait briefly then find the new run (running OR recently completed within 3 min)
-await sleep(6000);
-let runId = null;
-for (let i = 0; i < 45 && !runId; i++) {
-  await sleep(4000);
-  const runsRes = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=20&workflow_id=${GH_WORKFLOW_ID}&branch=${GITHUB_BRANCH}`,
-    { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-  );
-  const runs = await runsRes.json();
-  const commitSha = ctrlResult.commitSha;
-  const fresh = runs.workflow_runs?.find(r =>
-    
-    (r.head_sha === commitSha || r.head_sha.startsWith(commitSha) || commitSha.startsWith(r.head_sha.substring(0,7)))
-  );
-  if (fresh) runId = fresh.id;
-}
-if (!runId) throw new Error('Could not find push-triggered deploy run for commit — check GitHub Actions');
-      await log('deploy','running',`Build started ÃÂ· run #${runId}`);
+      let runId = null;
 
-      // Poll until completed (max ~5 min = 60 ÃÂ 5s)
+      for (let i = 0; i < 45 && !runId; i++) {
+        await sleep(4000);
+
+        const runsRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=20&workflow_id=${GH_WORKFLOW_ID}&branch=${GITHUB_BRANCH}`,
+          {
+            headers: {
+              Authorization: `token ${ghToken}`,
+              'User-Agent': 'V2-RFC-Pipeline'
+            }
+          }
+        );
+
+        const runs = await runsRes.json();
+        if (!runsRes.ok) {
+          throw new Error(`GitHub Actions runs API ${runsRes.status}: ${runs.message || 'Unknown error'}`);
+        }
+
+        const commitSha = ctrlResult.commitSha; // full SHA
+        const fresh = runs.workflow_runs?.find(r => r.head_sha === commitSha);
+
+        console.log('GH_WORKFLOW_ID:', GH_WORKFLOW_ID);
+        console.log('Looking for commit:', commitSha);
+        console.log(
+          'Returned runs:',
+          (runs.workflow_runs || []).map(r => ({
+            id: r.id,
+            name: r.name,
+            head_sha: r.head_sha,
+            status: r.status,
+            conclusion: r.conclusion,
+            event: r.event,
+            created_at: r.created_at
+          }))
+        );
+
+        if (fresh) {
+          runId = fresh.id;
+          break;
+        }
+      }
+
+      if (!runId) {
+        throw new Error('Could not find push-triggered deploy run for commit — check GitHub Actions');
+      }
+
+      await log('deploy','running',`Build started · run #${runId}`);
+
       let deployed = false;
+
       for (let i = 0; i < 60; i++) {
         await sleep(5000);
+
         const runRes = await fetch(
           `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
-          { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+          {
+            headers: {
+              Authorization: `token ${ghToken}`,
+              'User-Agent': 'V2-RFC-Pipeline'
+            }
+          }
         );
+
         const run = await runRes.json();
+        if (!runRes.ok) {
+          throw new Error(`GitHub Actions run API ${runRes.status}: ${run.message || 'Unknown error'}`);
+        }
+
         if (run.status === 'completed') {
           if (run.conclusion === 'success') {
-            await log('deploy','done',`Live Ã¢ÂÂ ${IIS_HOST}/api/${spec.rfcName}`);
+            await log('deploy','done',`Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
             deployed = true;
-            try{const _ej=JSON.parse(await kv.get(jobId)||'{}');_ej.rfcName=spec.rfcName;_ej.rfcApi=IIS_HOST+'/api/'+spec.rfcName;await kv.put(jobId,JSON.stringify(_ej),{expirationTtl:86400});}catch(_){}
+
+            try {
+              const _ej = JSON.parse(await kv.get(jobId) || '{}');
+              _ej.rfcName = spec.rfcName;
+              _ej.rfcApi = IIS_HOST + '/api/' + spec.rfcName;
+              await kv.put(jobId, JSON.stringify(_ej), { expirationTtl: 86400 });
+            } catch (_) {}
+
           } else {
-            throw new Error(`Deployment ${run.conclusion} Ã¢ÂÂ see GitHub Actions`);
+            throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
           }
           break;
         }
-        // Show current step name while waiting
+
         try {
           const jobsRes = await fetch(
             `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}/jobs`,
-            { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+            {
+              headers: {
+                Authorization: `token ${ghToken}`,
+                'User-Agent': 'V2-RFC-Pipeline'
+              }
+            }
           );
+
           const jobs = await jobsRes.json();
           const cur = jobs.jobs?.[0]?.steps?.find(s => s.status === 'in_progress')?.name;
-          if (cur) await log('deploy','running',`${cur} (run #${runId})`);
-        } catch(_) {}
+          if (cur) {
+            await log('deploy','running',`${cur} (run #${runId})`);
+          }
+        } catch (_) {}
       }
-      if (!deployed) throw new Error('Deployment timed out');
-    } catch(e) { await log('deploy','error',e.message); return; }
 
+      if (!deployed) {
+        throw new Error('Deployment timed out');
+      }
+
+    } catch (e) {
+      await log('deploy','error',e.message);
+      return;
+    }
     // Step 5: Register DAB
     await log('dab','running','Registering entity in DAB config...');
     let dabResult;
