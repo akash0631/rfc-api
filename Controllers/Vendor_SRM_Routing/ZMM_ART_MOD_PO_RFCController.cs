@@ -9,6 +9,7 @@ using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 {
+    [Route("api/ZMM_ART_MOD_PO_RFC")]
     public class ZMM_ART_MOD_PO_RFCController : BaseController
     {
         [HttpPost]
@@ -19,7 +20,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request body cannot be null" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request body is null or empty" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -33,31 +34,17 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                     IRfcTable inputTable = myfun.GetTable("IM_INPUT");
                     foreach (var item in request.IM_INPUT)
                     {
-                        inputTable.Append();
-                        IRfcStructure inputRow = inputTable.CurrentRow;
+                        IRfcStructure row = inputTable.Metadata.LineType.CreateStructure();
                         
-                        if (!string.IsNullOrEmpty(item.MANDT))
-                            inputRow.SetValue("MANDT", item.MANDT);
-                        if (!string.IsNullOrEmpty(item.EBELN))
-                            inputRow.SetValue("EBELN", item.EBELN);
-                        if (!string.IsNullOrEmpty(item.EBELP))
-                            inputRow.SetValue("EBELP", item.EBELP);
-                        if (!string.IsNullOrEmpty(item.MATNR))
-                            inputRow.SetValue("MATNR", item.MATNR);
-                        if (!string.IsNullOrEmpty(item.WERKS))
-                            inputRow.SetValue("WERKS", item.WERKS);
-                        if (!string.IsNullOrEmpty(item.LGORT))
-                            inputRow.SetValue("LGORT", item.LGORT);
-                        if (!string.IsNullOrEmpty(item.MENGE))
-                            inputRow.SetValue("MENGE", item.MENGE);
-                        if (!string.IsNullOrEmpty(item.MEINS))
-                            inputRow.SetValue("MEINS", item.MEINS);
-                        if (!string.IsNullOrEmpty(item.NETPR))
-                            inputRow.SetValue("NETPR", item.NETPR);
-                        if (!string.IsNullOrEmpty(item.PEINH))
-                            inputRow.SetValue("PEINH", item.PEINH);
-                        if (!string.IsNullOrEmpty(item.NETWR))
-                            inputRow.SetValue("NETWR", item.NETWR);
+                        if (!string.IsNullOrEmpty(item.EBELN)) row.SetValue("EBELN", item.EBELN);
+                        if (!string.IsNullOrEmpty(item.EBELP)) row.SetValue("EBELP", item.EBELP);
+                        if (!string.IsNullOrEmpty(item.MATNR)) row.SetValue("MATNR", item.MATNR);
+                        if (!string.IsNullOrEmpty(item.COLOR)) row.SetValue("COLOR", item.COLOR);
+                        if (!string.IsNullOrEmpty(item.MENGE)) row.SetValue("MENGE", item.MENGE);
+                        if (!string.IsNullOrEmpty(item.NETPR)) row.SetValue("NETPR", item.NETPR);
+                        if (!string.IsNullOrEmpty(item.WAERS)) row.SetValue("WAERS", item.WAERS);
+                        
+                        inputTable.Append(row);
                     }
                 }
 
@@ -67,107 +54,76 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                     IRfcTable outputTable = myfun.GetTable("IM_OUTPUT");
                     foreach (var item in request.IM_OUTPUT)
                     {
-                        outputTable.Append();
-                        IRfcStructure outputRow = outputTable.CurrentRow;
+                        IRfcStructure row = outputTable.Metadata.LineType.CreateStructure();
                         
-                        if (!string.IsNullOrEmpty(item.MANDT))
-                            outputRow.SetValue("MANDT", item.MANDT);
-                        if (!string.IsNullOrEmpty(item.EBELN))
-                            outputRow.SetValue("EBELN", item.EBELN);
-                        if (!string.IsNullOrEmpty(item.EBELP))
-                            outputRow.SetValue("EBELP", item.EBELP);
-                        if (!string.IsNullOrEmpty(item.MATNR))
-                            outputRow.SetValue("MATNR", item.MATNR);
-                        if (!string.IsNullOrEmpty(item.WERKS))
-                            outputRow.SetValue("WERKS", item.WERKS);
-                        if (!string.IsNullOrEmpty(item.LGORT))
-                            outputRow.SetValue("LGORT", item.LGORT);
-                        if (!string.IsNullOrEmpty(item.MENGE))
-                            outputRow.SetValue("MENGE", item.MENGE);
-                        if (!string.IsNullOrEmpty(item.MEINS))
-                            outputRow.SetValue("MEINS", item.MEINS);
-                        if (!string.IsNullOrEmpty(item.NETPR))
-                            outputRow.SetValue("NETPR", item.NETPR);
-                        if (!string.IsNullOrEmpty(item.PEINH))
-                            outputRow.SetValue("PEINH", item.PEINH);
-                        if (!string.IsNullOrEmpty(item.NETWR))
-                            outputRow.SetValue("NETWR", item.NETWR);
-                        if (!string.IsNullOrEmpty(item.STATUS))
-                            outputRow.SetValue("STATUS", item.STATUS);
-                        if (!string.IsNullOrEmpty(item.MESSAGE))
-                            outputRow.SetValue("MESSAGE", item.MESSAGE);
+                        if (!string.IsNullOrEmpty(item.EBELN)) row.SetValue("EBELN", item.EBELN);
+                        if (!string.IsNullOrEmpty(item.EBELP)) row.SetValue("EBELP", item.EBELP);
+                        if (!string.IsNullOrEmpty(item.MATNR)) row.SetValue("MATNR", item.MATNR);
+                        if (!string.IsNullOrEmpty(item.COLOR)) row.SetValue("COLOR", item.COLOR);
+                        if (!string.IsNullOrEmpty(item.MENGE)) row.SetValue("MENGE", item.MENGE);
+                        if (!string.IsNullOrEmpty(item.NETPR)) row.SetValue("NETPR", item.NETPR);
+                        if (!string.IsNullOrEmpty(item.WAERS)) row.SetValue("WAERS", item.WAERS);
+                        if (!string.IsNullOrEmpty(item.STATUS)) row.SetValue("STATUS", item.STATUS);
+                        if (!string.IsNullOrEmpty(item.MESSAGE)) row.SetValue("MESSAGE", item.MESSAGE);
+                        
+                        outputTable.Append(row);
                     }
                 }
 
                 myfun.Invoke(dest);
-
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetValue("TYPE").ToString();
-                string returnMessage = EX_RETURN.GetValue("MESSAGE").ToString();
+                string returnType = EX_RETURN.GetValue("TYPE")?.ToString() ?? "";
+                string returnMessage = EX_RETURN.GetValue("MESSAGE")?.ToString() ?? "";
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
                 }
 
-                var response = new
-                {
-                    Status = returnType,
-                    Message = returnMessage
-                };
-
-                return Request.CreateResponse(HttpStatusCode.OK, response);
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "S", Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
             }
         }
     }
 
     public class ZMM_ART_MOD_PO_RFCRequest
     {
-        public List<ZMM_PO_ART_TT> IM_INPUT { get; set; }
-        public List<ZMM_PO_ART_OUT_TT> IM_OUTPUT { get; set; }
+        public List<ZMM_PO_ART_Input> IM_INPUT { get; set; }
+        public List<ZMM_PO_ART_Output> IM_OUTPUT { get; set; }
     }
 
-    public class ZMM_PO_ART_TT
+    public class ZMM_PO_ART_Input
     {
-        public string MANDT { get; set; }
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string WERKS { get; set; }
-        public string LGORT { get; set; }
+        public string COLOR { get; set; }
         public string MENGE { get; set; }
-        public string MEINS { get; set; }
         public string NETPR { get; set; }
-        public string PEINH { get; set; }
-        public string NETWR { get; set; }
+        public string WAERS { get; set; }
     }
 
-    public class ZMM_PO_ART_OUT_TT
+    public class ZMM_PO_ART_Output
     {
-        public string MANDT { get; set; }
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string WERKS { get; set; }
-        public string LGORT { get; set; }
+        public string COLOR { get; set; }
         public string MENGE { get; set; }
-        public string MEINS { get; set; }
         public string NETPR { get; set; }
-        public string PEINH { get; set; }
-        public string NETWR { get; set; }
+        public string WAERS { get; set; }
         public string STATUS { get; set; }
         public string MESSAGE { get; set; }
     }
