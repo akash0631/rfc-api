@@ -294,52 +294,76 @@ async function updateSwagger(spec, sapEnv, token) {
 }
 
 // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Full pipeline Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
-async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
-  const apiKey   = env.ANTHROPIC_API_KEY;
-  const ghToken  = env.GITHUB_TOKEN;
-  const kv       = env.RFC_JOBS;
-  const log = async (step, status, detail='') => {
-    const job = JSON.parse(await kv.get(jobId)||'{}');
-    job.steps = job.steps||[];
-    const existing = job.steps.find(s=>s.step===step);
-    if (existing) { existing.status=status; existing.detail=detail; }
-    else job.steps.push({step, status, detail});
-    if (status==='done'||status==='error') {
-     const TOTAL_STEPS = 4;
-const allDone = job.steps.length >= TOTAL_STEPS && job.steps.every(s => s.status === 'done' || s.status === 'error');
-if (allDone) job.status = job.steps.some(s => s.status === 'error') ? 'error' : 'complete';
+async function runPipeline(text, sapEnv, jobId, env, originalFileName, docxImages) {
+  const kv = env.RFC_JOBS;
+  const ghToken = env.GITHUB_TOKEN;
+  const apiKey  = env.ANTHROPIC_API_KEY;
+
+  async function log(step, status, detail) {
+    const raw = await kv.get(jobId);
+    const job = raw ? JSON.parse(raw) : { status: 'running', steps: [] };
+
+    const idx = job.steps.findIndex(s => s.step === step);
+    const row = { step, status, detail };
+    if (idx >= 0) job.steps[idx] = row;
+    else job.steps.push(row);
+
+    const TOTAL_STEPS = 4;
+    const allDone =
+      job.steps.length >= TOTAL_STEPS &&
+      job.steps.every(s => s.status === 'done' || s.status === 'error');
+
+    if (allDone) {
+      job.status = job.steps.some(s => s.status === 'error') ? 'error' : 'complete';
+    } else if (job.status !== 'error') {
+      job.status = 'running';
     }
-    await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
-  };
+
+    await kv.put(jobId, JSON.stringify(job), { expirationTtl: 86400 });
+  }
 
   try {
-    // Step 1: Parse
-    await log('parse','running','Extracting RFC spec with Claude AI...');
+    // Step 1: Parse RFC
+    await log('parse', 'running', 'Reading RFC document...');
     let spec;
-    try { spec = await parseRfc(text, apiKey, filename, images); }
-    catch(e) { await log('parse','error',e.message); return; }
-    await log('parse','done',`${spec.rfcName} ÃÂ· ${spec.category}`);
-try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj.rfcApi=IIS_HOST+'/api/'+spec.rfcName;await kv.put(jobId,JSON.stringify(_pj),{expirationTtl:86400});}catch(_){}
-    // Step 2: Generate controller
-    await log('controller','running','Generating ASP.NET C# controller...');
-    let code;
-    try { code = await genController(spec, sapEnv, apiKey); }
-    catch(e) { await log('controller','error',e.message); return; }
-    await log('controller','done',`${code.split('\n').length} lines generated`);
+    try {
+      spec = await parseRFC(
+        text,
+        apiKey,
+        originalFileName,
+        Array.isArray(docxImages) ? docxImages : []
+      );
+    } catch (e) {
+      await log('parse', 'error', e.message);
+      return;
+    }
+    await log('parse', 'done', `${spec.rfcName} · ${spec.category}`);
 
-       // Step 3: Push controller
-    await log('github','running','Pushing controller to GitHub...');
+    // Step 2: Generate controller
+    await log('controller', 'running', 'Generating ASP.NET Web API controller...');
+    let code;
+    try {
+      code = await genController(spec, sapEnv, apiKey);
+    } catch (e) {
+      await log('controller', 'error', e.message);
+      return;
+    }
+    await log('controller', 'done', `${code.split('\n').length} lines generated`);
+
+    // Step 3: Push controller
+    await log('github', 'running', 'Pushing controller to GitHub...');
     let ctrlResult;
     try {
       ctrlResult = await pushController(spec, code, sapEnv, ghToken);
     } catch (e) {
-      await log('github','error',e.message);
+      await log('github', 'error', e.message);
       return;
     }
-    await log('github','done',`${ctrlResult.filePath} (${ctrlResult.shortCommitSha})`);
+    await log('github', 'done', `${ctrlResult.filePath} (${ctrlResult.commitSha})`);
 
     // Step 4: Trigger IIS deploy via GitHub Actions
-    await log('deploy','running',`Finding push-triggered deploy for commit ${ctrlResult.shortCommitSha}...`);
+    await log('deploy', 'running', `Finding push-triggered deploy for commit ${ctrlResult.commitSha}...`);
+
     try {
       await sleep(6000);
 
@@ -363,35 +387,22 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
           throw new Error(`GitHub Actions runs API ${runsRes.status}: ${runs.message || 'Unknown error'}`);
         }
 
-        const commitSha = ctrlResult.commitSha; // full SHA
-        const fresh = runs.workflow_runs?.find(r => r.head_sha === commitSha);
-
-        console.log('GH_WORKFLOW_ID:', GH_WORKFLOW_ID);
-        console.log('Looking for commit:', commitSha);
-        console.log(
-          'Returned runs:',
-          (runs.workflow_runs || []).map(r => ({
-            id: r.id,
-            name: r.name,
-            head_sha: r.head_sha,
-            status: r.status,
-            conclusion: r.conclusion,
-            event: r.event,
-            created_at: r.created_at
-          }))
+        const commitSha = ctrlResult.commitSha;
+        const fresh = runs.workflow_runs?.find(
+          r =>
+            r.head_sha === commitSha ||
+            r.head_sha.startsWith(commitSha) ||
+            commitSha.startsWith(r.head_sha.substring(0, 7))
         );
 
-        if (fresh) {
-          runId = fresh.id;
-          break;
-        }
+        if (fresh) runId = fresh.id;
       }
 
       if (!runId) {
         throw new Error('Could not find push-triggered deploy run for commit — check GitHub Actions');
       }
 
-      await log('deploy','running',`Build started · run #${runId}`);
+      await log('deploy', 'running', `Build started · run #${runId}`);
 
       let deployed = false;
 
@@ -413,24 +424,24 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
           throw new Error(`GitHub Actions run API ${runRes.status}: ${run.message || 'Unknown error'}`);
         }
 
-       if (run.status === 'completed') {
-  if (run.conclusion === 'success') {
-    await log('deploy','done',`Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
-    deployed = true;
+        if (run.status === 'completed') {
+          if (run.conclusion === 'success') {
+            await log('deploy', 'done', `Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
+            deployed = true;
 
-    const job = JSON.parse(await kv.get(jobId) || '{}');
-    job.status = 'complete';
-    job.rfcName = spec.rfcName;
-    job.rfcApi = `${IIS_HOST}/api/${spec.rfcName}`;
-    job.commit = ctrlResult.commitUrl;
-    job.completedAt = new Date().toISOString();
+            const job = JSON.parse(await kv.get(jobId) || '{}');
+            job.status = 'complete';
+            job.rfcName = spec.rfcName;
+            job.rfcApi = `${IIS_HOST}/api/${spec.rfcName}`;
+            job.commit = ctrlResult.commitUrl;
+            job.completedAt = new Date().toISOString();
 
-    await kv.put(jobId, JSON.stringify(job), { expirationTtl: 86400 });
-    return;
-  } else {
-    throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
-  }
-}
+            await kv.put(jobId, JSON.stringify(job), { expirationTtl: 86400 });
+            return;
+          } else {
+            throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
+          }
+        }
 
         try {
           const jobsRes = await fetch(
@@ -446,7 +457,7 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
           const jobs = await jobsRes.json();
           const cur = jobs.jobs?.[0]?.steps?.find(s => s.status === 'in_progress')?.name;
           if (cur) {
-            await log('deploy','running',`${cur} (run #${runId})`);
+            await log('deploy', 'running', `${cur} (run #${runId})`);
           }
         } catch (_) {}
       }
@@ -456,39 +467,17 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
       }
 
     } catch (e) {
-      await log('deploy','error',e.message);
+      await log('deploy', 'error', e.message);
       return;
     }
-    // Step 5: Register DAB
-    await log('dab','running','Registering entity in DAB config...');
-    let dabResult;
-    try { dabResult = await registerDab(spec, ghToken); }
-    catch(e) { await log('dab','error',e.message); return; }
-    await log('dab','done',`${dabResult.endpoint}`);
 
-    // Step 6: Update Swagger
-    await log('swagger','running','Updating Swagger documentation...');
-    try { await updateSwagger(spec, sapEnv, ghToken); }
-    catch(e) { await log('swagger','error',e.message); }
-    await log('swagger','done','Endpoint card added to portal');
-
-    // Final: write summary
-    const job = JSON.parse(await kv.get(jobId)||'{}');
-    job.status  = 'complete';
-    job.rfcName  = spec.rfcName;
-    job.rfcApi   = `${IIS_HOST}/api/${spec.rfcName}`;
-    job.dataLake = dabResult.endpoint;
-    job.swagger  = `${IIS_HOST}/swagger/ui/index`;
-    job.commit   = ctrlResult.commitUrl;
-    await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
-
-  } catch(e) {
-    const job = JSON.parse(await kv.get(jobId)||'{}');
-    job.status='error'; job.error=e.message;
-    await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
+  } catch (e) {
+    const job = JSON.parse(await kv.get(jobId) || '{}');
+    job.status = 'error';
+    job.error = e.message;
+    await kv.put(jobId, JSON.stringify(job), { expirationTtl: 86400 });
   }
 }
-
 
 // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Manage Data Lake Columns Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 async function manageColumns(tableName, operations, token) {
@@ -1359,7 +1348,7 @@ function reset() {
   document.getElementById('fileSel').style.display='none';
   document.getElementById('deployBtn').disabled=true;
   selEnv('dev');
-  ['parse','controller','github','deploy','dab','swagger'].forEach(s=>{
+ ['parse','controller','github','deploy'].forEach(s => {
     const el=document.getElementById('s-'+s);
     if(el){el.className='step';el.querySelector('.step-icon').innerHTML='Ã¢ÂÂ';const d=el.querySelector('.step-detail');if(d)d.remove();}
   });
