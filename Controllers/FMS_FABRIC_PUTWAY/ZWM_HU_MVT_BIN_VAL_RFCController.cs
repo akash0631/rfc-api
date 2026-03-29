@@ -13,16 +13,17 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_BIN_VAL_RFC")]
-        public HttpResponseMessage ZWM_HU_MVT_BIN_VAL_RFC([FromBody] ZWM_HU_MVT_BIN_VAL_RFCRequest request)
+        public HttpResponseMessage ExecuteRFC(ZWM_HU_MVT_BIN_VAL_RFCRequest request)
         {
             try
             {
+                // Validate input parameters
                 if (request == null)
                 {
                     return Request.CreateResponse(HttpStatusCode.BadRequest, new
                     {
                         Status = "E",
-                        Message = "Request body cannot be null"
+                        Message = "Request cannot be null"
                     });
                 }
 
@@ -53,17 +54,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
                     });
                 }
 
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
+                // SAP RFC connection
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZWM_HU_MVT_BIN_VAL_RFC");
 
+                // Set input parameters
                 myfun.SetValue("IM_USER", request.IM_USER);
                 myfun.SetValue("IM_PLANT", request.IM_PLANT);
                 myfun.SetValue("IM_BIN", request.IM_BIN);
 
+                // Execute RFC
                 myfun.Invoke(dest);
 
+                // Get return structure
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
                 string returnType = EX_RETURN.GetString("TYPE");
@@ -86,7 +91,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -94,7 +99,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -102,7 +107,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
                     Status = "E",
                     Message = ex.Message
