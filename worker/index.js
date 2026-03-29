@@ -7,7 +7,7 @@ const IIS_HOST         = 'https://sap-api.v2retail.net';
 const GH_WORKFLOW_ID   = '245504825';  // deploy-test-vm.yml
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
-  dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
+  dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.17h4', client: '210' },
   quality:    { fn: 'rfcConfigparametersquality',    host: '192.168.144.179', client: '600' },
   production: { fn: 'rfcConfigparametersproduction', host: '192.168.144.170', client: '600' },
 };
@@ -339,7 +339,7 @@ let runId = null;
 for (let i = 0; i < 20 && !runId; i++) {
   await sleep(4000);
   const runsRes = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=10&event=workflow_dispatch&branch=${GITHUB_BRANCH}`,
+    `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=10&event=workflow_dispatch&workflow_id=${GH_WORKFLOW_ID}&branch=${GITHUB_BRANCH}`,
     { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
   );
   const runs = await runsRes.json();
