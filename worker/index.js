@@ -7,7 +7,7 @@ const IIS_HOST         = 'https://sap-api.v2retail.net';
 const GH_WORKFLOW_ID   = '245504825';  // deploy-test-vm.yml
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
-  dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.17h4', client: '210' },
+  dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
   quality:    { fn: 'rfcConfigparametersquality',    host: '192.168.144.179', client: '600' },
   production: { fn: 'rfcConfigparametersproduction', host: '192.168.144.170', client: '600' },
 };
@@ -320,18 +320,8 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
     await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha})`);
 
     // Step 4: Trigger IIS deploy via GitHub Actions
-    await log('deploy','running','Finding push-triggered deploy for commit ${ctrlResult.commitSha}...');
+    await log('deploy','running',`Finding push-triggered deploy for commit ${ctrlResult.commitSha}...`);
     try {
-      // Dispatch workflow
-      const dispatchRes = await fetch(
-        `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${GH_WORKFLOW_ID}/dispatches`,
-        { method:'POST',
-          headers:{ Authorization:`token ${ghToken}`, Accept:'application/vnd.github+json',
-            'Content-Type':'application/json', 'User-Agent':'V2-RFC-Pipeline' },
-          body: JSON.stringify({ref: GITHUB_BRANCH}) }
-      );
-      if (!dispatchRes.ok && dispatchRes.status !== 204)
-        // push-triggered run found by commit SHA above
 
      // Wait briefly then find the new run (running OR recently completed within 3 min)
 await sleep(6000);
