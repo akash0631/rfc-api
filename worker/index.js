@@ -333,20 +333,24 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
       if (!dispatchRes.ok && dispatchRes.status !== 204)
         throw new Error(`Workflow dispatch HTTP ${dispatchRes.status}`);
 
-      // Wait briefly then find the new running run
-      await sleep(8000);
-      let runId = null;
-      for (let i = 0; i < 15 && !runId; i++) {
-        await sleep(4000);
-        const runsRes = await fetch(
-          `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=5&event=workflow_dispatch&branch=${GITHUB_BRANCH}`,
-          { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
-        );
-        const runs = await runsRes.json();
-        const fresh = runs.workflow_runs?.find(r => r.status !== 'completed');
-        if (fresh) runId = fresh.id;
-      }
-      if (!runId) throw new Error('Could not find workflow run after dispatch');
+     // Wait briefly then find the new run (running OR recently completed within 3 min)
+await sleep(6000);
+let runId = null;
+for (let i = 0; i < 20 && !runId; i++) {
+  await sleep(4000);
+  const runsRes = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=10&event=workflow_dispatch&branch=${GITHUB_BRANCH}`,
+    { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
+  );
+  const runs = await runsRes.json();
+  const cutoff = new Date(Date.now() - 180000).toISOString();
+  const fresh = runs.workflow_runs?.find(r =>
+    r.status !== 'completed' ||
+    (r.status === 'completed' && r.created_at >= cutoff)
+  );
+  if (fresh) runId = fresh.id;
+}
+if (!runId) throw new Error('Could not find workflow run after dispatch — check GitHub Actions');
       await log('deploy','running',`Build started ÃÂ· run #${runId}`);
 
       // Poll until completed (max ~8 min = 96 ÃÂ 5s)
