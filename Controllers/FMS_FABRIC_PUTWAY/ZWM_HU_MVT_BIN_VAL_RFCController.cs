@@ -13,7 +13,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_BIN_VAL_RFC")]
-        public HttpResponseMessage Execute(ZWM_HU_MVT_BIN_VAL_RFC_Request request)
+        public HttpResponseMessage ZWM_HU_MVT_BIN_VAL_RFC([FromBody] ZWM_HU_MVT_BIN_VAL_RFCRequest request)
         {
             try
             {
@@ -22,7 +22,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
                     return Request.CreateResponse(HttpStatusCode.BadRequest, new
                     {
                         Status = "E",
-                        Message = "Request cannot be null"
+                        Message = "Request body cannot be null"
                     });
                 }
 
@@ -53,7 +53,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
                     });
                 }
 
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZWM_HU_MVT_BIN_VAL_RFC");
@@ -66,8 +66,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
 
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetValue("TYPE").ToString();
-                string returnMessage = EX_RETURN.GetValue("MESSAGE").ToString();
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
 
                 if (returnType == "E")
                 {
@@ -111,7 +111,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
         }
     }
 
-    public class ZWM_HU_MVT_BIN_VAL_RFC_Request
+    public class ZWM_HU_MVT_BIN_VAL_RFCRequest
     {
         public string IM_USER { get; set; }
         public string IM_PLANT { get; set; }
