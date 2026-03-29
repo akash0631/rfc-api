@@ -1362,7 +1362,25 @@ export default {
       return new Response(JSON.stringify({jobId, status:'running'}),
         {headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
     }
-
+// POST /pipeline/force-complete/:jobId
+const forceMatch = url.pathname.match(/^\/pipeline\/force-complete\/(.+)$/);
+if (forceMatch && request.method === 'POST') {
+  const jobId = forceMatch[1];
+  const raw = await env.RFC_JOBS.get(jobId);
+  if (!raw) return new Response(JSON.stringify({error:'Job not found'}),
+    {status:404, headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'}});
+  const job = JSON.parse(raw);
+  const deployStep = job.steps?.find(s => s.step === 'deploy');
+  if (deployStep && deployStep.status === 'running') {
+    deployStep.status = 'done';
+    deployStep.detail = `Live → ${job.rfcApi || IIS_HOST + '/api/' + job.rfcName}`;
+  }
+  job.status = 'complete';
+  job.forceCompleted = new Date().toISOString();
+  await env.RFC_JOBS.put(jobId, JSON.stringify(job), {expirationTtl: 86400});
+  return new Response(JSON.stringify({ok: true, jobId, status: 'complete'}),
+    {headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'}});
+}
     // GET /status/:jobId
    const match = url.pathname.match(/^\/(?:pipeline\/)?status\/(.+)$/);
     if (match && request.method === 'GET') {
