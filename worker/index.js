@@ -346,7 +346,7 @@ for (let i = 0; i < 20 && !runId; i++) {
   const commitSha = ctrlResult.commitSha;
   const fresh = runs.workflow_runs?.find(r =>
     
-    r.head_sha === commitSha;
+    r.head_sha === commitSha
   );
   if (fresh) runId = fresh.id;
 }
