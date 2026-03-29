@@ -3,86 +3,120 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
+using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
 
-namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
+namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 {
-    /// <summary>Article modification PO RFC — ZMM_ART_MOD_PO_RFC</summary>
     public class ZMM_ART_MOD_PO_RFCController : BaseController
     {
-        /// <summary>
-        /// Modifies article on PO.
-        /// IMPORT table IM_INPUT: EBELN, MATNR, COLOR.
-        /// EXPORT table IM_OUTPUT: EBELN, PO_STATUS, OLD_ART, NEW_ART, ART_STATUS.
-        /// </summary>
         [HttpPost]
         [Route("api/ZMM_ART_MOD_PO_RFC")]
-        public IHttpActionResult ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFCRequest request)
+        public async Task<IHttpActionResult> ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_Request request)
         {
             try
             {
-                RfcDestination dest = RfcDestinationManager.GetDestination("SAP");
-                IRfcFunction fn = dest.Repository.CreateFunction("ZMM_ART_MOD_PO_RFC");
-
-                IRfcTable imInput = fn.GetTable("IM_INPUT");
-                if (request != null && request.IM_INPUT != null)
+                if (request == null)
                 {
-                    foreach (var row in request.IM_INPUT)
-                    {
-                        imInput.Append();
-                        imInput.SetValue("EBELN", row.EBELN ?? "");
-                        imInput.SetValue("MATNR", row.MATNR ?? "");
-                        imInput.SetValue("COLOR", row.COLOR ?? "");
-                    }
+                    return Content(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request body cannot be null" });
                 }
 
-                fn.Invoke(dest);
-
-                IRfcTable imOutput = fn.GetTable("IM_OUTPUT");
-                var outputList = new List<object>();
-                for (int i = 0; i < imOutput.Count; i++)
+                if (request.IM_INPUT == null)
                 {
-                    imOutput.CurrentIndex = i;
-                    outputList.Add(new
-                    {
-                        EBELN      = imOutput.GetValue("EBELN")?.ToString(),
-                        PO_STATUS  = imOutput.GetValue("PO_STATUS")?.ToString(),
-                        OLD_ART    = imOutput.GetValue("OLD_ART")?.ToString(),
-                        NEW_ART    = imOutput.GetValue("NEW_ART")?.ToString(),
-                        ART_STATUS = imOutput.GetValue("ART_STATUS")?.ToString()
-                    });
+                    return Content(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_INPUT parameter is required" });
                 }
 
-                return Ok(new { success = true, data = outputList, message = "" });
+                if (request.IM_OUTPUT == null)
+                {
+                    return Content(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_OUTPUT parameter is required" });
+                }
+
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZMM_ART_MOD_PO_RFC");
+
+                IRfcStructure IM_INPUT = myfun.GetStructure("IM_INPUT");
+                if (!string.IsNullOrEmpty(request.IM_INPUT.ARTICLE))
+                    IM_INPUT.SetValue("ARTICLE", request.IM_INPUT.ARTICLE);
+                if (!string.IsNullOrEmpty(request.IM_INPUT.COLOR))
+                    IM_INPUT.SetValue("COLOR", request.IM_INPUT.COLOR);
+                if (!string.IsNullOrEmpty(request.IM_INPUT.PO_NUMBER))
+                    IM_INPUT.SetValue("PO_NUMBER", request.IM_INPUT.PO_NUMBER);
+                if (!string.IsNullOrEmpty(request.IM_INPUT.PLANT))
+                    IM_INPUT.SetValue("PLANT", request.IM_INPUT.PLANT);
+                if (!string.IsNullOrEmpty(request.IM_INPUT.VENDOR))
+                    IM_INPUT.SetValue("VENDOR", request.IM_INPUT.VENDOR);
+
+                IRfcStructure IM_OUTPUT = myfun.GetStructure("IM_OUTPUT");
+                if (!string.IsNullOrEmpty(request.IM_OUTPUT.ARTICLE))
+                    IM_OUTPUT.SetValue("ARTICLE", request.IM_OUTPUT.ARTICLE);
+                if (!string.IsNullOrEmpty(request.IM_OUTPUT.COLOR))
+                    IM_OUTPUT.SetValue("COLOR", request.IM_OUTPUT.COLOR);
+                if (!string.IsNullOrEmpty(request.IM_OUTPUT.PO_NUMBER))
+                    IM_OUTPUT.SetValue("PO_NUMBER", request.IM_OUTPUT.PO_NUMBER);
+                if (!string.IsNullOrEmpty(request.IM_OUTPUT.PLANT))
+                    IM_OUTPUT.SetValue("PLANT", request.IM_OUTPUT.PLANT);
+                if (!string.IsNullOrEmpty(request.IM_OUTPUT.VENDOR))
+                    IM_OUTPUT.SetValue("VENDOR", request.IM_OUTPUT.VENDOR);
+                if (request.IM_OUTPUT.QUANTITY.HasValue)
+                    IM_OUTPUT.SetValue("QUANTITY", request.IM_OUTPUT.QUANTITY.Value);
+                if (request.IM_OUTPUT.PRICE.HasValue)
+                    IM_OUTPUT.SetValue("PRICE", request.IM_OUTPUT.PRICE.Value);
+
+                myfun.Invoke(dest);
+
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+
+                string returnType = EX_RETURN.GetValue("TYPE")?.ToString();
+                string returnMessage = EX_RETURN.GetValue("MESSAGE")?.ToString();
+
+                if (returnType == "E")
+                {
+                    return Content(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
+                }
+
+                return Ok(new { Status = returnType, Message = returnMessage });
             }
-            catch (RfcBaseException rfcEx)
+            catch (RfcAbapException ex)
             {
-                return Content(HttpStatusCode.BadGateway, new { success = false, message = rfcEx.Message });
+                return Content(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+            }
+            catch (RfcCommunicationException ex)
+            {
+                return Content(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return InternalServerError(ex);
+                return Content(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
         }
     }
 
-    // ─── Request models ───────────────────────────────────────────────────
-    /// <summary>Request body for ZMM_ART_MOD_PO_RFC</summary>
-    public class ZMM_ART_MOD_PO_RFCRequest
+    public class ZMM_ART_MOD_PO_Request
     {
-        /// <summary>Input table: PO + article data to modify</summary>
-        public List<ZMM_ART_MOD_InputRow> IM_INPUT { get; set; }
+        public ZMM_PO_ART_ST IM_INPUT { get; set; }
+        public ZMM_PO_ART_OUT_ST IM_OUTPUT { get; set; }
     }
 
-    /// <summary>Row for IM_INPUT table</summary>
-    public class ZMM_ART_MOD_InputRow
+    public class ZMM_PO_ART_ST
     {
-        /// <summary>Purchase Order number (EBELN)</summary>
-        public string EBELN  { get; set; }
-        /// <summary>Material/Article number (MATNR)</summary>
-        public string MATNR  { get; set; }
-        /// <summary>Color code</summary>
-        public string COLOR  { get; set; }
+        public string ARTICLE { get; set; }
+        public string COLOR { get; set; }
+        public string PO_NUMBER { get; set; }
+        public string PLANT { get; set; }
+        public string VENDOR { get; set; }
+    }
+
+    public class ZMM_PO_ART_OUT_ST
+    {
+        public string ARTICLE { get; set; }
+        public string COLOR { get; set; }
+        public string PO_NUMBER { get; set; }
+        public string PLANT { get; set; }
+        public string VENDOR { get; set; }
+        public decimal? QUANTITY { get; set; }
+        public decimal? PRICE { get; set; }
     }
 }
