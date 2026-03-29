@@ -13,28 +13,28 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_BIN_VAL_RFC")]
-        public HttpResponseMessage ZWM_HU_MVT_BIN_VAL_RFC([FromBody] ZWM_HU_MVT_BIN_VAL_RFCRequest request)
+        public HttpResponseMessage BinValidation([FromBody] ZWM_HU_MVT_BIN_VAL_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "Invalid request data"
+                    });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_USER))
+                if (string.IsNullOrEmpty(request.IM_USER) || 
+                    string.IsNullOrEmpty(request.IM_PLANT) || 
+                    string.IsNullOrEmpty(request.IM_BIN))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_USER is required" });
-                }
-
-                if (string.IsNullOrEmpty(request.IM_PLANT))
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_PLANT is required" });
-                }
-
-                if (string.IsNullOrEmpty(request.IM_BIN))
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_BIN is required" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "Required parameters missing: IM_USER, IM_PLANT, IM_BIN"
+                    });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -55,22 +55,42 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    {
+                        Status = "E",
+                        Message = returnMessage
+                    });
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = returnType, Message = returnMessage });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "S",
+                    Message = returnMessage
+                });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
         }
     }
