@@ -13,13 +13,17 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
     {
         [HttpPost]
         [Route("api/ZMM_ART_MOD_PO_RFC")]
-        public IHttpActionResult ExecuteZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_Request request)
+        public async Task<HttpResponseMessage> ModifyArticlePO([FromBody] ZMM_ART_MOD_PO_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Json(new { Status = "E", Message = "Request cannot be null" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "Request body cannot be null"
+                    });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -27,22 +31,61 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZMM_ART_MOD_PO_RFC");
 
-                // Set IM_INPUT structure
-                IRfcStructure imInputStructure = myfun.GetStructure("IM_INPUT");
+                // Set IM_INPUT table parameter
                 if (request.IM_INPUT != null)
                 {
-                    SetStructureValues(imInputStructure, request.IM_INPUT);
+                    IRfcTable inputTable = myfun.GetTable("IM_INPUT");
+                    foreach (var item in request.IM_INPUT)
+                    {
+                        IRfcStructure row = inputTable.Metadata.LineType.CreateStructure();
+                        
+                        if (!string.IsNullOrEmpty(item.PO_NUMBER))
+                            row.SetValue("PO_NUMBER", item.PO_NUMBER);
+                        if (!string.IsNullOrEmpty(item.PO_ITEM))
+                            row.SetValue("PO_ITEM", item.PO_ITEM);
+                        if (!string.IsNullOrEmpty(item.ARTICLE))
+                            row.SetValue("ARTICLE", item.ARTICLE);
+                        if (!string.IsNullOrEmpty(item.COLOR))
+                            row.SetValue("COLOR", item.COLOR);
+                        if (item.QUANTITY.HasValue)
+                            row.SetValue("QUANTITY", item.QUANTITY.Value);
+                        if (item.UNIT_PRICE.HasValue)
+                            row.SetValue("UNIT_PRICE", item.UNIT_PRICE.Value);
+                        if (!string.IsNullOrEmpty(item.CURRENCY))
+                            row.SetValue("CURRENCY", item.CURRENCY);
+                        if (!string.IsNullOrEmpty(item.DELIVERY_DATE))
+                            row.SetValue("DELIVERY_DATE", item.DELIVERY_DATE);
+                        
+                        inputTable.Append(row);
+                    }
                 }
 
-                // Set IM_OUTPUT structure
-                IRfcStructure imOutputStructure = myfun.GetStructure("IM_OUTPUT");
+                // Set IM_OUTPUT table parameter
                 if (request.IM_OUTPUT != null)
                 {
-                    SetStructureValues(imOutputStructure, request.IM_OUTPUT);
+                    IRfcTable outputTable = myfun.GetTable("IM_OUTPUT");
+                    foreach (var item in request.IM_OUTPUT)
+                    {
+                        IRfcStructure row = outputTable.Metadata.LineType.CreateStructure();
+                        
+                        if (!string.IsNullOrEmpty(item.PO_NUMBER))
+                            row.SetValue("PO_NUMBER", item.PO_NUMBER);
+                        if (!string.IsNullOrEmpty(item.PO_ITEM))
+                            row.SetValue("PO_ITEM", item.PO_ITEM);
+                        if (!string.IsNullOrEmpty(item.ARTICLE))
+                            row.SetValue("ARTICLE", item.ARTICLE);
+                        if (!string.IsNullOrEmpty(item.COLOR))
+                            row.SetValue("COLOR", item.COLOR);
+                        if (!string.IsNullOrEmpty(item.STATUS))
+                            row.SetValue("STATUS", item.STATUS);
+                        if (!string.IsNullOrEmpty(item.MESSAGE))
+                            row.SetValue("MESSAGE", item.MESSAGE);
+                        
+                        outputTable.Append(row);
+                    }
                 }
 
                 myfun.Invoke(dest);
-
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
                 string returnType = EX_RETURN.GetString("TYPE");
@@ -50,96 +93,70 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 
                 if (returnType == "E")
                 {
-                    return Json(new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    {
+                        Status = "E",
+                        Message = returnMessage
+                    });
                 }
 
-                return Json(new { Status = "S", Message = returnMessage });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "S",
+                    Message = returnMessage
+                });
             }
             catch (RfcAbapException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
-            catch (CommunicationException ex)
+            catch (RfcCommunicationException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (Exception ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
-            }
-        }
-
-        private void SetStructureValues(IRfcStructure structure, dynamic inputObject)
-        {
-            if (inputObject == null) return;
-
-            var properties = inputObject.GetType().GetProperties();
-            foreach (var property in properties)
-            {
-                try
+                return Request.CreateResponse(HttpStatusCode.OK, new
                 {
-                    var value = property.GetValue(inputObject);
-                    if (value != null)
-                    {
-                        if (property.PropertyType == typeof(string))
-                        {
-                            structure.SetValue(property.Name, value.ToString());
-                        }
-                        else if (property.PropertyType == typeof(int) || property.PropertyType == typeof(int?))
-                        {
-                            structure.SetValue(property.Name, Convert.ToInt32(value));
-                        }
-                        else if (property.PropertyType == typeof(decimal) || property.PropertyType == typeof(decimal?))
-                        {
-                            structure.SetValue(property.Name, Convert.ToDecimal(value));
-                        }
-                        else if (property.PropertyType == typeof(DateTime) || property.PropertyType == typeof(DateTime?))
-                        {
-                            structure.SetValue(property.Name, Convert.ToDateTime(value));
-                        }
-                        else
-                        {
-                            structure.SetValue(property.Name, value.ToString());
-                        }
-                    }
-                }
-                catch (Exception)
-                {
-                    // Skip properties that cannot be set
-                    continue;
-                }
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
         }
     }
 
-    public class ZMM_ART_MOD_PO_Request
+    public class ZMM_ART_MOD_PO_RFCRequest
     {
-        public ZMM_PO_ART_ST IM_INPUT { get; set; }
-        public ZMM_PO_ART_OUT_ST IM_OUTPUT { get; set; }
+        public List<ZMM_PO_ART_Input> IM_INPUT { get; set; }
+        public List<ZMM_PO_ART_Output> IM_OUTPUT { get; set; }
     }
 
-    public class ZMM_PO_ART_ST
+    public class ZMM_PO_ART_Input
     {
-        public string EBELN { get; set; }
-        public string EBELP { get; set; }
-        public string MATNR { get; set; }
-        public string MENGE { get; set; }
-        public string NETPR { get; set; }
-        public string EINDT { get; set; }
-        public string WERKS { get; set; }
-        public string LGORT { get; set; }
+        public string PO_NUMBER { get; set; }
+        public string PO_ITEM { get; set; }
+        public string ARTICLE { get; set; }
+        public string COLOR { get; set; }
+        public decimal? QUANTITY { get; set; }
+        public decimal? UNIT_PRICE { get; set; }
+        public string CURRENCY { get; set; }
+        public string DELIVERY_DATE { get; set; }
     }
 
-    public class ZMM_PO_ART_OUT_ST
+    public class ZMM_PO_ART_Output
     {
-        public string EBELN { get; set; }
-        public string EBELP { get; set; }
-        public string MATNR { get; set; }
-        public string MENGE { get; set; }
-        public string NETPR { get; set; }
-        public string EINDT { get; set; }
-        public string WERKS { get; set; }
-        public string LGORT { get; set; }
+        public string PO_NUMBER { get; set; }
+        public string PO_ITEM { get; set; }
+        public string ARTICLE { get; set; }
+        public string COLOR { get; set; }
         public string STATUS { get; set; }
         public string MESSAGE { get; set; }
     }
