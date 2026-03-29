@@ -1,29 +1,32 @@
 name: CreateFabricLogin_606448
+
 on:
   push:
-    paths: ['.github/workflows/create_fabric_login_606448.yml']
+    paths:
+      - '.github/workflows/create_fabric_login_606448.yml'
+
 jobs:
   run:
     runs-on: [self-hosted, iis]
+
     steps:
       - name: Create FabricReader login on .28
         shell: powershell
         run: |
           # First verify we can connect to .28 as Administrator from this machine
           $createSQL = @"
-          -- Enable SQL Server auth mode if needed
           IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = 'FabricReader')
           BEGIN
-            CREATE LOGIN [FabricReader] WITH PASSWORD = 'Fabric@V2Retail2026', 
+            CREATE LOGIN [FabricReader] WITH PASSWORD = 'Fabric@V2Retail2026',
               DEFAULT_DATABASE = [DataV2],
-              CHECK_EXPIRATION = OFF, 
+              CHECK_EXPIRATION = OFF,
               CHECK_POLICY = OFF
             PRINT 'Login created'
           END
           ELSE
             PRINT 'Login already exists'
-"@
-          
+          "@
+
           # Also grant db access
           $grantSQL = @"
           IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = 'FabricReader')
@@ -33,30 +36,31 @@ jobs:
           END
           EXEC sp_addrolemember 'db_datareader', 'FabricReader'
           PRINT 'db_datareader role granted'
-"@
+          "@
 
           try {
-            # Connect using Windows auth as the current user (Administrator on .36)
+            # Connect using Windows auth as the current user
             Invoke-Sqlcmd -ServerInstance "192.168.151.28" -Database "master" -Query $createSQL -TrustServerCertificate -ErrorAction Stop
-            Write-Host "✅ Login FabricReader created on .28"
-            
+            Write-Host "Login FabricReader created on .28"
+
             Invoke-Sqlcmd -ServerInstance "192.168.151.28" -Database "DataV2" -Query $grantSQL -TrustServerCertificate -ErrorAction Stop
-            Write-Host "✅ FabricReader granted db_datareader on DataV2"
-            
+            Write-Host "FabricReader granted db_datareader on DataV2"
+
             # Test the new login
             $testConn = New-Object System.Data.SqlClient.SqlConnection
             $testConn.ConnectionString = "Server=192.168.151.28;Database=DataV2;User Id=FabricReader;Password=Fabric@V2Retail2026;Connect Timeout=10;TrustServerCertificate=True"
             $testConn.Open()
-            Write-Host "✅ SQL Login test: SUCCESS - FabricReader can connect to DataV2"
+            Write-Host "SQL Login test: SUCCESS - FabricReader can connect to DataV2"
             $testConn.Close()
-          } catch {
-            Write-Host "❌ Error: $_"
-            
-            # Check if SQL auth is enabled on .28
+          }
+          catch {
+            Write-Host "Error: $_"
+
             try {
               $checkAuth = Invoke-Sqlcmd -ServerInstance "192.168.151.28" -Database "master" -Query "SELECT value_in_use FROM sys.configurations WHERE name = 'user options'; SELECT SERVERPROPERTY('IsIntegratedSecurityOnly') as WinAuthOnly" -TrustServerCertificate -ErrorAction Stop
-              Write-Host "Auth check: $($checkAuth | ConvertTo-Json)"
-            } catch {
-              Write-Host "Cannot connect to .28 at all from .36: $_"
+              Write-Host "Auth check: $($checkAuth | ConvertTo-Json -Compress)"
+            }
+            catch {
+              Write-Host "Cannot connect to .28 at all from runner: $_"
             }
           }
