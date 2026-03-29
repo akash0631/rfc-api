@@ -9,17 +9,18 @@ using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 {
+    [RoutePrefix("api")]
     public class ZMM_ART_MOD_PO_RFCController : BaseController
     {
         [HttpPost]
-        [Route("api/ZMM_ART_MOD_PO_RFC")]
-        public IHttpActionResult ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_Request request)
+        [Route("ZMM_ART_MOD_PO_RFC")]
+        public async Task<IHttpActionResult> ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Ok(new { Status = "E", Message = "Request body cannot be null" });
+                    return Json(new { Status = "E", Message = "Request cannot be null" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -27,25 +28,22 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZMM_ART_MOD_PO_RFC");
 
-                // Set IM_INPUT structure
                 if (request.IM_INPUT != null)
                 {
-                    IRfcStructure imInputStructure = myfun.GetStructure("IM_INPUT");
-                    SetStructureValues(imInputStructure, request.IM_INPUT);
+                    IRfcStructure imInputStruct = myfun.GetStructure("IM_INPUT");
+                    SetIMInputStructure(imInputStruct, request.IM_INPUT);
+                    myfun.SetValue("IM_INPUT", imInputStruct);
                 }
 
-                // Set IM_OUTPUT table
-                if (request.IM_OUTPUT != null && request.IM_OUTPUT.Count > 0)
+                if (request.IM_OUTPUT != null)
                 {
-                    IRfcTable imOutputTable = myfun.GetTable("IM_OUTPUT");
-                    foreach (var item in request.IM_OUTPUT)
-                    {
-                        imOutputTable.Append();
-                        SetTableRowValues(imOutputTable.CurrentRow, item);
-                    }
+                    IRfcStructure imOutputStruct = myfun.GetStructure("IM_OUTPUT");
+                    SetIMOutputStructure(imOutputStruct, request.IM_OUTPUT);
+                    myfun.SetValue("IM_OUTPUT", imOutputStruct);
                 }
 
                 myfun.Invoke(dest);
+
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
                 string status = EX_RETURN.GetString("TYPE");
@@ -53,117 +51,93 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 
                 if (status == "E")
                 {
-                    return Ok(new { Status = "E", Message = message });
+                    return Json(new { Status = "E", Message = message });
                 }
 
-                return Ok(new { Status = status, Message = message });
+                return Json(new { Status = status, Message = message });
             }
             catch (RfcAbapException ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Ok(new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
         }
 
-        private void SetStructureValues(IRfcStructure structure, ZMM_PO_ART_ST input)
+        private void SetIMInputStructure(IRfcStructure structure, IMInputModel model)
         {
-            var structureType = structure.Metadata;
-            foreach (var field in structureType)
+            if (model == null) return;
+
+            foreach (var field in structure)
             {
-                try
+                var property = typeof(IMInputModel).GetProperty(field.Metadata.Name);
+                if (property != null)
                 {
-                    var property = input.GetType().GetProperty(field.Name);
-                    if (property != null)
+                    var value = property.GetValue(model);
+                    if (value != null)
                     {
-                        var value = property.GetValue(input);
-                        if (value != null)
-                        {
-                            structure.SetValue(field.Name, value);
-                        }
+                        structure.SetValue(field.Metadata.Name, value);
                     }
-                }
-                catch
-                {
-                    // Skip field if conversion fails
                 }
             }
         }
 
-        private void SetTableRowValues(IRfcStructure row, ZMM_PO_ART_OUT_IT item)
+        private void SetIMOutputStructure(IRfcStructure structure, IMOutputModel model)
         {
-            var rowType = row.Metadata;
-            foreach (var field in rowType)
+            if (model == null) return;
+
+            foreach (var field in structure)
             {
-                try
+                var property = typeof(IMOutputModel).GetProperty(field.Metadata.Name);
+                if (property != null)
                 {
-                    var property = item.GetType().GetProperty(field.Name);
-                    if (property != null)
+                    var value = property.GetValue(model);
+                    if (value != null)
                     {
-                        var value = property.GetValue(item);
-                        if (value != null)
-                        {
-                            row.SetValue(field.Name, value);
-                        }
+                        structure.SetValue(field.Metadata.Name, value);
                     }
-                }
-                catch
-                {
-                    // Skip field if conversion fails
                 }
             }
         }
     }
 
-    public class ZMM_ART_MOD_PO_Request
+    public class ZMM_ART_MOD_PO_RFCRequest
     {
-        public ZMM_PO_ART_ST IM_INPUT { get; set; }
-        public List<ZMM_PO_ART_OUT_IT> IM_OUTPUT { get; set; }
+        public IMInputModel IM_INPUT { get; set; }
+        public IMOutputModel IM_OUTPUT { get; set; }
     }
 
-    public class ZMM_PO_ART_ST
+    public class IMInputModel
     {
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string COLOR { get; set; }
-        public decimal MENGE { get; set; }
-        public decimal NETPR { get; set; }
-        public string MEINS { get; set; }
-        public DateTime EEIND { get; set; }
-        public string BSART { get; set; }
-        public string BUKRS { get; set; }
+        public string MENGE { get; set; }
+        public string NETPR { get; set; }
         public string WERKS { get; set; }
         public string LGORT { get; set; }
-        public string MATKL { get; set; }
-        public string PSTYP { get; set; }
-        public string KNTTP { get; set; }
+        public string EINDT { get; set; }
+        public string UEBTO { get; set; }
+        public string UEBTK { get; set; }
     }
 
-    public class ZMM_PO_ART_OUT_IT
+    public class IMOutputModel
     {
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string COLOR { get; set; }
-        public decimal MENGE { get; set; }
-        public decimal NETPR { get; set; }
-        public string MEINS { get; set; }
-        public DateTime EEIND { get; set; }
-        public string STATUS { get; set; }
+        public string MENGE { get; set; }
+        public string NETPR { get; set; }
+        public string WERKS { get; set; }
+        public string LGORT { get; set; }
+        public string EINDT { get; set; }
         public string MESSAGE { get; set; }
-        public string BSART { get; set; }
-        public string BUKRS { get; set; }
-        public string WERKS { get; set; }
-        public string LGORT { get; set; }
-        public string MATKL { get; set; }
-        public string PSTYP { get; set; }
-        public string KNTTP { get; set; }
+        public string TYPE { get; set; }
     }
 }
