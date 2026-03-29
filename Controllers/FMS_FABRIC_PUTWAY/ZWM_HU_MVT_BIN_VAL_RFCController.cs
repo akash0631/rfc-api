@@ -13,62 +13,39 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_BIN_VAL_RFC")]
-        public HttpResponseMessage ExecuteRFC(ZWM_HU_MVT_BIN_VAL_RFCRequest request)
+        public HttpResponseMessage ZWM_HU_MVT_BIN_VAL_RFC([FromBody] ZWM_HU_MVT_BIN_VAL_RFCRequest request)
         {
             try
             {
-                // Validate input parameters
                 if (request == null)
                 {
                     return Request.CreateResponse(HttpStatusCode.BadRequest, new
                     {
                         Status = "E",
-                        Message = "Request cannot be null"
+                        Message = "Request body cannot be null"
                     });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_USER))
+                if (string.IsNullOrEmpty(request.IM_USER) || string.IsNullOrEmpty(request.IM_PLANT) || string.IsNullOrEmpty(request.IM_BIN))
                 {
                     return Request.CreateResponse(HttpStatusCode.BadRequest, new
                     {
                         Status = "E",
-                        Message = "IM_USER is required"
+                        Message = "IM_USER, IM_PLANT and IM_BIN are required parameters"
                     });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_PLANT))
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "IM_PLANT is required"
-                    });
-                }
-
-                if (string.IsNullOrEmpty(request.IM_BIN))
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "IM_BIN is required"
-                    });
-                }
-
-                // SAP RFC connection
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZWM_HU_MVT_BIN_VAL_RFC");
 
-                // Set input parameters
                 myfun.SetValue("IM_USER", request.IM_USER);
                 myfun.SetValue("IM_PLANT", request.IM_PLANT);
                 myfun.SetValue("IM_BIN", request.IM_BIN);
 
-                // Execute RFC
                 myfun.Invoke(dest);
 
-                // Get return structure
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
                 string returnType = EX_RETURN.GetString("TYPE");
@@ -85,13 +62,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
 
                 return Request.CreateResponse(HttpStatusCode.OK, new
                 {
-                    Status = "S",
+                    Status = returnType,
                     Message = returnMessage
                 });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -99,7 +76,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
@@ -107,7 +84,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
                 {
                     Status = "E",
                     Message = ex.Message
