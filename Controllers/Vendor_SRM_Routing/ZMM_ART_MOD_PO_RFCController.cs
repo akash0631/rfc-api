@@ -9,18 +9,18 @@ using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 {
-    [Route("api/ZMM_ART_MOD_PO_RFC")]
+    [RoutePrefix("api")]
     public class ZMM_ART_MOD_PO_RFCController : BaseController
     {
         [HttpPost]
-        [Route("api/ZMM_ART_MOD_PO_RFC")]
+        [Route("ZMM_ART_MOD_PO_RFC")]
         public HttpResponseMessage ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request body is null or invalid" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -28,71 +28,45 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZMM_ART_MOD_PO_RFC");
 
-                // Set IM_INPUT parameter
+                // Set IM_INPUT table
                 if (request.IM_INPUT != null && request.IM_INPUT.Count > 0)
                 {
-                    IRfcTable inputTable = myfun.GetTable("IM_INPUT");
-                    foreach (var item in request.IM_INPUT)
+                    IRfcTable imInputTable = myfun.GetTable("IM_INPUT");
+                    foreach (var inputItem in request.IM_INPUT)
                     {
-                        inputTable.Append();
-                        if (!string.IsNullOrEmpty(item.EBELN))
-                            inputTable.SetValue("EBELN", item.EBELN);
-                        if (!string.IsNullOrEmpty(item.EBELP))
-                            inputTable.SetValue("EBELP", item.EBELP);
-                        if (!string.IsNullOrEmpty(item.MATNR))
-                            inputTable.SetValue("MATNR", item.MATNR);
-                        if (!string.IsNullOrEmpty(item.WERKS))
-                            inputTable.SetValue("WERKS", item.WERKS);
-                        if (!string.IsNullOrEmpty(item.LGORT))
-                            inputTable.SetValue("LGORT", item.LGORT);
-                        if (item.MENGE.HasValue)
-                            inputTable.SetValue("MENGE", item.MENGE.Value);
-                        if (item.NETPR.HasValue)
-                            inputTable.SetValue("NETPR", item.NETPR.Value);
-                        if (!string.IsNullOrEmpty(item.PEINH))
-                            inputTable.SetValue("PEINH", item.PEINH);
-                        if (!string.IsNullOrEmpty(item.WAERS))
-                            inputTable.SetValue("WAERS", item.WAERS);
-                        if (item.EINDT.HasValue)
-                            inputTable.SetValue("EINDT", item.EINDT.Value);
-                        if (!string.IsNullOrEmpty(item.COLOR))
-                            inputTable.SetValue("COLOR", item.COLOR);
+                        imInputTable.Append();
+                        imInputTable.SetValue("MANDT", inputItem.MANDT ?? "");
+                        imInputTable.SetValue("EBELN", inputItem.EBELN ?? "");
+                        imInputTable.SetValue("EBELP", inputItem.EBELP ?? "");
+                        imInputTable.SetValue("MATNR", inputItem.MATNR ?? "");
+                        imInputTable.SetValue("TXZ01", inputItem.TXZ01 ?? "");
+                        imInputTable.SetValue("MENGE", inputItem.MENGE ?? "");
+                        imInputTable.SetValue("MEINS", inputItem.MEINS ?? "");
+                        imInputTable.SetValue("NETPR", inputItem.NETPR ?? "");
+                        imInputTable.SetValue("PEINH", inputItem.PEINH ?? "");
+                        imInputTable.SetValue("BPRME", inputItem.BPRME ?? "");
                     }
                 }
 
-                // Set IM_OUTPUT parameter
+                // Set IM_OUTPUT table
                 if (request.IM_OUTPUT != null && request.IM_OUTPUT.Count > 0)
                 {
-                    IRfcTable outputTable = myfun.GetTable("IM_OUTPUT");
-                    foreach (var item in request.IM_OUTPUT)
+                    IRfcTable imOutputTable = myfun.GetTable("IM_OUTPUT");
+                    foreach (var outputItem in request.IM_OUTPUT)
                     {
-                        outputTable.Append();
-                        if (!string.IsNullOrEmpty(item.EBELN))
-                            outputTable.SetValue("EBELN", item.EBELN);
-                        if (!string.IsNullOrEmpty(item.EBELP))
-                            outputTable.SetValue("EBELP", item.EBELP);
-                        if (!string.IsNullOrEmpty(item.MATNR))
-                            outputTable.SetValue("MATNR", item.MATNR);
-                        if (!string.IsNullOrEmpty(item.WERKS))
-                            outputTable.SetValue("WERKS", item.WERKS);
-                        if (!string.IsNullOrEmpty(item.LGORT))
-                            outputTable.SetValue("LGORT", item.LGORT);
-                        if (item.MENGE.HasValue)
-                            outputTable.SetValue("MENGE", item.MENGE.Value);
-                        if (item.NETPR.HasValue)
-                            outputTable.SetValue("NETPR", item.NETPR.Value);
-                        if (!string.IsNullOrEmpty(item.PEINH))
-                            outputTable.SetValue("PEINH", item.PEINH);
-                        if (!string.IsNullOrEmpty(item.WAERS))
-                            outputTable.SetValue("WAERS", item.WAERS);
-                        if (item.EINDT.HasValue)
-                            outputTable.SetValue("EINDT", item.EINDT.Value);
-                        if (!string.IsNullOrEmpty(item.COLOR))
-                            outputTable.SetValue("COLOR", item.COLOR);
-                        if (!string.IsNullOrEmpty(item.STATUS))
-                            outputTable.SetValue("STATUS", item.STATUS);
-                        if (!string.IsNullOrEmpty(item.MESSAGE))
-                            outputTable.SetValue("MESSAGE", item.MESSAGE);
+                        imOutputTable.Append();
+                        imOutputTable.SetValue("MANDT", outputItem.MANDT ?? "");
+                        imOutputTable.SetValue("EBELN", outputItem.EBELN ?? "");
+                        imOutputTable.SetValue("EBELP", outputItem.EBELP ?? "");
+                        imOutputTable.SetValue("MATNR", outputItem.MATNR ?? "");
+                        imOutputTable.SetValue("TXZ01", outputItem.TXZ01 ?? "");
+                        imOutputTable.SetValue("MENGE", outputItem.MENGE ?? "");
+                        imOutputTable.SetValue("MEINS", outputItem.MEINS ?? "");
+                        imOutputTable.SetValue("NETPR", outputItem.NETPR ?? "");
+                        imOutputTable.SetValue("PEINH", outputItem.PEINH ?? "");
+                        imOutputTable.SetValue("BPRME", outputItem.BPRME ?? "");
+                        imOutputTable.SetValue("MESSAGE", outputItem.MESSAGE ?? "");
+                        imOutputTable.SetValue("TYPE", outputItem.TYPE ?? "");
                     }
                 }
 
@@ -104,61 +78,65 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "S", Message = returnMessage });
+                var response = new
+                {
+                    Status = returnType,
+                    Message = returnMessage
+                };
+
+                return Request.CreateResponse(HttpStatusCode.OK, response);
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
         }
     }
 
     public class ZMM_ART_MOD_PO_RFCRequest
     {
-        public List<ZMM_PO_ART_Input> IM_INPUT { get; set; }
-        public List<ZMM_PO_ART_Output> IM_OUTPUT { get; set; }
+        public List<ZMM_PO_ART_TT> IM_INPUT { get; set; }
+        public List<ZMM_PO_ART_OUT_TT> IM_OUTPUT { get; set; }
     }
 
-    public class ZMM_PO_ART_Input
+    public class ZMM_PO_ART_TT
     {
+        public string MANDT { get; set; }
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string WERKS { get; set; }
-        public string LGORT { get; set; }
-        public decimal? MENGE { get; set; }
-        public decimal? NETPR { get; set; }
+        public string TXZ01 { get; set; }
+        public string MENGE { get; set; }
+        public string MEINS { get; set; }
+        public string NETPR { get; set; }
         public string PEINH { get; set; }
-        public string WAERS { get; set; }
-        public DateTime? EINDT { get; set; }
-        public string COLOR { get; set; }
+        public string BPRME { get; set; }
     }
 
-    public class ZMM_PO_ART_Output
+    public class ZMM_PO_ART_OUT_TT
     {
+        public string MANDT { get; set; }
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string WERKS { get; set; }
-        public string LGORT { get; set; }
-        public decimal? MENGE { get; set; }
-        public decimal? NETPR { get; set; }
+        public string TXZ01 { get; set; }
+        public string MENGE { get; set; }
+        public string MEINS { get; set; }
+        public string NETPR { get; set; }
         public string PEINH { get; set; }
-        public string WAERS { get; set; }
-        public DateTime? EINDT { get; set; }
-        public string COLOR { get; set; }
-        public string STATUS { get; set; }
+        public string BPRME { get; set; }
         public string MESSAGE { get; set; }
+        public string TYPE { get; set; }
     }
 }
