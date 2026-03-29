@@ -329,7 +329,7 @@ let runId = null;
 for (let i = 0; i < 45 && !runId; i++) {
   await sleep(4000);
   const runsRes = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=10&event=push&workflow_id=${GH_WORKFLOW_ID}&branch=${GITHUB_BRANCH}`,
+    `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=20&workflow_id=${GH_WORKFLOW_ID}&branch=${GITHUB_BRANCH}`,
     { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
   );
   const runs = await runsRes.json();
