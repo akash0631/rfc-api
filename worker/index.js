@@ -305,9 +305,9 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
     if (status==='done'||status==='error') {
-     const TOTAL_STEPS = 6;
-const allDone = job.steps.length >= TOTAL_STEPS && job.steps.every(s=>s.status==='done'||s.status==='error');
-if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
+     const TOTAL_STEPS = 4;
+const allDone = job.steps.length >= TOTAL_STEPS && job.steps.every(s => s.status === 'done' || s.status === 'error');
+if (allDone) job.status = job.steps.some(s => s.status === 'error') ? 'error' : 'complete';
     }
     await kv.put(jobId, JSON.stringify(job), {expirationTtl:86400});
   };
@@ -413,23 +413,24 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
           throw new Error(`GitHub Actions run API ${runRes.status}: ${run.message || 'Unknown error'}`);
         }
 
-        if (run.status === 'completed') {
-          if (run.conclusion === 'success') {
-            await log('deploy','done',`Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
-            deployed = true;
+       if (run.status === 'completed') {
+  if (run.conclusion === 'success') {
+    await log('deploy','done',`Live ✓ ${IIS_HOST}/api/${spec.rfcName}`);
+    deployed = true;
 
-            try {
-              const _ej = JSON.parse(await kv.get(jobId) || '{}');
-              _ej.rfcName = spec.rfcName;
-              _ej.rfcApi = IIS_HOST + '/api/' + spec.rfcName;
-              await kv.put(jobId, JSON.stringify(_ej), { expirationTtl: 86400 });
-            } catch (_) {}
+    const job = JSON.parse(await kv.get(jobId) || '{}');
+    job.status = 'complete';
+    job.rfcName = spec.rfcName;
+    job.rfcApi = `${IIS_HOST}/api/${spec.rfcName}`;
+    job.commit = ctrlResult.commitUrl;
+    job.completedAt = new Date().toISOString();
 
-          } else {
-            throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
-          }
-          break;
-        }
+    await kv.put(jobId, JSON.stringify(job), { expirationTtl: 86400 });
+    return;
+  } else {
+    throw new Error(`Deployment ${run.conclusion} — see GitHub Actions`);
+  }
+}
 
         try {
           const jobsRes = await fetch(
