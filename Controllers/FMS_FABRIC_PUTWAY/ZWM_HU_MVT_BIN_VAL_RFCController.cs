@@ -19,20 +19,22 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "Request body cannot be null"
-                    });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_USER) || string.IsNullOrEmpty(request.IM_PLANT) || string.IsNullOrEmpty(request.IM_BIN))
+                if (string.IsNullOrEmpty(request.IM_USER))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "IM_USER, IM_PLANT and IM_BIN are required parameters"
-                    });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_USER is required" });
+                }
+
+                if (string.IsNullOrEmpty(request.IM_PLANT))
+                {
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_PLANT is required" });
+                }
+
+                if (string.IsNullOrEmpty(request.IM_BIN))
+                {
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_BIN is required" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -53,42 +55,22 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new
-                    {
-                        Status = "E",
-                        Message = returnMessage
-                    });
+                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new
-                {
-                    Status = returnType,
-                    Message = returnMessage
-                });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = returnType, Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = "E", Message = ex.Message });
             }
         }
     }
