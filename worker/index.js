@@ -7,7 +7,7 @@ const IIS_HOST         = 'https://sap-api.v2retail.net';
 const GH_WORKFLOW_ID   = '245504825';  // deploy-test-vm.yml
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
-  dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
+  dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174'h, client: '210' },
   quality:    { fn: 'rfcConfigparametersquality',    host: '192.168.144.179', client: '600' },
   production: { fn: 'rfcConfigparametersproduction', host: '192.168.144.170', client: '600' },
 };
@@ -326,7 +326,7 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
      // Wait briefly then find the new run (running OR recently completed within 3 min)
 await sleep(6000);
 let runId = null;
-for (let i = 0; i < 20 && !runId; i++) {
+for (let i = 0; i < 45 && !runId; i++) {
   await sleep(4000);
   const runsRes = await fetch(
     `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=10&event=push&workflow_id=${GH_WORKFLOW_ID}&branch=${GITHUB_BRANCH}`,
@@ -336,7 +336,7 @@ for (let i = 0; i < 20 && !runId; i++) {
   const commitSha = ctrlResult.commitSha;
   const fresh = runs.workflow_runs?.find(r =>
     
-    r.head_sha === commitSha
+    (r.head_sha === commitSha || r.head_sha.startsWith(commitSha) || commitSha.startsWith(r.head_sha.substring(0,7)))
   );
   if (fresh) runId = fresh.id;
 }
