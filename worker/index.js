@@ -320,7 +320,7 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
     await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha})`);
 
     // Step 4: Trigger IIS deploy via GitHub Actions
-    await log('deploy','running','Triggering build + deploy on IIS (.36)...');
+    await log('deploy','running','Finding push-triggered deploy for commit ${ctrlResult.commitSha}...');
     try {
       // Dispatch workflow
       const dispatchRes = await fetch(
@@ -331,7 +331,7 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
           body: JSON.stringify({ref: GITHUB_BRANCH}) }
       );
       if (!dispatchRes.ok && dispatchRes.status !== 204)
-        throw new Error(`Workflow dispatch HTTP ${dispatchRes.status}`);
+        // push-triggered run found by commit SHA above
 
      // Wait briefly then find the new run (running OR recently completed within 3 min)
 await sleep(6000);
@@ -339,23 +339,23 @@ let runId = null;
 for (let i = 0; i < 20 && !runId; i++) {
   await sleep(4000);
   const runsRes = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=10&event=workflow_dispatch&workflow_id=${GH_WORKFLOW_ID}&branch=${GITHUB_BRANCH}`,
+    `https://api.github.com/repos/${GITHUB_REPO}/actions/runs?per_page=10&event=push&workflow_id=${GH_WORKFLOW_ID}&branch=${GITHUB_BRANCH}`,
     { headers:{ Authorization:`token ${ghToken}`, 'User-Agent':'V2-RFC-Pipeline' } }
   );
   const runs = await runsRes.json();
-  const cutoff = new Date(Date.now() - 180000).toISOString();
+  const commitSha = ctrlResult.commitSha;
   const fresh = runs.workflow_runs?.find(r =>
-    r.status !== 'completed' ||
-    (r.status === 'completed' && r.created_at >= cutoff)
+    
+    r.head_sha === commitSha;
   );
   if (fresh) runId = fresh.id;
 }
-if (!runId) throw new Error('Could not find workflow run after dispatch — check GitHub Actions');
+if (!runId) throw new Error('Could not find push-triggered deploy run for commit — check GitHub Actions');
       await log('deploy','running',`Build started ÃÂ· run #${runId}`);
 
-      // Poll until completed (max ~8 min = 96 ÃÂ 5s)
+      // Poll until completed (max ~5 min = 60 ÃÂ 5s)
       let deployed = false;
-      for (let i = 0; i < 96; i++) {
+      for (let i = 0; i < 60; i++) {
         await sleep(5000);
         const runRes = await fetch(
           `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
