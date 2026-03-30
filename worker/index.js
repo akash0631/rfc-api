@@ -345,7 +345,7 @@ if (!runId) throw new Error('Could not find push-triggered deploy run for commit
 
       // Poll until completed (max ~5 min = 60 ÃÂ 5s)
       let deployed = false;
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 120; i++) {
         await sleep(5000);
         const runRes = await fetch(
           `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
