@@ -48,7 +48,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
             IntPtr token = IntPtr.Zero;
             try
             {
-                bool ok = LogonUser(WIN_USER, WIN_DOMAIN, WIN_PASS, 3, 0, out token);
+                bool ok = LogonUser(WIN_USER, WIN_DOMAIN, WIN_PASS, 9, 0, out token); // LOGON32_LOGON_NEW_CREDENTIALS = network creds for remote SQL
                 if (ok && token != IntPtr.Zero)
                 {
                     var wi = new WindowsIdentity(token);
