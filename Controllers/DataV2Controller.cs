@@ -5,6 +5,8 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
@@ -21,30 +23,54 @@ namespace Vendor_SRM_Routing_Application.Controllers
         private const string API_KEY    = "v2-datav2-analyst-2026";
         private const string ADMIN_KEY  = "v2-datav2-admin-2026";
 
-        // Try multiple connection strategies
-        private static readonly string[] CONN_STRINGS = new[] {
-            @"Server=192.168.151.28;Database=DataV2;User Id=V2RD\akash.agarwal;Password=vrl@99999;Connection Timeout=10;MultipleActiveResultSets=true;",
-            @"Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connection Timeout=10;MultipleActiveResultSets=true;",
-            @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@99999;Connection Timeout=10;MultipleActiveResultSets=true;",
-            @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@55555;Connection Timeout=10;MultipleActiveResultSets=true;",
-            @"Server=192.168.151.28;Database=DataV2;User Id=sa;Password=vrl@12345;Connection Timeout=10;MultipleActiveResultSets=true;",
-            @"Server=192.168.151.28\MSSQLSERVER;Database=DataV2;Integrated Security=True;Connection Timeout=10;",
-        };
-        private static string CONN_STR = null;
-        
-        private SqlConnection GetConnection() {
-            if (CONN_STR != null) {
-                return GetConnection();
+        // Windows impersonation to connect as V2RD\akash.agarwal
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool LogonUser(string lpszUsername, string lpszDomain,
+            string lpszPassword, int dwLogonType, int dwLogonProvider, out IntPtr phToken);
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        private const string SQL_SERVER = "192.168.151.28";
+        private const string SQL_DB     = "DataV2";
+        private const string WIN_DOMAIN = "V2RD";
+        private const string WIN_USER   = "akash.agarwal";
+        private const string WIN_PASS   = "vrl@99999";
+
+        private static readonly string CS_INTEGRATED =
+            @"Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connection Timeout=15;MultipleActiveResultSets=true;";
+        private static readonly string CS_FALLBACK =
+            @"Server=192.168.151.28;Database=DataV2;User Id=V2ApiReader;Password=V2Api@2026;Connection Timeout=15;MultipleActiveResultSets=true;";
+
+        // Returns an ALREADY OPEN connection — callers must NOT call conn.Open() again
+        private SqlConnection GetConnection()
+        {
+            // Strategy 1: Impersonate V2RD\akash.agarwal, open with Integrated Security
+            IntPtr token = IntPtr.Zero;
+            try
+            {
+                bool ok = LogonUser(WIN_USER, WIN_DOMAIN, WIN_PASS, 3, 0, out token);
+                if (ok && token != IntPtr.Zero)
+                {
+                    var wi = new WindowsIdentity(token);
+                    SqlConnection conn = null;
+                    WindowsIdentity.RunImpersonated(wi.AccessToken, () => {
+                        try {
+                            conn = new SqlConnection(CS_INTEGRATED);
+                            conn.Open();
+                        } catch { conn?.Dispose(); conn = null; }
+                    });
+                    if (conn != null && conn.State == ConnectionState.Open) return conn;
+                }
             }
-            foreach (var cs in CONN_STRINGS) {
-                try {
-                    var conn = new SqlConnection(cs);
-                    conn.Open();
-                    conn.Close();
-                    CONN_STR = cs;
-                    return GetConnection();
-                } catch {}
-            }
+            catch { }
+            finally { if (token != IntPtr.Zero) CloseHandle(token); }
+
+            // Strategy 2: Integrated Security without impersonation (if pool runs as domain account)
+            try { var c = new SqlConnection(CS_INTEGRATED); c.Open(); return c; } catch { }
+
+            // Strategy 3: SQL login fallback
+            try { var c = new SqlConnection(CS_FALLBACK); c.Open(); return c; } catch { }
+
             throw new Exception("All connection strings failed for Server 28");
         }
         private const int    MAX_ROWS   = 50000;
@@ -87,7 +113,6 @@ namespace Vendor_SRM_Routing_Application.Controllers
         public HttpResponseMessage Health() {
             try {
                 using (var conn = GetConnection()) {
-                    conn.Open();
                     using (var cmd = new SqlCommand("SELECT @@SERVERNAME svr, DB_NAME() db, GETDATE() ts, (SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE') tbl_count", conn)) {
                         using (var rd = cmd.ExecuteReader()) {
                             rd.Read();
@@ -125,7 +150,6 @@ namespace Vendor_SRM_Routing_Application.Controllers
                 var cols = new List<string>();
                 var t0 = DateTime.UtcNow;
                 using (var conn = GetConnection()) {
-                    await conn.OpenAsync();
                     using (var cmd = new SqlCommand(sql, conn) { CommandTimeout = TIMEOUT }) {
                         using (var rd = await cmd.ExecuteReaderAsync()) {
                             for (int i = 0; i < rd.FieldCount; i++) cols.Add(rd.GetName(i));
@@ -159,7 +183,6 @@ namespace Vendor_SRM_Routing_Application.Controllers
             try {
                 var rows = new List<object>(); var t0 = DateTime.UtcNow;
                 using (var conn = GetConnection()) {
-                    await conn.OpenAsync();
                     using (var cmd = new SqlCommand(sql, conn){CommandTimeout=60})
                     using (var rd = await cmd.ExecuteReaderAsync())
                         while(await rd.ReadAsync())
