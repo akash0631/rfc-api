@@ -8,7 +8,7 @@ const GH_WORKFLOW_ID   = '245504825';  // deploy-test-vm.yml
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
-  quality:    { fn: 'rfcConfigparametersquality'h,    host: '192.168.144.179', client: '600' },
+  quality:    { fn: 'rfcConfigparametersquality',    host: '192.168.144.179', client: '600' },
   production: { fn: 'rfcConfigparametersproduction', host: '192.168.144.170', client: '600' },
 };
 const FOLDER_MAP = {
