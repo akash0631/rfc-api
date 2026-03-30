@@ -13,64 +13,107 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_BIN_VAL_RFC")]
-        public HttpResponseMessage ZWM_HU_MVT_BIN_VAL_RFC(ZWM_HU_MVT_BIN_VAL_RFCRequest request)
+        public HttpResponseMessage ValidateBin(ZWM_HU_MVT_BIN_VAL_RFCRequest request)
         {
             try
             {
+                // Validate input parameters
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "Request body cannot be null"
+                    });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_USER))
+                if (string.IsNullOrWhiteSpace(request.IM_USER))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_USER is required" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "IM_USER is required"
+                    });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_PLANT))
+                if (string.IsNullOrWhiteSpace(request.IM_PLANT))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_PLANT is required" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "IM_PLANT is required"
+                    });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_BIN))
+                if (string.IsNullOrWhiteSpace(request.IM_BIN))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_BIN is required" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                    {
+                        Status = "E",
+                        Message = "IM_BIN is required"
+                    });
                 }
 
+                // SAP RFC connection and execution
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZWM_HU_MVT_BIN_VAL_RFC");
 
+                // Set input parameters
                 myfun.SetValue("IM_USER", request.IM_USER);
                 myfun.SetValue("IM_PLANT", request.IM_PLANT);
                 myfun.SetValue("IM_BIN", request.IM_BIN);
 
+                // Execute RFC
                 myfun.Invoke(dest);
 
+                // Get return structure
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetValue("TYPE").ToString();
-                string returnMessage = EX_RETURN.GetValue("MESSAGE").ToString();
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
 
+                // Check if there's an error from SAP
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.OK, new
+                    {
+                        Status = "E",
+                        Message = returnMessage
+                    });
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = returnType, Message = returnMessage });
+                // Success response
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = returnType,
+                    Message = returnMessage
+                });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
         }
     }
