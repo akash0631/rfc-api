@@ -8,7 +8,7 @@ const GH_WORKFLOW_ID   = '245504825';  // deploy-test-vm.yml
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
-  quality:    { fn: 'rfcConfigparametersquality',    host: '192.168.144.179', client: '600' },
+  quality:    { fn: 'rfcConfigparametersquality'h,    host: '192.168.144.179', client: '600' },
   production: { fn: 'rfcConfigparametersproduction', host: '192.168.144.170', client: '600' },
 };
 const FOLDER_MAP = {
@@ -290,7 +290,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
     if (status==='done'||status==='error') {
-     const TOTAL_STEPS = 6;
+     const TOTAL_STEPS = 4;
 const allDone = job.steps.length >= TOTAL_STEPS && job.steps.every(s=>s.status==='done'||s.status==='error');
 if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
     }
@@ -2183,3 +2183,4 @@ onRfcChange();
 
 
 // CRON handled by IIS SyncController + Windows Task Scheduler (02:00 IST)
+h
