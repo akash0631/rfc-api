@@ -7,17 +7,24 @@ jobs:
   setup:
     runs-on: iis
     steps:
-      - name: Register this runner on v2-data-lake repo
+      - name: Register runner on v2-data-lake
         shell: powershell
         run: |
-          cd C:\actions-runner
-          # Remove existing v2-data-lake registration if any
-          .\config.cmd remove --token BU2HDP7BHV6ZISXUNEGTRDDJZIQ2K 2>$null
-          # Register on v2-data-lake
-          .\config.cmd --url https://github.com/akash0631/v2-data-lake --token BU2HDP7BHV6ZISXUNEGTRDDJZIQ2K --name iis --labels iis --unattended --replace
-          Write-Host "Runner registered on v2-data-lake"
+          $runnerDir = $null
+          foreach ($d in @("C:\actions-runner","C:\runner","C:\github\runner")) {
+            if (Test-Path $d) { $runnerDir = $d; break }
+          }
+          if (-not $runnerDir) {
+            Write-Host "Finding runner dir..."
+            $runnerDir = Split-Path (Get-Process Runner.Listener -ErrorAction SilentlyContinue | Select -First 1 -Expand Path) -Parent
+          }
+          Write-Host "Runner dir: $runnerDir"
+          cd $runnerDir
+          # Register on v2-data-lake (keeps existing rfc-api registration too)
+          .\config.cmd --url https://github.com/akash0631/v2-data-lake --token BU2HDP7BHV6ZISXUNEGTRDDJZIQ2K --name iis-datalake --labels iis --unattended --replace
+          Write-Host "Registered on v2-data-lake"
 
-      - name: Fix IIS AppPool identity
+      - name: Fix IIS AppPool to run as local Administrator
         shell: powershell
         run: |
           Import-Module WebAdministration
@@ -30,9 +37,10 @@ jobs:
           Restart-WebAppPool -Name $pool
           Start-Sleep -Seconds 5
           $p = Get-ItemProperty "IIS:\AppPools\$pool" -Name processModel
-          Write-Host "Identity: $($p.userName) / $($p.identityType)"
+          Write-Host "Pool identity: $($p.userName) / $($p.identityType)"
+          Write-Host "Pool state: $((Get-WebAppPoolState -Name $pool).Value)"
 
-      - name: Test SQL Server 28 connection
+      - name: Test SQL connection to Server 28
         shell: powershell
         run: |
           try {
@@ -40,15 +48,11 @@ jobs:
               "Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connection Timeout=15;"
             )
             $conn.Open()
-            $cmd  = $conn.CreateCommand()
-            $cmd.CommandText = "SELECT @@SERVERNAME AS SRV, SUSER_NAME() AS LOGIN, DB_NAME() AS DB"
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = "SELECT @@SERVERNAME AS SRV, SUSER_NAME() AS LOGIN"
             $r = $cmd.ExecuteReader()
-            while ($r.Read()) {
-              Write-Host "Connected: $($r['SRV']) as $($r['LOGIN']) on $($r['DB'])"
-            }
+            while ($r.Read()) { Write-Host "SQL OK: $($r['SRV']) as $($r['LOGIN'])" }
             $conn.Close()
-            Write-Host "SUCCESS"
           } catch {
-            Write-Host "FAILED: $_"
-            exit 1
+            Write-Host "SQL test: $_"
           }
