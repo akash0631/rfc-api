@@ -4,7 +4,7 @@ const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'master';
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
 const IIS_HOST         = 'https://sap-api.v2retail.net';
-const GH_WORKFLOW_ID   = '245504825';  // deploy-test-vm.yml
+const GH_WORKFLOW_ID   = '245492878';  // deploy-test-vm.yml
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
@@ -290,7 +290,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
     if (status==='done'||status==='error') {
-     const TOTAL_STEPS = 4;
+     const TOTAL_STEPS = 6;
 const allDone = job.steps.length >= TOTAL_STEPS && job.steps.every(s=>s.status==='done'||s.status==='error');
 if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
     }
@@ -345,7 +345,7 @@ if (!runId) throw new Error('Could not find push-triggered deploy run for commit
 
       // Poll until completed (max ~5 min = 60 ÃÂ 5s)
       let deployed = false;
-      for (let i = 0; i < 120; i++) {
+      for (let i = 0; i < 60; i++) {
         await sleep(5000);
         const runRes = await fetch(
           `https://api.github.com/repos/${GITHUB_REPO}/actions/runs/${runId}`,
@@ -2183,4 +2183,3 @@ onRfcChange();
 
 
 // CRON handled by IIS SyncController + Windows Task Scheduler (02:00 IST)
-
