@@ -1,0 +1,95 @@
+name: Setup Cloudflare Tunnel on Server 36
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-tunnel:
+    runs-on: iis
+    steps:
+      - name: Download cloudflared
+        shell: powershell
+        run: |
+          $cf = "C:\cloudflared\cloudflared.exe"
+          New-Item -ItemType Directory -Force -Path "C:\cloudflared" | Out-Null
+          
+          if (Test-Path $cf) {
+            $ver = & $cf --version 2>&1
+            Write-Host "Already installed: $ver"
+          } else {
+            Write-Host "Downloading cloudflared..."
+            $url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+            Invoke-WebRequest -Uri $url -OutFile $cf -UseBasicParsing
+            Write-Host "Downloaded: $(Get-Item $cf | Select-Object -ExpandProperty Length) bytes"
+          }
+          & $cf --version
+
+      - name: Verify Server 28 connectivity from Server 36
+        shell: powershell
+        run: |
+          Write-Host "Testing Server 28 (192.168.151.28) SQL port..."
+          $result = Test-NetConnection -ComputerName "192.168.151.28" -Port 1433
+          if ($result.TcpTestSucceeded) {
+            Write-Host "Server 28 SQL port 1433 REACHABLE from Server 36"
+          } else {
+            Write-Host "ERROR: Cannot reach Server 28 SQL port from Server 36"
+            exit 1
+          }
+
+      - name: Install tunnel as Windows Service
+        shell: powershell
+        env:
+          CF_TUNNEL_TOKEN: ${{ secrets.CF_TUNNEL_TOKEN_SQL28 }}
+        run: |
+          $cf = "C:\cloudflared\cloudflared.exe"
+          
+          # Stop and remove any existing service
+          $svc = Get-Service "cloudflared" -ErrorAction SilentlyContinue
+          if ($svc) {
+            Write-Host "Stopping existing cloudflared service..."
+            Stop-Service cloudflared -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
+            & $cf service uninstall 2>$null
+            Start-Sleep -Seconds 2
+          }
+          
+          # Install as Windows Service with tunnel token
+          Write-Host "Installing cloudflared service..."
+          & $cf service install --token $env:CF_TUNNEL_TOKEN
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to install service"
+            exit 1
+          }
+          
+          # Start service
+          Start-Service cloudflared
+          Start-Sleep -Seconds 5
+          
+          # Set auto-start
+          Set-Service cloudflared -StartupType Automatic
+          
+          # Verify
+          $svc = Get-Service cloudflared
+          Write-Host "Service status: $($svc.Status)"
+          Write-Host "Startup type: $($svc.StartType)"
+          
+          if ($svc.Status -ne "Running") {
+            Write-Host "ERROR: Service not running"
+            exit 1
+          }
+          Write-Host "Cloudflare Tunnel installed and running on Server 36 permanently"
+
+      - name: Test tunnel is live
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 10
+          Write-Host "Testing tunnel connectivity..."
+          try {
+            $resp = Invoke-WebRequest -Uri "https://sql28.v2retail.net/health" -UseBasicParsing -TimeoutSec 15
+            Write-Host "Tunnel is LIVE: $($resp.StatusCode)"
+            Write-Host $resp.Content
+          } catch {
+            Write-Host "Tunnel test: $_"
+            Write-Host "Note: Tunnel may need 30-60s to fully connect to Cloudflare edge"
+          }
