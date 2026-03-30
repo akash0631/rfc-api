@@ -101,7 +101,7 @@ export default {
         const b = await request.json();
         const qr = await fetch(DATAV2_URL+DATAV2_BASE+"/query",{
           method:"POST",
-          headers:{"Content-Type":"application/json","User-Agent":"cf-worker"},
+          headers:{"Content-Type":"application/json","User-Agent":"cf-worker","x-api-key":"v2-datav2-analyst-2026"},
           body:JSON.stringify(b)
         });
         return new Response(await qr.text(),{headers:{...CORS_H,"Content-Type":"application/json"}});
@@ -167,7 +167,7 @@ export default {
         try {
           const qr = await fetch(DATAV2_URL+DATAV2_BASE+"/query", {
             method:"POST",
-            headers:{"Content-Type":"application/json","User-Agent":"cf-worker"},
+            headers:{"Content-Type":"application/json","User-Agent":"cf-worker","x-api-key":"v2-datav2-analyst-2026"},
             body:JSON.stringify({sql}),
             signal:AbortSignal.timeout(28000)
           });
