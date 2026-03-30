@@ -1,0 +1,34 @@
+name: Fix IIS AppPool Identity for DataV2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-apppool:
+    runs-on: iis
+    steps:
+      - name: Set AppPool to run as V2RD domain account
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          
+          # Find the app pool used by the V2RfcTest site
+          $pool = "V2RfcTestPool"
+          Write-Host "Configuring app pool: $pool"
+          
+          # Set identity to specific domain account
+          Set-ItemProperty "IIS:\AppPools\$pool" -Name processModel -Value @{
+            userName = "V2RD\akash.agarwal"
+            password = "vrl@99999"
+            identityType = "SpecificUser"
+          }
+          
+          # Restart the app pool
+          Restart-WebAppPool -Name $pool
+          Start-Sleep -Seconds 3
+          
+          # Verify
+          $p = Get-ItemProperty "IIS:\AppPools\$pool" -Name processModel
+          Write-Host "App pool identity: $($p.userName)"
+          Write-Host "Identity type: $($p.identityType)"
+          Write-Host "App pool restarted - IIS now connects to Server 28 as V2RD\akash.agarwal"
