@@ -1,0 +1,54 @@
+name: Register runner on v2-data-lake and fix AppPool
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: iis
+    steps:
+      - name: Register this runner on v2-data-lake repo
+        shell: powershell
+        run: |
+          cd C:\actions-runner
+          # Remove existing v2-data-lake registration if any
+          .\config.cmd remove --token BU2HDP7BHV6ZISXUNEGTRDDJZIQ2K 2>$null
+          # Register on v2-data-lake
+          .\config.cmd --url https://github.com/akash0631/v2-data-lake --token BU2HDP7BHV6ZISXUNEGTRDDJZIQ2K --name iis --labels iis --unattended --replace
+          Write-Host "Runner registered on v2-data-lake"
+
+      - name: Fix IIS AppPool identity
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+          $pool = "V2RfcTestPool"
+          Set-ItemProperty "IIS:\AppPools\$pool" -Name processModel -Value @{
+            userName     = ".\Administrator"
+            password     = "vrl@99999"
+            identityType = "SpecificUser"
+          }
+          Restart-WebAppPool -Name $pool
+          Start-Sleep -Seconds 5
+          $p = Get-ItemProperty "IIS:\AppPools\$pool" -Name processModel
+          Write-Host "Identity: $($p.userName) / $($p.identityType)"
+
+      - name: Test SQL Server 28 connection
+        shell: powershell
+        run: |
+          try {
+            $conn = New-Object System.Data.SqlClient.SqlConnection(
+              "Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connection Timeout=15;"
+            )
+            $conn.Open()
+            $cmd  = $conn.CreateCommand()
+            $cmd.CommandText = "SELECT @@SERVERNAME AS SRV, SUSER_NAME() AS LOGIN, DB_NAME() AS DB"
+            $r = $cmd.ExecuteReader()
+            while ($r.Read()) {
+              Write-Host "Connected: $($r['SRV']) as $($r['LOGIN']) on $($r['DB'])"
+            }
+            $conn.Close()
+            Write-Host "SUCCESS"
+          } catch {
+            Write-Host "FAILED: $_"
+            exit 1
+          }
