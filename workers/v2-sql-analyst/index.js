@@ -1,4 +1,5 @@
 const DATAV2_URL = "https://sql28.v2retail.net";
+const DATAV2_BASE = "/api/datav2";
 const DATAV2_KEY = "v2-datav2-analyst-2026";
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 const CORS_H = {
@@ -75,7 +76,7 @@ export default {
 
     if (url.pathname === "/health") {
       try {
-        const h = await fetch(DATAV2_URL+"/health",{headers:{"User-Agent":"cf-worker"},signal:AbortSignal.timeout(5000)});
+        const h = await fetch(DATAV2_URL+DATAV2_BASE+"/health",{headers:{"User-Agent":"cf-worker"},signal:AbortSignal.timeout(5000)});
         return J({status:"ok",datav2:await h.json(),ts:new Date().toISOString()});
       } catch(e){ return J({status:"error",err:e.message},503); }
     }
@@ -84,7 +85,7 @@ export default {
     if (url.pathname === "/query" && request.method === "POST") {
       try {
         const b = await request.json();
-        const qr = await fetch(DATAV2_URL+"/query",{
+        const qr = await fetch(DATAV2_URL+DATAV2_BASE+"/query",{
           method:"POST",
           headers:{"Content-Type":"application/json","User-Agent":"cf-worker"},
           body:JSON.stringify(b)
@@ -150,7 +151,7 @@ export default {
       // Execute SQL
       if (sql && !sqlErr) {
         try {
-          const qr = await fetch(DATAV2_URL+"/query", {
+          const qr = await fetch(DATAV2_URL+DATAV2_BASE+"/query", {
             method:"POST",
             headers:{"Content-Type":"application/json","User-Agent":"cf-worker"},
             body:JSON.stringify({sql}),
