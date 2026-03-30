@@ -64,7 +64,21 @@ KEY TABLES (top by usage):
 - ET_STOCK_SEASONAL_DATA: seasonal stock by MATNR x WERKS x LGORT (LABST=unrestricted qty)
 - ALLOCATION_REPORT_DATA: allocation by STORE_CODE x SEG x DIV x MAJ_CAT
 - MRST_PROCESSDATA_AGING_BKP: stock aging 0-90,91-180,181-360,360+ days by MATNR x STORE_CODE
-- Festival_Rolling_Plan_Transaction_Data: festival plan actuals (Store_code,Maj_Cat,PARTICULARS_NAME,PARTICULARS_VALUE)`;
+- Festival_Rolling_Plan_Transaction_Data: festival plan actuals (Store_code,Maj_Cat,PARTICULARS_NAME,PARTICULARS_VALUE)
+
+PERFORMANCE RULES — MUST FOLLOW:
+1. For ANY sales query (LW/LM/MTD/YTD/L7D/L30D/LYSM/today), ALWAYS use DAILY_SALE_PROCESS_DATA — NEVER join to STORE_STOCK_SALE_DAY_SUMMARY for rolling metrics
+2. DAILY_SALE_PROCESS_DATA already has all rolling windows pre-computed. Just GROUP BY STORE_CODE and join to tbl_SAP_yogesh_ajay_Store_Master for zone/region
+3. For zone breakdown: GROUP BY zone from store master join — ONE simple join only
+4. NEVER join more than 2 tables in a single query
+5. NEVER use STORE_STOCK_SALE_DAY_SUMMARY unless specifically asked for a specific date range with BOTH ST_CD and TXN_DATE filters
+6. TOP 50 max on any query
+7. For budget vs actual: use bgt_act_daywise (sloc, seg, div, sub_div, store_cd, maj_cat columns)
+
+FAST QUERY PATTERNS (always prefer these):
+- Sales by zone: SELECT s.ZONE, SUM(d.LW_Sale_V) FROM DAILY_SALE_PROCESS_DATA d JOIN tbl_SAP_yogesh_ajay_Store_Master s ON d.STORE_CODE=s.ST_CD GROUP BY s.ZONE
+- Sales totals: SELECT SUM(MTD_SALE_V), SUM(YTD_SALE_V) FROM DAILY_SALE_PROCESS_DATA WITH(NOLOCK)
+- Top stores: SELECT STORE_CODE, SUM(MTD_SALE_V) FROM DAILY_SALE_PROCESS_DATA WITH(NOLOCK) GROUP BY STORE_CODE ORDER BY SUM(MTD_SALE_V) DESC`;
 
 export default {
   async fetch(request, env) {
