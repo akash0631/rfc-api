@@ -9,18 +9,17 @@ using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Vendor
 {
-    [RoutePrefix("api")]
     public class ZMM_ART_MOD_PO_RFCController : BaseController
     {
         [HttpPost]
         [Route("api/ZMM_ART_MOD_PO_RFC")]
-        public async Task<HttpResponseMessage> ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_RFC_Request request)
+        public HttpResponseMessage ZMM_ART_MOD_PO_RFC([FromBody] ZMM_ART_MOD_PO_Request request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request body cannot be null" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -28,45 +27,53 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZMM_ART_MOD_PO_RFC");
 
-                if (request.IM_INPUT != null && request.IM_INPUT.Count > 0)
+                // Set IM_INPUT structure
+                if (request.IM_INPUT != null)
                 {
-                    IRfcTable inputTable = myfun.GetTable("IM_INPUT");
-                    foreach (var inputItem in request.IM_INPUT)
-                    {
-                        IRfcStructure inputRow = inputTable.Metadata.LineType.CreateStructure();
-                        foreach (var property in inputItem.GetType().GetProperties())
-                        {
-                            var value = property.GetValue(inputItem);
-                            if (value != null)
-                            {
-                                inputRow.SetValue(property.Name, value);
-                            }
-                        }
-                        inputTable.Append(inputRow);
-                    }
+                    IRfcStructure imInputStruct = myfun.GetStructure("IM_INPUT");
+                    if (!string.IsNullOrEmpty(request.IM_INPUT.EBELN))
+                        imInputStruct.SetValue("EBELN", request.IM_INPUT.EBELN);
+                    if (!string.IsNullOrEmpty(request.IM_INPUT.EBELP))
+                        imInputStruct.SetValue("EBELP", request.IM_INPUT.EBELP);
+                    if (!string.IsNullOrEmpty(request.IM_INPUT.MATNR))
+                        imInputStruct.SetValue("MATNR", request.IM_INPUT.MATNR);
+                    if (!string.IsNullOrEmpty(request.IM_INPUT.COLOR))
+                        imInputStruct.SetValue("COLOR", request.IM_INPUT.COLOR);
+                    if (!string.IsNullOrEmpty(request.IM_INPUT.MENGE))
+                        imInputStruct.SetValue("MENGE", request.IM_INPUT.MENGE);
+                    if (!string.IsNullOrEmpty(request.IM_INPUT.NETPR))
+                        imInputStruct.SetValue("NETPR", request.IM_INPUT.NETPR);
+                    if (!string.IsNullOrEmpty(request.IM_INPUT.EINDT))
+                        imInputStruct.SetValue("EINDT", request.IM_INPUT.EINDT);
                 }
 
-                if (request.IM_OUTPUT != null && request.IM_OUTPUT.Count > 0)
+                // Set IM_OUTPUT structure
+                if (request.IM_OUTPUT != null)
                 {
-                    IRfcTable outputTable = myfun.GetTable("IM_OUTPUT");
-                    foreach (var outputItem in request.IM_OUTPUT)
-                    {
-                        IRfcStructure outputRow = outputTable.Metadata.LineType.CreateStructure();
-                        foreach (var property in outputItem.GetType().GetProperties())
-                        {
-                            var value = property.GetValue(outputItem);
-                            if (value != null)
-                            {
-                                outputRow.SetValue(property.Name, value);
-                            }
-                        }
-                        outputTable.Append(outputRow);
-                    }
+                    IRfcStructure imOutputStruct = myfun.GetStructure("IM_OUTPUT");
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.EBELN))
+                        imOutputStruct.SetValue("EBELN", request.IM_OUTPUT.EBELN);
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.EBELP))
+                        imOutputStruct.SetValue("EBELP", request.IM_OUTPUT.EBELP);
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.MATNR))
+                        imOutputStruct.SetValue("MATNR", request.IM_OUTPUT.MATNR);
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.COLOR))
+                        imOutputStruct.SetValue("COLOR", request.IM_OUTPUT.COLOR);
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.MENGE))
+                        imOutputStruct.SetValue("MENGE", request.IM_OUTPUT.MENGE);
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.NETPR))
+                        imOutputStruct.SetValue("NETPR", request.IM_OUTPUT.NETPR);
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.EINDT))
+                        imOutputStruct.SetValue("EINDT", request.IM_OUTPUT.EINDT);
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.STATUS))
+                        imOutputStruct.SetValue("STATUS", request.IM_OUTPUT.STATUS);
+                    if (!string.IsNullOrEmpty(request.IM_OUTPUT.MESSAGE))
+                        imOutputStruct.SetValue("MESSAGE", request.IM_OUTPUT.MESSAGE);
                 }
 
                 myfun.Invoke(dest);
-
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
+
                 string returnType = EX_RETURN.GetString("TYPE");
                 string returnMessage = EX_RETURN.GetString("MESSAGE");
 
@@ -75,7 +82,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                     return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "S", Message = returnMessage });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = returnType, Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
@@ -92,36 +99,32 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
         }
     }
 
-    public class ZMM_ART_MOD_PO_RFC_Request
+    public class ZMM_ART_MOD_PO_Request
     {
-        public List<ZMM_PO_ART_TT> IM_INPUT { get; set; }
-        public List<ZMM_PO_ART_OUT_TT> IM_OUTPUT { get; set; }
+        public ZMM_PO_ART_ST IM_INPUT { get; set; }
+        public ZMM_PO_ART_OUT_ST IM_OUTPUT { get; set; }
     }
 
-    public class ZMM_PO_ART_TT
+    public class ZMM_PO_ART_ST
     {
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string WERKS { get; set; }
-        public decimal MENGE { get; set; }
-        public string MEINS { get; set; }
-        public decimal NETPR { get; set; }
-        public string PEINH { get; set; }
-        public string BPRME { get; set; }
+        public string COLOR { get; set; }
+        public string MENGE { get; set; }
+        public string NETPR { get; set; }
+        public string EINDT { get; set; }
     }
 
-    public class ZMM_PO_ART_OUT_TT
+    public class ZMM_PO_ART_OUT_ST
     {
         public string EBELN { get; set; }
         public string EBELP { get; set; }
         public string MATNR { get; set; }
-        public string WERKS { get; set; }
-        public decimal MENGE { get; set; }
-        public string MEINS { get; set; }
-        public decimal NETPR { get; set; }
-        public string PEINH { get; set; }
-        public string BPRME { get; set; }
+        public string COLOR { get; set; }
+        public string MENGE { get; set; }
+        public string NETPR { get; set; }
+        public string EINDT { get; set; }
         public string STATUS { get; set; }
         public string MESSAGE { get; set; }
     }
