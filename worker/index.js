@@ -290,7 +290,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
     if (status==='done'||status==='error') {
-     const TOTAL_STEPS = 6;
+     const TOTAL_STEPS = 7;
 const allDone = job.steps.length >= TOTAL_STEPS && job.steps.every(s=>s.status==='done'||s.status==='error');
 if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
     }
@@ -320,7 +320,7 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
     await log('github','done',`${ctrlResult.filePath} (${ctrlResult.commitSha})`);
 
     // Step 4: Trigger IIS deploy via GitHub Actions
-    await log('deploy','running',`Finding push-triggered deploy for commit ${ctrlResult.commitSha}...`);
+    await log('build','running',`Finding push-triggered deploy for commit ${ctrlResult.commitSha}...`);
     try {
 
      // Wait briefly then find the new run (running OR recently completed within 3 min)
@@ -341,7 +341,7 @@ for (let i = 0; i < 45 && !runId; i++) {
   if (fresh) runId = fresh.id;
 }
 if (!runId) throw new Error('Could not find push-triggered deploy run for commit — check GitHub Actions');
-      await log('deploy','running',`Build started ÃÂ· run #${runId}`);
+      await log('build','running',`Build started ÃÂ· run #${runId}`);
 
       // Poll until completed (max ~5 min = 60 ÃÂ 5s)
       let deployed = false;
@@ -354,7 +354,7 @@ if (!runId) throw new Error('Could not find push-triggered deploy run for commit
         const run = await runRes.json();
         if (run.status === 'completed') {
           if (run.conclusion === 'success') {
-            await log('deploy','done',`Live Ã¢ÂÂ ${IIS_HOST}/api/${spec.rfcName}`);
+            await log('build','done',`Live Ã¢ÂÂ ${IIS_HOST}/api/${spec.rfcName}`);
             deployed = true;
             try{const _ej=JSON.parse(await kv.get(jobId)||'{}');_ej.rfcName=spec.rfcName;_ej.rfcApi=IIS_HOST+'/api/'+spec.rfcName;await kv.put(jobId,JSON.stringify(_ej),{expirationTtl:86400});}catch(_){}
           } else {
@@ -374,7 +374,8 @@ if (!runId) throw new Error('Could not find push-triggered deploy run for commit
         } catch(_) {}
       }
       if (!deployed) throw new Error('Deployment timed out');
-    } catch(e) { await log('deploy','error',e.message); return; }
+        await log('deploy','done',`IIS recycled ✓ — ${IIS_HOST}/api/${spec.rfcName}`);
+  } catch(e) { await log('deploy','error',e.message); return; }
 
     // Step 5: Register DAB
     await log('dab','running','Registering entity in DAB config...');
