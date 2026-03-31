@@ -13,112 +13,69 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
     {
         [HttpPost]
         [Route("api/ZWM_HU_MVT_BIN_VAL_RFC")]
-        public HttpResponseMessage ValidateBin(ZWM_HU_MVT_BIN_VAL_RFCRequest request)
+        public IHttpActionResult ExecuteZWM_HU_MVT_BIN_VAL_RFC([FromBody] ZWM_HU_MVT_BIN_VAL_RFC_Request request)
         {
             try
             {
-                // Validate input parameters
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "Request body cannot be null"
-                    });
+                    return Json(new { Status = "E", Message = "Request body cannot be null" });
                 }
 
-                if (string.IsNullOrWhiteSpace(request.IM_USER))
+                if (string.IsNullOrEmpty(request.IM_USER))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "IM_USER is required"
-                    });
+                    return Json(new { Status = "E", Message = "IM_USER is required" });
                 }
 
-                if (string.IsNullOrWhiteSpace(request.IM_PLANT))
+                if (string.IsNullOrEmpty(request.IM_PLANT))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "IM_PLANT is required"
-                    });
+                    return Json(new { Status = "E", Message = "IM_PLANT is required" });
                 }
 
-                if (string.IsNullOrWhiteSpace(request.IM_BIN))
+                if (string.IsNullOrEmpty(request.IM_BIN))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new
-                    {
-                        Status = "E",
-                        Message = "IM_BIN is required"
-                    });
+                    return Json(new { Status = "E", Message = "IM_BIN is required" });
                 }
 
-                // SAP RFC connection and execution
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZWM_HU_MVT_BIN_VAL_RFC");
 
-                // Set input parameters
                 myfun.SetValue("IM_USER", request.IM_USER);
                 myfun.SetValue("IM_PLANT", request.IM_PLANT);
                 myfun.SetValue("IM_BIN", request.IM_BIN);
 
-                // Execute RFC
                 myfun.Invoke(dest);
 
-                // Get return structure
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
                 string returnType = EX_RETURN.GetString("TYPE");
                 string returnMessage = EX_RETURN.GetString("MESSAGE");
 
-                // Check if there's an error from SAP
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new
-                    {
-                        Status = "E",
-                        Message = returnMessage
-                    });
+                    return Json(new { Status = "E", Message = returnMessage });
                 }
 
-                // Success response
-                return Request.CreateResponse(HttpStatusCode.OK, new
-                {
-                    Status = returnType,
-                    Message = returnMessage
-                });
+                return Json(new { Status = "S", Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
-            catch (RfcCommunicationException ex)
+            catch (CommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.InternalServerError, new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                });
+                return Json(new { Status = "E", Message = ex.Message });
             }
         }
     }
 
-    public class ZWM_HU_MVT_BIN_VAL_RFCRequest
+    public class ZWM_HU_MVT_BIN_VAL_RFC_Request
     {
         public string IM_USER { get; set; }
         public string IM_PLANT { get; set; }
