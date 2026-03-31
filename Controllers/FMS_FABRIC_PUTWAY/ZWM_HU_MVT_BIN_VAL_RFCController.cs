@@ -64,10 +64,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.FabricPutway
             {
                 return Json(new { Status = "E", Message = ex.Message });
             }
-            catch (CommunicationException ex)
-            {
-                return Json(new { Status = "E", Message = ex.Message });
-            }
+           
             catch (Exception ex)
             {
                 return Json(new { Status = "E", Message = ex.Message });
