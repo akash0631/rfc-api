@@ -9,18 +9,17 @@ using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Finance
 {
-    [RoutePrefix("api")]
     public class ZFI_EXP_UPLOAD_RFCController : BaseController
     {
         [HttpPost]
-        [Route("ZFI_EXP_UPLOAD_RFC")]
-        public async Task<HttpResponseMessage> ZFI_EXP_UPLOAD_RFC([FromBody] ZFI_EXP_UPLOAD_RFCRequest request)
+        [Route("api/ZFI_EXP_UPLOAD_RFC")]
+        public async Task<IHttpActionResult> ProcessFinanceExpenseUpload(ZFI_EXP_UPLOAD_Request request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request body cannot be null" });
+                    return Json(new { Status = "E", Message = "Request cannot be null" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -28,85 +27,115 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_EXP_UPLOAD_RFC");
 
-                // Set IM_INPUT table
-                if (request.IM_INPUT != null && request.IM_INPUT.Count > 0)
+                // Set input parameters
+                IRfcTable imInputTable = myfun.GetTable("IM_INPUT");
+                if (request.IM_INPUT != null)
                 {
-                    IRfcTable inputTable = myfun.GetTable("IM_INPUT");
-                    foreach (var item in request.IM_INPUT)
+                    foreach (var inputItem in request.IM_INPUT)
                     {
-                        inputTable.Append();
-                        inputTable.CurrentRow.SetValue("BUKRS", item.BUKRS ?? "");
-                        inputTable.CurrentRow.SetValue("LIFNR", item.LIFNR ?? "");
-                        inputTable.CurrentRow.SetValue("XBLNR", item.XBLNR ?? "");
-                        inputTable.CurrentRow.SetValue("BLDAT", item.BLDAT ?? "");
-                        inputTable.CurrentRow.SetValue("BUDAT", item.BUDAT ?? "");
-                        inputTable.CurrentRow.SetValue("WAERS", item.WAERS ?? "");
-                        inputTable.CurrentRow.SetValue("WRBTR", item.WRBTR ?? "");
-                        inputTable.CurrentRow.SetValue("BKTXT", item.BKTXT ?? "");
+                        imInputTable.Append();
+                        imInputTable.SetValue("COMPANY_CODE", inputItem.COMPANY_CODE ?? "");
+                        imInputTable.SetValue("INVOICE_DATE", inputItem.INVOICE_DATE ?? "");
+                        imInputTable.SetValue("POSTING_DATE", inputItem.POSTING_DATE ?? "");
+                        imInputTable.SetValue("VENDOR_CODE", inputItem.VENDOR_CODE ?? "");
+                        imInputTable.SetValue("HEADER_TEXT", inputItem.HEADER_TEXT ?? "");
+                        imInputTable.SetValue("WH_TAX_CODE", inputItem.WH_TAX_CODE ?? "");
+                        imInputTable.SetValue("REFRENCE_NUMBER", inputItem.REFRENCE_NUMBER ?? "");
+                        imInputTable.SetValue("VENDOR_LINE_TEXT", inputItem.VENDOR_LINE_TEXT ?? "");
+                        imInputTable.SetValue("GL_CODE", inputItem.GL_CODE ?? "");
+                        imInputTable.SetValue("AMOUNT", inputItem.AMOUNT ?? "");
+                        imInputTable.SetValue("TAX_CODE", inputItem.TAX_CODE ?? "");
+                        imInputTable.SetValue("COST_CENTER", inputItem.COST_CENTER ?? "");
+                        imInputTable.SetValue("BUSINESS_AREA", inputItem.BUSINESS_AREA ?? "");
+                        imInputTable.SetValue("PROFIT_CENTER", inputItem.PROFIT_CENTER ?? "");
+                        imInputTable.SetValue("ASSIGNMENT_NO", inputItem.ASSIGNMENT_NO ?? "");
+                        imInputTable.SetValue("GL_LINE_TEXT", inputItem.GL_LINE_TEXT ?? "");
                     }
                 }
 
-                // Set IM_OUTPUT table
-                if (request.IM_OUTPUT != null && request.IM_OUTPUT.Count > 0)
-                {
-                    IRfcTable outputTable = myfun.GetTable("IM_OUTPUT");
-                    foreach (var item in request.IM_OUTPUT)
-                    {
-                        outputTable.Append();
-                        outputTable.CurrentRow.SetValue("FIELD1", item.FIELD1 ?? "");
-                        outputTable.CurrentRow.SetValue("FIELD2", item.FIELD2 ?? "");
-                    }
-                }
+                myfun.SetValue("COMPANY_CODE", request.COMPANY_CODE ?? "");
+                myfun.SetValue("INVOICE_DATE", request.INVOICE_DATE ?? "");
+                myfun.SetValue("POSTING_DATE", request.POSTING_DATE ?? "");
+                myfun.SetValue("VENDOR_CODE", request.VENDOR_CODE ?? "");
+                myfun.SetValue("HEADER_TEXT", request.HEADER_TEXT ?? "");
+                myfun.SetValue("WH_TAX_CODE", request.WH_TAX_CODE ?? "");
+                myfun.SetValue("REFRENCE_NUMBER", request.REFRENCE_NUMBER ?? "");
+                myfun.SetValue("VENDOR_LINE_TEXT", request.VENDOR_LINE_TEXT ?? "");
+                myfun.SetValue("GL_CODE", request.GL_CODE ?? "");
+                myfun.SetValue("AMOUNT", request.AMOUNT ?? "");
+                myfun.SetValue("TAX_CODE", request.TAX_CODE ?? "");
+                myfun.SetValue("COST_CENTER", request.COST_CENTER ?? "");
+                myfun.SetValue("BUSINESS_AREA", request.BUSINESS_AREA ?? "");
+                myfun.SetValue("PROFIT_CENTER", request.PROFIT_CENTER ?? "");
+                myfun.SetValue("ASSIGNMENT_NO", request.ASSIGNMENT_NO ?? "");
+                myfun.SetValue("GL_LINE_TEXT", request.GL_LINE_TEXT ?? "");
 
                 myfun.Invoke(dest);
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetValue("TYPE")?.ToString() ?? "";
-                string returnMessage = EX_RETURN.GetValue("MESSAGE")?.ToString() ?? "";
+                string status = EX_RETURN.GetValue("TYPE")?.ToString() ?? "";
+                string message = EX_RETURN.GetValue("MESSAGE")?.ToString() ?? "";
 
-                if (returnType == "E")
+                if (status == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
+                    return Json(new { Status = "E", Message = message });
                 }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "S", Message = returnMessage });
+                return Json(new { Status = status, Message = message });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
         }
     }
 
-    public class ZFI_EXP_UPLOAD_RFCRequest
+    public class ZFI_EXP_UPLOAD_Request
     {
-        public List<IM_INPUT_Item> IM_INPUT { get; set; }
-        public List<IM_OUTPUT_Item> IM_OUTPUT { get; set; }
+        public List<ZFI_EXP_INPUT_Item> IM_INPUT { get; set; }
+        public string COMPANY_CODE { get; set; }
+        public string INVOICE_DATE { get; set; }
+        public string POSTING_DATE { get; set; }
+        public string VENDOR_CODE { get; set; }
+        public string HEADER_TEXT { get; set; }
+        public string WH_TAX_CODE { get; set; }
+        public string REFRENCE_NUMBER { get; set; }
+        public string VENDOR_LINE_TEXT { get; set; }
+        public string GL_CODE { get; set; }
+        public string AMOUNT { get; set; }
+        public string TAX_CODE { get; set; }
+        public string COST_CENTER { get; set; }
+        public string BUSINESS_AREA { get; set; }
+        public string PROFIT_CENTER { get; set; }
+        public string ASSIGNMENT_NO { get; set; }
+        public string GL_LINE_TEXT { get; set; }
     }
 
-    public class IM_INPUT_Item
+    public class ZFI_EXP_INPUT_Item
     {
-        public string BUKRS { get; set; }
-        public string LIFNR { get; set; }
-        public string XBLNR { get; set; }
-        public string BLDAT { get; set; }
-        public string BUDAT { get; set; }
-        public string WAERS { get; set; }
-        public string WRBTR { get; set; }
-        public string BKTXT { get; set; }
-    }
-
-    public class IM_OUTPUT_Item
-    {
-        public string FIELD1 { get; set; }
-        public string FIELD2 { get; set; }
+        public string COMPANY_CODE { get; set; }
+        public string INVOICE_DATE { get; set; }
+        public string POSTING_DATE { get; set; }
+        public string VENDOR_CODE { get; set; }
+        public string HEADER_TEXT { get; set; }
+        public string WH_TAX_CODE { get; set; }
+        public string REFRENCE_NUMBER { get; set; }
+        public string VENDOR_LINE_TEXT { get; set; }
+        public string GL_CODE { get; set; }
+        public string AMOUNT { get; set; }
+        public string TAX_CODE { get; set; }
+        public string COST_CENTER { get; set; }
+        public string BUSINESS_AREA { get; set; }
+        public string PROFIT_CENTER { get; set; }
+        public string ASSIGNMENT_NO { get; set; }
+        public string GL_LINE_TEXT { get; set; }
     }
 }
