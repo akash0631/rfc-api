@@ -200,22 +200,23 @@
             <div class="step-detail">Controllers/{Module}/{RFC}Controller.cs</div>
           </div>
         </div>
+    <div class="step pending" id="s-build"><div class="step-num">4</div><div class="step-body"><div class="step-label">Build Check (MSBuild)</div><div class="step-detail">NuGet restore &#8594; MSBuild compile &#8594; verify pass</div></div></div>
         <div class="step pending" id="s-deploy">
-          <div class="step-num">4</div>
+          <div class="step-num">5</div>
           <div class="step-body">
-            <div class="step-label">Build &amp; Deploy to IIS (192.168.151.46)</div>
+            <div class="step-label">Deploy to IIS (192.168.151.46)</div>
             <div class="step-detail">NuGet restore &rarr; MSBuild &rarr; robocopy &rarr; IIS recycle</div>
           </div>
         </div>
         <div class="step pending" id="s-dab">
-          <div class="step-num">5</div>
+          <div class="step-num">6</div>
           <div class="step-body">
             <div class="step-label">Register Data Lake endpoint</div>
             <div class="step-detail">Update dab-config.json in GitHub</div>
           </div>
         </div>
         <div class="step pending" id="s-swagger">
-          <div class="step-num">6</div>
+          <div class="step-num">7</div>
           <div class="step-body">
             <div class="step-label">Update RFC Swagger docs</div>
             <div class="step-detail">New endpoint card added to API explorer</div>
@@ -264,7 +265,7 @@ let selectedFile=null,selectedEnv='dev',pollTimer=null,logCount=0,lastStepState=
 
 const STEP_LABELS={
   parse:'PARSE',controller:'CONTROLLER',github:'GITHUB',
-  deploy:'DEPLOY',dab:'DAB',swagger:'SWAGGER'
+  build:'BUILD',deploy:'DEPLOY',dab:'DAB',swagger:'SWAGGER'
 };
 
 function addLog(step,status,msg){
@@ -406,7 +407,7 @@ function resetForm(){
   document.getElementById('fileInput').value='';
   document.getElementById('errBox').style.display='none';
   document.getElementById('deployBtn').disabled=true;
-  [['parse','1'],['controller','2'],['github','3'],['deploy','4'],['dab','5'],['swagger','6']].forEach(function(x){
+  [['parse','1'],['controller','2'],['github','3'],['build','4'],['deploy','5'],['dab','6'],['swagger','7']].forEach(function(x){
     var el=document.getElementById('s-'+x[0]);if(!el)return;
     el.className='step pending';el.querySelector('.step-num').textContent=x[1];
   });
