@@ -201,7 +201,6 @@ namespace Vendor_SRM_Routing_Application.Controllers
             try {
                 var rows = new List<object>();
                 using(var conn=GetConnection()){
-                    await conn.OpenAsync();
                     using(var cmd=new SqlCommand(sql,conn){CommandTimeout=30})
                     using(var rd=await cmd.ExecuteReaderAsync())
                         while(await rd.ReadAsync())
@@ -223,7 +222,6 @@ namespace Vendor_SRM_Routing_Application.Controllers
             if(string.IsNullOrEmpty(sql)) return Fail("sql required");
             try {
                 using(var conn=GetConnection()){
-                    await conn.OpenAsync();
                     using(var cmd=new SqlCommand(sql,conn){CommandTimeout=TIMEOUT}){
                         int n = await cmd.ExecuteNonQueryAsync();
                         return Ok(new{success=true,rows_affected=n,sql});
