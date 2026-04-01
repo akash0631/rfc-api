@@ -48,7 +48,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
             using (var conn = new SqlConnection(GetConnectionString()))
             {
                 conn.Open();
-                var sql = "IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = " + sq + "RFC_Upload_Metadata" + sq + ") " +
+                var sql = "IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = " + "'" + "RFC_Upload_Metadata" + "'" + ") " +
                           "CREATE TABLE RFC_Upload_Metadata (" +
                           "    Id               INT           IDENTITY(1,1) PRIMARY KEY," +
                           "    ApiName          NVARCHAR(255) NULL," +
@@ -59,7 +59,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                           "    ContentType      NVARCHAR(100) NULL," +
                           "    UploadedBy       NVARCHAR(100) NULL," +
                           "    UploadedAt       DATETIME2     NOT NULL DEFAULT GETUTCDATE()," +
-                          "    Status           NVARCHAR(50)  NOT NULL DEFAULT " + sq + "UPLOADED" + sq + "," +
+                          "    Status           NVARCHAR(50)  NOT NULL DEFAULT " + "'" + "UPLOADED" + "'" + "," +
                           "    Remarks          NVARCHAR(MAX) NULL" +
                           ")";
                 using (var cmd = new SqlCommand(sql, conn)) cmd.ExecuteNonQuery();
@@ -153,7 +153,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                 var filePath = Path.Combine(GetUploadRoot(), safeName);
                 File.WriteAllBytes(filePath, fileBytes);
                 EnsureMetadataTable();
-                var insertSql = "INSERT INTO RFC_Upload_Metadata (ApiName,FileName,OriginalFileName,FilePath,FileSizeBytes,ContentType,UploadedBy,Status) OUTPUT INSERTED.Id VALUES (@ApiName,@FileName,@OriginalFileName,@FilePath,@FileSizeBytes,@ContentType,@UploadedBy," + sq + "UPLOADED" + sq + ")";
+                var insertSql = "INSERT INTO RFC_Upload_Metadata (ApiName,FileName,OriginalFileName,FilePath,FileSizeBytes,ContentType,UploadedBy,Status) OUTPUT INSERTED.Id VALUES (@ApiName,@FileName,@OriginalFileName,@FilePath,@FileSizeBytes,@ContentType,@UploadedBy," + "'" + "UPLOADED" + "'" + ")";
                 int newId;
                 using (var conn = new SqlConnection(GetConnectionString()))
                 {
