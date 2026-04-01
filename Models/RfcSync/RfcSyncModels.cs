@@ -143,5 +143,7 @@ namespace Vendor_SRM_Routing_Application.Models.RfcSync
         public string RequestedFrom        { get; set; }
         public string RequestedTo          { get; set; }
         public string Status               { get; set; }
+                public string RequestedDate           { get; set; }
+                public DateTime SyncedAt              { get; set; }
     }
 }
