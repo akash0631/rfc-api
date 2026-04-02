@@ -13,113 +13,118 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
     {
         [HttpPost]
         [Route("api/ZFI_EXP_UPLOAD_RFC")]
-        public async Task<IHttpActionResult> ProcessFinanceExpenseUpload(ZFI_EXP_UPLOAD_Request request)
+        public async Task<HttpResponseMessage> UploadExpenseData(ZFI_EXP_UPLOAD_RFCRequest request)
         {
             try
             {
-                if (request == null)
-                {
-                    return Json(new { Status = "E", Message = "Request cannot be null" });
-                }
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_EXP_UPLOAD_RFC");
 
-                // Set input parameters
-                IRfcTable imInputTable = myfun.GetTable("IM_INPUT");
-                if (request.IM_INPUT != null)
+                // Set IMPORT parameters
+                IRfcStructure imInput = myfun.GetStructure("IM_INPUT");
+                if (!string.IsNullOrEmpty(request.COMPANY_CODE))
+                    imInput.SetValue("COMPANY_CODE", request.COMPANY_CODE);
+                if (!string.IsNullOrEmpty(request.INVOICE_DATE))
+                    imInput.SetValue("INVOICE_DATE", request.INVOICE_DATE);
+                if (!string.IsNullOrEmpty(request.POSTING_DATE))
+                    imInput.SetValue("POSTING_DATE", request.POSTING_DATE);
+                if (!string.IsNullOrEmpty(request.VENDOR_CODE))
+                    imInput.SetValue("VENDOR_CODE", request.VENDOR_CODE);
+                if (!string.IsNullOrEmpty(request.HEADER_TEXT))
+                    imInput.SetValue("HEADER_TEXT", request.HEADER_TEXT);
+                if (!string.IsNullOrEmpty(request.WH_TAX_CODE))
+                    imInput.SetValue("WH_TAX_CODE", request.WH_TAX_CODE);
+                if (!string.IsNullOrEmpty(request.REFRENCE_NUMBER))
+                    imInput.SetValue("REFRENCE_NUMBER", request.REFRENCE_NUMBER);
+                if (!string.IsNullOrEmpty(request.VENDOR_LINE_TEXT))
+                    imInput.SetValue("VENDOR_LINE_TEXT", request.VENDOR_LINE_TEXT);
+                if (!string.IsNullOrEmpty(request.GL_CODE))
+                    imInput.SetValue("GL_CODE", request.GL_CODE);
+                if (!string.IsNullOrEmpty(request.AMOUNT))
+                    imInput.SetValue("AMOUNT", request.AMOUNT);
+                if (!string.IsNullOrEmpty(request.TAX_CODE))
+                    imInput.SetValue("TAX_CODE", request.TAX_CODE);
+                if (!string.IsNullOrEmpty(request.COST_CENTER))
+                    imInput.SetValue("COST_CENTER", request.COST_CENTER);
+                if (!string.IsNullOrEmpty(request.BUSINESS_AREA))
+                    imInput.SetValue("BUSINESS_AREA", request.BUSINESS_AREA);
+                if (!string.IsNullOrEmpty(request.PROFIT_CENTER))
+                    imInput.SetValue("PROFIT_CENTER", request.PROFIT_CENTER);
+                if (!string.IsNullOrEmpty(request.ASSIGNMENT_NO))
+                    imInput.SetValue("ASSIGNMENT_NO", request.ASSIGNMENT_NO);
+                if (!string.IsNullOrEmpty(request.GL_LINE_TEXT))
+                    imInput.SetValue("GL_LINE_TEXT", request.GL_LINE_TEXT);
+
+                myfun.Invoke(dest);
+
+                IRfcTable exReturnTable = myfun.GetTable("EX_RETURN");
+                
+                var returnData = new List<dynamic>();
+                foreach (IRfcStructure row in exReturnTable)
                 {
-                    foreach (var inputItem in request.IM_INPUT)
+                    var rowData = new Dictionary<string, object>();
+                    foreach (RfcFieldMetadata field in row.GetMetadata())
                     {
-                        imInputTable.Append();
-                        imInputTable.SetValue("COMPANY_CODE", inputItem.COMPANY_CODE ?? "");
-                        imInputTable.SetValue("INVOICE_DATE", inputItem.INVOICE_DATE ?? "");
-                        imInputTable.SetValue("POSTING_DATE", inputItem.POSTING_DATE ?? "");
-                        imInputTable.SetValue("VENDOR_CODE", inputItem.VENDOR_CODE ?? "");
-                        imInputTable.SetValue("HEADER_TEXT", inputItem.HEADER_TEXT ?? "");
-                        imInputTable.SetValue("WH_TAX_CODE", inputItem.WH_TAX_CODE ?? "");
-                        imInputTable.SetValue("REFRENCE_NUMBER", inputItem.REFRENCE_NUMBER ?? "");
-                        imInputTable.SetValue("VENDOR_LINE_TEXT", inputItem.VENDOR_LINE_TEXT ?? "");
-                        imInputTable.SetValue("GL_CODE", inputItem.GL_CODE ?? "");
-                        imInputTable.SetValue("AMOUNT", inputItem.AMOUNT ?? "");
-                        imInputTable.SetValue("TAX_CODE", inputItem.TAX_CODE ?? "");
-                        imInputTable.SetValue("COST_CENTER", inputItem.COST_CENTER ?? "");
-                        imInputTable.SetValue("BUSINESS_AREA", inputItem.BUSINESS_AREA ?? "");
-                        imInputTable.SetValue("PROFIT_CENTER", inputItem.PROFIT_CENTER ?? "");
-                        imInputTable.SetValue("ASSIGNMENT_NO", inputItem.ASSIGNMENT_NO ?? "");
-                        imInputTable.SetValue("GL_LINE_TEXT", inputItem.GL_LINE_TEXT ?? "");
+                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
+                        {
+                            rowData[field.Name] = row.GetValue(field.Name)?.ToString();
+                        }
+                    }
+                    returnData.Add(rowData);
+                    
+                    // Check for error type
+                    var messageType = row.GetValue("TYPE")?.ToString();
+                    if (messageType == "E")
+                    {
+                        var errorMessage = row.GetValue("MESSAGE")?.ToString();
+                        return Request.CreateResponse(HttpStatusCode.OK, new
+                        {
+                            Status = "E",
+                            Message = errorMessage ?? "Error occurred during expense upload processing",
+                            Data = new { EX_RETURN = returnData }
+                        });
                     }
                 }
 
-                myfun.SetValue("COMPANY_CODE", request.COMPANY_CODE ?? "");
-                myfun.SetValue("INVOICE_DATE", request.INVOICE_DATE ?? "");
-                myfun.SetValue("POSTING_DATE", request.POSTING_DATE ?? "");
-                myfun.SetValue("VENDOR_CODE", request.VENDOR_CODE ?? "");
-                myfun.SetValue("HEADER_TEXT", request.HEADER_TEXT ?? "");
-                myfun.SetValue("WH_TAX_CODE", request.WH_TAX_CODE ?? "");
-                myfun.SetValue("REFRENCE_NUMBER", request.REFRENCE_NUMBER ?? "");
-                myfun.SetValue("VENDOR_LINE_TEXT", request.VENDOR_LINE_TEXT ?? "");
-                myfun.SetValue("GL_CODE", request.GL_CODE ?? "");
-                myfun.SetValue("AMOUNT", request.AMOUNT ?? "");
-                myfun.SetValue("TAX_CODE", request.TAX_CODE ?? "");
-                myfun.SetValue("COST_CENTER", request.COST_CENTER ?? "");
-                myfun.SetValue("BUSINESS_AREA", request.BUSINESS_AREA ?? "");
-                myfun.SetValue("PROFIT_CENTER", request.PROFIT_CENTER ?? "");
-                myfun.SetValue("ASSIGNMENT_NO", request.ASSIGNMENT_NO ?? "");
-                myfun.SetValue("GL_LINE_TEXT", request.GL_LINE_TEXT ?? "");
-
-                myfun.Invoke(dest);
-                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-
-                string status = EX_RETURN.GetValue("TYPE")?.ToString() ?? "";
-                string message = EX_RETURN.GetValue("MESSAGE")?.ToString() ?? "";
-
-                if (status == "E")
+                var response = new
                 {
-                    return Json(new { Status = "E", Message = message });
-                }
+                    Status = "S",
+                    Message = "Expense data uploaded successfully",
+                    Data = new { EX_RETURN = returnData }
+                };
 
-                return Json(new { Status = status, Message = message });
+                return Request.CreateResponse(HttpStatusCode.OK, response);
             }
             catch (RfcAbapException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (RfcCommunicationException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
             catch (Exception ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                });
             }
         }
     }
 
-    public class ZFI_EXP_UPLOAD_Request
-    {
-        public List<ZFI_EXP_INPUT_Item> IM_INPUT { get; set; }
-        public string COMPANY_CODE { get; set; }
-        public string INVOICE_DATE { get; set; }
-        public string POSTING_DATE { get; set; }
-        public string VENDOR_CODE { get; set; }
-        public string HEADER_TEXT { get; set; }
-        public string WH_TAX_CODE { get; set; }
-        public string REFRENCE_NUMBER { get; set; }
-        public string VENDOR_LINE_TEXT { get; set; }
-        public string GL_CODE { get; set; }
-        public string AMOUNT { get; set; }
-        public string TAX_CODE { get; set; }
-        public string COST_CENTER { get; set; }
-        public string BUSINESS_AREA { get; set; }
-        public string PROFIT_CENTER { get; set; }
-        public string ASSIGNMENT_NO { get; set; }
-        public string GL_LINE_TEXT { get; set; }
-    }
-
-    public class ZFI_EXP_INPUT_Item
+    public class ZFI_EXP_UPLOAD_RFCRequest
     {
         public string COMPANY_CODE { get; set; }
         public string INVOICE_DATE { get; set; }
