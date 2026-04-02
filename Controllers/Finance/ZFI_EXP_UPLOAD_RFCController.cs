@@ -65,8 +65,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 foreach (IRfcStructure row in exReturnTable)
                 {
                     var rowData = new Dictionary<string, object>();
-                    foreach (RfcFieldMetadata field in row.GetMetadata())
+                    for (int fi = 0; fi < row.Metadata.FieldCount; fi++)
                     {
+                        RfcFieldMetadata field = row.Metadata[fi];
                         if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
                             rowData[field.Name] = row.GetValue(field.Name)?.ToString();
