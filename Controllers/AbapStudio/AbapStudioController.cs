@@ -259,8 +259,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
             RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
             RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
             IRfcFunction fn = dest.Repository.CreateFunction("Z_UPLOAD_PROGRAM");
-            fn.SetValue("IV_PROGRAM", request.program.Trim().ToUpper());
-            fn.SetValue("IV_SOURCE", request.source);
+            string progName = request.program?.Trim()?.ToUpper() ?? "";
+            fn.SetValue("IV_PROGRAM", progName);
+            fn.SetValue("IV_SOURCE", request.source ?? "");
             fn.SetValue("IV_TITLE", request.title ?? "AI Generated Program");
             fn.SetValue("IV_PROGRAM_TYPE", request.program_type ?? "1");
             fn.SetValue("IV_TRANSPORT", request.transport ?? "");
