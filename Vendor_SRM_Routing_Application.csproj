@@ -243,10 +243,6 @@
     <Compile Include="Models\PeperlessPicklist\ZVND_GATELOT2_PICKLIST_VAL_RFCModel.cs" />
     <Compile Include="Models\RfcSync\RfcUploadMetadata.cs" />
     <Compile Include="Models\RfcSync\RfcSyncModels.cs" />
-    <Compile Include="Controllers\RfcSync\RfcUploadController.cs" />
-    <Compile Include="Controllers\RfcSync\RfcProcessController.cs" />
-    <Compile Include="Controllers\RfcSync\RfcTableController.cs" />
-    <Compile Include="Controllers\RfcSync\RfcDataSyncController.cs" />
     <Compile Include="PO_Compliance\PO_COMP_GETController.cs" />
     <Compile Include="PO_Compliance\PO_COMP_POSTController.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
