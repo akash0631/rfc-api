@@ -1,10 +1,22 @@
 name: Build and Deploy to .36 IIS
+
+# Triggered ONLY when master branch is updated.
+# In normal flow, master is updated by build-check-merge.yml after staging build passes.
+# Direct pushes to master are DISCOURAGED — use the staging branch instead.
+
 on:
   workflow_dispatch:
   push:
+    branches:
+      - master            # Only deploy when master is updated (not staging)
     paths:
       - 'Controllers/**'
       - 'Models/**'
+      - 'App_Start/**'
+      - 'Views/**'
+      - '*.cs'
+      - '*.csproj'
+      - '*.config'
 
 jobs:
   build:
