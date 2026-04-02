@@ -1,0 +1,92 @@
+name: Build Check then Merge to Master then Deploy .36 IIS
+
+# HOW IT WORKS
+# 1. Developer pushes to 'staging' branch (NEVER directly to master).
+# 2. This workflow runs a full MSBuild compile on the staging branch.
+# 3. If the build PASSES  -> automatically merges staging -> master.
+#    master push triggers deploy-iis.yml -> DLLs copied to .36 IIS, pool recycled.
+# 4. If the build FAILS   -> merge is BLOCKED. master stays clean.
+#    Developer fixes the error and pushes to staging again.
+
+on:
+  push:
+    branches:
+      - staging
+    paths:
+      - 'Controllers/**'
+      - 'Models/**'
+      - 'App_Start/**'
+      - 'Views/**'
+      - '*.cs'
+      - '*.csproj'
+      - '*.config'
+  workflow_dispatch:
+
+jobs:
+  build-check:
+    name: Build Check on staging
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          fetch-depth: 0
+
+      - name: NuGet restore
+        shell: cmd
+        run: |
+          nuget restore Vendor_SRM_Routing_Application.sln
+          echo NuGet restore exit: %ERRORLEVEL%
+          if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: MSBuild compile Release
+        shell: cmd
+        run: |
+          msbuild Vendor_SRM_Routing_Application.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /v:minimal
+          echo MSBuild exit: %ERRORLEVEL%
+          if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-build-bin
+          path: |
+            **/bin/*.dll
+            **/bin/*.pdb
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-to-master:
+    name: Merge staging to master
+    runs-on: ubuntu-latest
+    needs: build-check
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      - name: Merge staging into master
+        run: |
+          git fetch origin staging master
+          git checkout master
+          git merge --no-ff origin/staging -m "ci: auto-merge staging to master after build check passed [skip worker]"
+          git push origin master
+
+      - name: Merge complete
+        run: echo "staging merged into master. deploy-iis.yml will now trigger the .36 IIS deploy."
