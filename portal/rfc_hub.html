@@ -7,245 +7,88 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root {
-  --navy:  #1A3C6E;
-  --red:   #E8401C;
-  --bg:    #F0F4FA;
-  --white: #FFFFFF;
-  --border:#DDE3EE;
-  --text:  #0F172A;
-  --muted: #64748B;
-  --green: #059669;
-  --mono:  'IBM Plex Mono', monospace;
-  --sans:  'DM Sans', sans-serif;
-}
+:root{--navy:#1A3C6E;--red:#E8401C;--bg:#F0F4FA;--white:#FFFFFF;--border:#DDE3EE;--text:#0F172A;--muted:#64748B;--green:#059669;--mono:'IBM Plex Mono',monospace;--sans:'DM Sans',sans-serif;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
-
-/* ── TOPBAR ── */
-#topbar{
-  background:var(--navy);padding:12px 24px;
-  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
-  position:sticky;top:0;z-index:200;box-shadow:0 2px 12px rgba(0,0,0,0.3);
-}
-.logo-wrap{display:flex;align-items:center;gap:12px}
-.logo-icon{background:var(--red);color:#fff;font-weight:700;font-size:13px;padding:5px 8px;border-radius:6px;letter-spacing:.5px}
-.logo-text{color:#fff;font-size:16px;font-weight:600}
-.logo-sub{color:#7fa8d0;font-size:11px;margin-top:1px}
-.live-badge{
-  background:rgba(5,150,105,.15);border:1px solid rgba(110,231,183,.4);
-  color:#6ee7b7;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;
-  display:flex;align-items:center;gap:6px;font-family:var(--mono);
-}
-.live-dot{width:7px;height:7px;border-radius:50%;background:#6ee7b7;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.topbar-links{display:flex;gap:4px}
-.tl{color:#94b8d8;font-size:12px;text-decoration:none;padding:5px 10px;border-radius:5px;transition:.15s}
-.tl:hover{background:rgba(255,255,255,.1);color:#fff}
-
-/* ── TABS ── */
-#tabs{
-  background:#fff;border-bottom:2px solid var(--border);
-  padding:0 24px;display:flex;gap:0;overflow-x:auto;
-}
-.tab{
-  padding:13px 18px;cursor:pointer;font-size:13px;font-weight:500;
-  color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;
-  transition:.2s;user-select:none;display:flex;align-items:center;gap:7px;white-space:nowrap;
-}
-.tab:hover{color:var(--navy)}
-.tab.active{color:var(--navy);border-bottom-color:var(--red);font-weight:600}
-.dot{width:8px;height:8px;border-radius:50%;background:#cbd5e1;display:inline-block}
-.tab.active .dot{background:#22c55e}
-.chip{background:#EDF2FB;color:var(--navy);padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700}
-.new-chip{background:var(--red);color:#fff;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700}
-
-/* ── SECTIONS ── */
-.section{display:none;padding:24px}
-.section.active{display:block}
-
-/* ── CARDS ── */
+#topbar{background:var(--navy);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:200;box-shadow:0 2px 12px rgba(0,0,0,0.3);}
+.logo-wrap{display:flex;align-items:center;gap:12px}.logo-icon{background:var(--red);color:#fff;font-weight:700;font-size:13px;padding:5px 8px;border-radius:6px;letter-spacing:.5px}.logo-text{color:#fff;font-size:16px;font-weight:600}.logo-sub{color:#7fa8d0;font-size:11px;margin-top:1px}
+.live-badge{background:rgba(5,150,105,.15);border:1px solid rgba(110,231,183,.4);color:#6ee7b7;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;font-family:var(--mono);}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#6ee7b7;animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.topbar-links{display:flex;gap:4px}.tl{color:#94b8d8;font-size:12px;text-decoration:none;padding:5px 10px;border-radius:5px;transition:.15s}.tl:hover{background:rgba(255,255,255,.1);color:#fff}
+#tabs{background:#fff;border-bottom:2px solid var(--border);padding:0 24px;display:flex;gap:0;overflow-x:auto;}
+.tab{padding:13px 18px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:.2s;user-select:none;display:flex;align-items:center;gap:7px;white-space:nowrap;}
+.tab:hover{color:var(--navy)}.tab.active{color:var(--navy);border-bottom-color:var(--red);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;background:#cbd5e1;display:inline-block}.tab.active .dot{background:#22c55e}
+.chip{background:#EDF2FB;color:var(--navy);padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700}.new-chip{background:var(--red);color:#fff;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700}
+.section{display:none;padding:24px}.section.active{display:block}
 .card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
 .card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px}
-
-/* ── OVERVIEW STATS ── */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px}
 .stat-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:18px;text-align:center}
-.stat-card .num{font-size:32px;font-weight:700;color:var(--navy);font-family:var(--mono)}
-.stat-card .label{font-size:12px;color:var(--muted);margin-top:4px}
-.stat-card.live .num{color:var(--green)}
-.stat-card.red .num{color:var(--red)}
-
+.stat-card .num{font-size:32px;font-weight:700;color:var(--navy);font-family:var(--mono)}.stat-card .label{font-size:12px;color:var(--muted);margin-top:4px}
+.stat-card.live .num{color:var(--green)}.stat-card.red .num{color:var(--red)}
 .quick-ref-table{width:100%;border-collapse:collapse;font-size:13px}
 .quick-ref-table th{text-align:left;padding:8px 12px;background:#F8FAFC;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .quick-ref-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
-.quick-ref-table tr:last-child td{border-bottom:none}
-.quick-ref-table tr:hover td{background:#F8FAFC}
-.method-post{background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono)}
-.route-code{font-family:var(--mono);font-size:12px;color:#374151}
-
-/* ── RFC EXPLORER ── */
-.rfc-card{background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden}
-.rfc-header{
-  padding:14px 18px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
-  user-select:none;transition:.15s;
-}
-.rfc-header:hover{background:#F8FAFC}
-.rfc-name{font-weight:600;font-size:14px;color:var(--navy);font-family:var(--mono)}
-.rfc-desc{font-size:12px;color:var(--muted);margin-top:2px}
-.rfc-chevron{color:var(--muted);transition:transform .2s;font-size:18px}
-.rfc-card.open .rfc-chevron{transform:rotate(180deg)}
-.rfc-body{display:none;border-top:1px solid var(--border)}
-.rfc-card.open .rfc-body{display:block}
-.rfc-body-inner{padding:16px 18px}
-
-.params-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px}
-.params-table th{text-align:left;padding:6px 10px;background:#F0F4FA;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
-.params-table td{padding:7px 10px;border-bottom:1px solid var(--border)}
-.params-table tr:last-child td{border-bottom:none}
-.ptype{font-family:var(--mono);font-size:11px;color:#7c3aed;background:#f5f3ff;padding:1px 5px;border-radius:3px}
-
-/* ── TRY-IT ── */
-.try-it{margin-top:10px}
-.try-it-header{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
-.try-textarea{
-  width:100%;font-family:var(--mono);font-size:12px;
-  border:1px solid var(--border);border-radius:6px;padding:10px 12px;
-  background:#FAFBFD;resize:vertical;min-height:80px;outline:none;
-  transition:.15s;
-}
-.try-textarea:focus{border-color:var(--navy);background:#fff}
-.try-row{display:flex;gap:8px;margin-top:8px;align-items:flex-start;flex-wrap:wrap}
-.env-select{
-  font-family:var(--mono);font-size:11px;padding:7px 10px;
-  border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);outline:none;cursor:pointer;
-}
-.run-btn{
-  background:var(--navy);color:#fff;border:none;border-radius:6px;
-  padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;
-}
-.run-btn:hover{background:#1e4a8a}
-.run-btn:active{transform:scale(.97)}
-.response-box{
-  margin-top:10px;background:#0F172A;color:#e2e8f0;
-  border-radius:6px;padding:12px;font-family:var(--mono);font-size:11px;
-  min-height:44px;max-height:200px;overflow-y:auto;white-space:pre-wrap;display:none;
-}
-.response-box.visible{display:block}
-.resp-ok{color:#86efac}
-.resp-err{color:#fca5a5}
-.resp-loading{color:#94a3b8;font-style:italic}
-
-/* ── RFC GENERATOR ── */
-.gen-hero{text-align:center;padding:24px 0 20px}
-.gen-title{font-size:26px;font-weight:700;color:var(--navy)}
-.gen-sub{color:var(--muted);font-size:14px;margin-top:6px}
-.gen-flow{display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;margin:18px 0;font-size:12px}
-.gen-step{background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-weight:500}
-.gen-step.active-step{background:var(--navy);color:#fff;border-color:var(--navy)}
-.gen-arrow{color:var(--muted);font-size:14px}
-
-.gen-dropzone{
-  border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;
-  cursor:pointer;transition:.2s;
-}
-.gen-dropzone:hover,.gen-dropzone.hover{border-color:var(--navy);background:#F0F4FA}
-.gen-dz-icon{font-size:36px;margin-bottom:8px}
-.gen-dz-text{font-size:14px;font-weight:500;color:var(--text)}
-.gen-dz-sub{font-size:12px;color:var(--muted);margin-top:4px}
-.gen-dz-hint{font-size:11px;color:#94a3b8;margin-top:8px;font-family:var(--mono)}
-
-.gen-file-badge{
-  display:flex;align-items:center;gap:8px;padding:10px 14px;
-  background:#EDF2FB;border-radius:8px;margin-top:10px;font-size:13px;
-}
-.gen-env-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
-.gen-env{
-  border:2px solid var(--border);border-radius:8px;padding:12px;
-  cursor:pointer;transition:.15s;text-align:center;
-}
-.gen-env:hover{border-color:var(--navy)}
-.gen-env.active{border-color:var(--navy);background:#EDF2FB}
-.gen-env-name{font-weight:600;font-size:13px}
-.gen-env-ip{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px}
-
-.gen-deploy-btn{
-  width:100%;background:var(--navy);color:#fff;border:none;border-radius:8px;
-  padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:.15s;margin-top:14px;
-}
-.gen-deploy-btn:hover:not(:disabled){background:#1e4a8a}
-.gen-deploy-btn:disabled{opacity:.5;cursor:not-allowed}
-
-/* ── PIPELINE STEPS ── */
+.quick-ref-table tr:last-child td{border-bottom:none}.quick-ref-table tr:hover td{background:#F8FAFC}
 .pipe-steps{display:flex;flex-direction:column;gap:8px;margin-top:12px}
-.pipe-step{
-  display:flex;align-items:center;gap:12px;padding:10px 14px;
-  border:1px solid var(--border);border-radius:8px;background:#fff;transition:.3s;
-}
-.pipe-step.ps-done{border-color:#bbf7d0;background:#f0fdf4}
-.pipe-step.ps-running{border-color:#bfdbfe;background:#eff6ff}
-.pipe-step.ps-error{border-color:#fecaca;background:#fef2f2}
-.pipe-icon{font-size:18px;width:28px;text-align:center}
-.pipe-name{font-weight:600;font-size:13px}
-.pipe-detail{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:1px}
-.spinner{display:inline-block;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-/* ── SWAGGER & DAB ── */
-.swagger-note{
-  background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;
-  font-size:13px;color:#92400e;margin-bottom:16px;
-}
-.endpoint-card{
-  background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:10px;
-}
-.ep-route{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text)}
-.ep-desc{font-size:12px;color:var(--muted);margin-top:4px}
-
-/* ── RESPONSIVE ── */
-@media(max-width:600px){
-  #topbar{padding:10px 14px}
-  .section{padding:14px}
-  .gen-env-grid{grid-template-columns:1fr}
-  .try-row{flex-direction:column}
-  .env-select,.run-btn{width:100%}
-}
+.pipe-step{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:#fff;transition:.3s;}
+.pipe-step.ps-done{border-color:#bbf7d0;background:#f0fdf4}.pipe-step.ps-running{border-color:#bfdbfe;background:#eff6ff}.pipe-step.ps-error{border-color:#fecaca;background:#fef2f2}
+.pipe-icon{font-size:18px;width:28px;text-align:center}.pipe-name{font-weight:600;font-size:13px}.pipe-detail{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:1px}
+.spinner{display:inline-block;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.gen-hero{text-align:center;padding:24px 0 20px}.gen-title{font-size:26px;font-weight:700;color:var(--navy)}.gen-sub{color:var(--muted);font-size:14px;margin-top:6px}
+.gen-flow{display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;margin:18px 0;font-size:12px}
+.gen-step{background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-weight:500}.gen-step.active-step{background:var(--navy);color:#fff;border-color:var(--navy)}.gen-arrow{color:var(--muted);font-size:14px}
+.gen-dropzone{border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:.2s;}.gen-dropzone:hover,.gen-dropzone.hover{border-color:var(--navy);background:#F0F4FA}
+.gen-dz-icon{font-size:36px;margin-bottom:8px}.gen-dz-text{font-size:14px;font-weight:500;color:var(--text)}.gen-dz-sub{font-size:12px;color:var(--muted);margin-top:4px}.gen-dz-hint{font-size:11px;color:#94a3b8;margin-top:8px;font-family:var(--mono)}
+.gen-file-badge{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#EDF2FB;border-radius:8px;margin-top:10px;font-size:13px;}
+.gen-env-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
+.gen-env{border:2px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;transition:.15s;text-align:center;}.gen-env:hover{border-color:var(--navy)}.gen-env.active{border-color:var(--navy);background:#EDF2FB}
+.gen-env-name{font-weight:600;font-size:13px}.gen-env-ip{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:3px}
+.gen-deploy-btn{width:100%;background:var(--navy);color:#fff;border:none;border-radius:8px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;transition:.15s;margin-top:14px;}
+.gen-deploy-btn:hover:not(:disabled){background:#1e4a8a}.gen-deploy-btn:disabled{opacity:.5;cursor:not-allowed}
+.ls-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.ls-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.ls-card-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.ls-card-val{font-size:20px;font-weight:700;font-family:var(--mono);display:flex;align-items:center;gap:8px}
+.ls-card-sub{font-size:11px;color:var(--muted);word-break:break-word}
+.ls-ok{color:#059669}.ls-fail{color:#dc2626}.ls-warn{color:#d97706}.ls-loading{color:#94a3b8;font-size:13px;font-style:italic}
+.run-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px}.run-row:last-child{border-bottom:none}
+.run-badge{padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;font-family:var(--mono);white-space:nowrap}
+.run-badge.ok{background:#dcfce7;color:#15803d}.run-badge.fail{background:#fee2e2;color:#dc2626}.run-badge.progress{background:#dbeafe;color:#1d4ed8;animation:blink 1.2s infinite}.run-badge.cancelled{background:#f3f4f6;color:#6b7280}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
+.run-name{font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.run-time{color:var(--muted);white-space:nowrap;font-family:var(--mono);font-size:11px}
+.run-branch{background:#EDF2FB;color:var(--navy);padding:1px 6px;border-radius:4px;font-size:10px;font-family:var(--mono)}
+.gate-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;margin-bottom:8px;border:1px solid var(--border);background:#fff}
+.gate-icon{font-size:22px;width:32px;text-align:center;flex-shrink:0}.gate-label{font-weight:600;font-size:13px}.gate-desc{font-size:11px;color:var(--muted);margin-top:2px}
+.gate-status{margin-left:auto;font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;white-space:nowrap}
+.gate-status.ok{background:#dcfce7;color:#15803d}.gate-status.fail{background:#fee2e2;color:#dc2626}.gate-status.info{background:#dbeafe;color:#1d4ed8}
+.refresh-bar{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted);margin-bottom:16px;padding:8px 12px;background:#fff;border:1px solid var(--border);border-radius:8px;flex-wrap:wrap}
+.refresh-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite;flex-shrink:0}
+#ls-refresh-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:3px 10px;cursor:pointer;font-size:11px;color:var(--muted)}#ls-refresh-btn:hover{background:#F0F4FA}
+#ls-last-updated{font-family:var(--mono)}
+@media(max-width:600px){#topbar{padding:10px 14px}.section{padding:14px}.gen-env-grid{grid-template-columns:1fr}.ls-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-
-<!-- ── TOPBAR ──────────────────────────────────────────────────── -->
 <div id="topbar">
-  <div class="logo-wrap">
-    <div class="logo-icon">V2</div>
-    <div>
-      <div class="logo-text">V2 Retail — SAP RFC Portal</div>
-      <div class="logo-sub">Part 1: RFC API · Part 2: Data Lake · 46 Controllers · 82 DAB Tables</div>
-    </div>
-  </div>
-  <div class="live-badge">
-    <div class="live-dot"></div>
-    sap-api.v2retail.net — Live
-  </div>
+  <div class="logo-wrap"><div class="logo-icon">V2</div><div><div class="logo-text">V2 Retail — SAP RFC Portal</div><div class="logo-sub">Part 1: RFC API · Part 2: Data Lake · 46 Controllers · 82 DAB Tables</div></div></div>
+  <div class="live-badge"><div class="live-dot"></div> sap-api.v2retail.net — Live</div>
   <div class="topbar-links">
     <a class="tl" href="https://github.com/akash0631/rfc-api" target="_blank">GitHub ↗</a>
     <a class="tl" href="https://my-dab-app.azurewebsites.net" target="_blank">Azure DAB ↗</a>
     <a class="tl" href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank" style="background:rgba(232,64,28,.2);color:#fca5a5;border-radius:5px;padding:5px 10px">🔍 Swagger UI ↗</a>
   </div>
 </div>
-
-<!-- ── TABS ──────────────────────────────────────────────────────── -->
 <div id="tabs">
   <div class="tab active" data-tab="overview"><span class="dot"></span> Overview</div>
   <div class="tab" data-tab="explorer"><span class="dot"></span> RFC Explorer <span class="chip" id="rfc-count">46</span></div>
   <div class="tab" data-tab="generator"><span class="dot"></span> RFC Generator</div>
   <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
   <div class="tab" data-tab="pipeline"><span class="dot"></span> Pipeline</div>
+  <div class="tab" data-tab="livestatus"><span class="dot"></span> Live Status <span class="new-chip">LIVE</span></div>
 </div>
-
-<!-- ════════════════════════════════════════════════════════════════
-     OVERVIEW TAB
-════════════════════════════════════════════════════════════════ -->
 <div id="tab-overview" class="section active">
   <div class="stats-grid">
     <div class="stat-card"><div class="num" id="ctrl-count">46</div><div class="label">Total API Controllers</div></div>
@@ -254,411 +97,137 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
     <div class="stat-card red"><div class="num">SAP Dev</div><div class="label">192.168.144.174 / Client 210</div></div>
     <div class="stat-card"><div class="num">7</div><div class="label">Module Categories</div></div>
   </div>
-
   <div class="card">
     <div class="card-title">All 125 APIs — Via Swagger</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">All live endpoints are documented and testable in Swagger UI — auto-generated from the deployed controllers on IIS .36.</p>
-    <a href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank" 
-       style="display:inline-flex;align-items:center;gap:8px;background:var(--navy);color:#fff;padding:10px 20px;border-radius:7px;text-decoration:none;font-size:13px;font-weight:600">
-      🔍 Open Swagger UI — All 125 APIs ↗
-    </a>
+    <a href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:var(--navy);color:#fff;padding:10px 20px;border-radius:7px;text-decoration:none;font-size:13px;font-weight:600">🔍 Open Swagger UI — All 125 APIs ↗</a>
     <p style="font-size:11px;color:var(--muted);margin-top:10px">Try any endpoint directly — fill parameters and hit Execute. Auto-updates when new RFCs are deployed.</p>
   </div>
-</div><!-- end #tab-overview -->
-
-<!-- ════════════════════════════════════════════════════════════════
-     RFC GENERATOR TAB
-════════════════════════════════════════════════════════════════ -->
+</div>
 <div id="tab-generator" class="section">
-  <div class="gen-hero">
-    <div class="gen-title">SAP RFC <span style="color:var(--red)">→ Live API</span></div>
-    <div class="gen-sub">Upload an RFC .docx → AI generates C# controller → deployed to SAP in &lt;2 min</div>
-  </div>
-
+  <div class="gen-hero"><div class="gen-title">SAP RFC <span style="color:var(--red)">→ Live API</span></div><div class="gen-sub">Upload an RFC .docx → AI generates C# controller → deployed to SAP in &lt;2 min</div></div>
   <div class="gen-flow">
-    <div class="gen-step">📄 Upload .docx</div><div class="gen-arrow">→</div>
-    <div class="gen-step">🤖 AI Parse</div><div class="gen-arrow">→</div>
-    <div class="gen-step">⚙️ C# Generate</div><div class="gen-arrow">→</div>
-    <div class="gen-step">📦 GitHub Push</div><div class="gen-arrow">→</div>
-    <div class="gen-step active-step">🚀 Live API</div>
+    <div class="gen-step">📄 Upload .docx</div><div class="gen-arrow">→</div><div class="gen-step">🤖 AI Parse</div><div class="gen-arrow">→</div><div class="gen-step">⚙️ C# Generate</div><div class="gen-arrow">→</div><div class="gen-step">📦 GitHub Push</div><div class="gen-arrow">→</div><div class="gen-step active-step">🚀 Live API</div>
   </div>
-
   <div id="gen-upload-view">
     <div class="card">
       <div class="card-title">RFC Document</div>
-      <div class="gen-dropzone" id="gen-dropzone"
-           onclick="document.getElementById('gen-file-input').click()"
-           ondragover="event.preventDefault();this.classList.add('hover')"
-           ondragleave="this.classList.remove('hover')"
-           ondrop="genHandleDrop(event)">
-        <div class="gen-dz-icon">📄</div>
-        <div class="gen-dz-text">Drop your RFC document here</div>
-        <div class="gen-dz-sub">or <strong style="color:var(--red)">browse files</strong></div>
-        <div class="gen-dz-hint">.docx · .txt · .md</div>
+      <div class="gen-dropzone" id="gen-dropzone" onclick="document.getElementById('gen-file-input').click()" ondragover="event.preventDefault();this.classList.add('hover')" ondragleave="this.classList.remove('hover')" ondrop="genHandleDrop(event)">
+        <div class="gen-dz-icon">📄</div><div class="gen-dz-text">Drop your RFC document here</div><div class="gen-dz-sub">or <strong style="color:var(--red)">browse files</strong></div><div class="gen-dz-hint">.docx · .txt · .md</div>
         <input type="file" id="gen-file-input" accept=".docx,.txt,.md" style="display:none" onchange="genHandleFile(this.files[0])">
       </div>
-      <div id="gen-file-badge" style="display:none" class="gen-file-badge">
-        <span>📎</span>
-        <span id="gen-file-name" style="font-weight:500"></span>
-        <button onclick="genClearFile()" style="background:none;border:none;cursor:pointer;color:var(--muted);margin-left:auto;font-size:18px">×</button>
-      </div>
+      <div id="gen-file-badge" style="display:none" class="gen-file-badge"><span>📎</span><span id="gen-file-name" style="font-weight:500"></span><button onclick="genClearFile()" style="background:none;border:none;cursor:pointer;color:var(--muted);margin-left:auto;font-size:18px">×</button></div>
     </div>
-
     <div class="card">
       <div class="card-title">SAP Environment</div>
       <div class="gen-env-grid">
-        <div class="gen-env active" id="gen-env-dev" onclick="genSetEnv('dev')">
-          <div class="gen-env-name">Dev</div>
-          <div class="gen-env-ip">192.168.144.174 · Client 210</div>
-        </div>
-        <div class="gen-env" id="gen-env-quality" onclick="genSetEnv('quality')">
-          <div class="gen-env-name">Quality</div>
-          <div class="gen-env-ip">192.168.144.179 · Client 600</div>
-        </div>
-        <div class="gen-env" id="gen-env-production" onclick="genSetEnv('production')">
-          <div class="gen-env-name" style="color:var(--red)">Production</div>
-          <div class="gen-env-ip">192.168.144.170 · Client 600</div>
-        </div>
+        <div class="gen-env active" id="gen-env-dev" onclick="genSetEnv('dev')"><div class="gen-env-name">Dev</div><div class="gen-env-ip">192.168.144.174 · Client 210</div></div>
+        <div class="gen-env" id="gen-env-quality" onclick="genSetEnv('quality')"><div class="gen-env-name">Quality</div><div class="gen-env-ip">192.168.144.179 · Client 600</div></div>
+        <div class="gen-env" id="gen-env-production" onclick="genSetEnv('production')"><div class="gen-env-name" style="color:var(--red)">Production</div><div class="gen-env-ip">192.168.144.170 · Client 600</div></div>
       </div>
     </div>
-
-    <button id="gen-deploy-btn" class="gen-deploy-btn" onclick="genDeploy()" disabled>
-      ⚡ Deploy RFC → Live API
-    </button>
+    <button id="gen-deploy-btn" class="gen-deploy-btn" onclick="genDeploy()" disabled>⚡ Deploy RFC → Live API</button>
   </div>
-
   <div id="gen-progress-view" style="display:none">
     <div class="card">
       <div class="card-title">Pipeline Progress</div>
-      <div class="pipe-steps" id="gen-pipe-steps">
+      <div class="pipe-steps">
         <div class="pipe-step" id="gps-parse"><div class="pipe-icon">○</div><div><div class="pipe-name">📄 Parse RFC Document</div><div class="pipe-detail" id="gpd-parse">Waiting…</div></div></div>
         <div class="pipe-step" id="gps-controller"><div class="pipe-icon">○</div><div><div class="pipe-name">⚙️ Generate C# Controller</div><div class="pipe-detail" id="gpd-controller">Waiting…</div></div></div>
         <div class="pipe-step" id="gps-github"><div class="pipe-icon">○</div><div><div class="pipe-name">📦 Push to GitHub</div><div class="pipe-detail" id="gpd-github">Waiting…</div></div></div>
-        <div class="pipe-step" id="gps-deploy"><div class="pipe-icon">○</div><div><div class="pipe-name">🚀 Build & Deploy to IIS</div><div class="pipe-detail" id="gpd-deploy">Waiting…</div></div></div>
+        <div class="pipe-step" id="gps-deploy"><div class="pipe-icon">○</div><div><div class="pipe-name">🚀 Build &amp; Deploy to IIS</div><div class="pipe-detail" id="gpd-deploy">Waiting…</div></div></div>
       </div>
       <div id="gen-result" style="margin-top:16px;display:none"></div>
-      <button onclick="genReset()" id="gen-reset-btn" style="display:none;margin-top:12px;background:none;border:1px solid var(--border);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px">
-        ← Deploy another RFC
-      </button>
+      <button onclick="genReset()" id="gen-reset-btn" style="display:none;margin-top:12px;background:none;border:1px solid var(--border);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px">← Deploy another RFC</button>
     </div>
   </div>
 </div>
-
-<!-- ════════════════════════════════════════════════════════════════
-     DATA LAKE TAB
-════════════════════════════════════════════════════════════════ -->
 <div id="tab-dab" class="section">
-  <div class="card">
-    <div class="card-title">Azure Data API Builder</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">82 tables from DataV2 @ 192.168.151.28 exposed as REST/OData endpoints via Azure DAB.</p>
-    <a href="https://my-dab-app.azurewebsites.net" target="_blank" style="display:inline-block;background:var(--navy);color:#fff;padding:9px 18px;border-radius:7px;text-decoration:none;font-size:13px;font-weight:600">Open DAB API Explorer ↗</a>
-  </div>
-  <div class="card">
-    <div class="card-title">OData Query Examples</div>
-    <div style="font-family:var(--mono);font-size:12px;display:flex;flex-direction:column;gap:8px">
-      <code style="background:#F0F4FA;padding:8px 12px;border-radius:6px;display:block">GET /api/PO_DATA_AKA?$top=100&$filter=STORE_CODE eq 'DL01'</code>
-      <code style="background:#F0F4FA;padding:8px 12px;border-radius:6px;display:block">GET /api/ET_ZADVANCE_PAYMENT?$top=50&$orderby=POSTING_DATE desc</code>
-      <code style="background:#F0F4FA;padding:8px 12px;border-radius:6px;display:block">GET /api/SALE_DATA_CM_AKA?$select=STORE_CODE,AMOUNT&$top=20</code>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title">RFC → Data Lake Sync</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Daily sync at 1:30 AM IST via GitHub Actions. SAP RFC data flows to DataV2 SQL → Azure DAB.</p>
-    <div style="font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;padding:4px 10px;border-radius:6px">SAP Dev RFC</span>
-      <span>→</span>
-      <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">Worker /relay-rfc</span>
-      <span>→</span>
-      <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">DataV2 SQL .28</span>
-      <span>→</span>
-      <span style="background:#faf5ff;border:1px solid #e9d5ff;color:#7e22ce;padding:4px 10px;border-radius:6px">Azure DAB API</span>
-    </div>
-  </div>
+  <div class="card"><div class="card-title">Azure Data API Builder</div><p style="font-size:13px;color:var(--muted);margin-bottom:14px">82 tables from DataV2 @ 192.168.151.28 exposed as REST/OData endpoints via Azure DAB.</p><a href="https://my-dab-app.azurewebsites.net" target="_blank" style="display:inline-block;background:var(--navy);color:#fff;padding:9px 18px;border-radius:7px;text-decoration:none;font-size:13px;font-weight:600">Open DAB API Explorer ↗</a></div>
+  <div class="card"><div class="card-title">OData Query Examples</div><div style="font-family:var(--mono);font-size:12px;display:flex;flex-direction:column;gap:8px"><code style="background:#F0F4FA;padding:8px 12px;border-radius:6px;display:block">GET /api/PO_DATA_AKA?$top=100&amp;$filter=STORE_CODE eq 'DL01'</code><code style="background:#F0F4FA;padding:8px 12px;border-radius:6px;display:block">GET /api/ET_ZADVANCE_PAYMENT?$top=50&amp;$orderby=POSTING_DATE desc</code><code style="background:#F0F4FA;padding:8px 12px;border-radius:6px;display:block">GET /api/SALE_DATA_CM_AKA?$select=STORE_CODE,AMOUNT&amp;$top=20</code></div></div>
+  <div class="card"><div class="card-title">RFC → Data Lake Sync</div><p style="font-size:13px;color:var(--muted);margin-bottom:12px">Daily sync at 1:30 AM IST via GitHub Actions. SAP RFC data flows to DataV2 SQL → Azure DAB.</p><div style="font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;padding:4px 10px;border-radius:6px">SAP Dev RFC</span><span>→</span><span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">Worker /relay-rfc</span><span>→</span><span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">DataV2 SQL .28</span><span>→</span><span style="background:#faf5ff;border:1px solid #e9d5ff;color:#7e22ce;padding:4px 10px;border-radius:6px">Azure DAB API</span></div></div>
 </div>
-
-<!-- ════════════════════════════════════════════════════════════════
-     PIPELINE TAB
-════════════════════════════════════════════════════════════════ -->
 <div id="tab-pipeline" class="section">
-  <div class="card">
-    <div class="card-title">Part 1 — RFC API Deployment</div>
-    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:20px">📄</span>
-        <div><div style="font-weight:600">1. Upload RFC Document (.docx)</div><div style="color:var(--muted);font-size:12px">SAP Function Builder export — RFC Generator tab</div></div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:20px">🤖</span>
-        <div><div style="font-weight:600">2. AI Parses RFC Parameters</div><div style="color:var(--muted);font-size:12px">Claude extracts RFC name, import/export params, table structures</div></div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:20px">⚙️</span>
-        <div><div style="font-weight:600">3. C# Controller Generated</div><div style="color:var(--muted);font-size:12px">ASP.NET WebAPI controller with SAP NCo binding auto-generated</div></div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:20px">📦</span>
-        <div><div style="font-weight:600">4. Push to GitHub (akash0631/rfc-api)</div><div style="color:var(--muted);font-size:12px">Controllers/Finance/ or Controllers/[Module]/ — path filter auto-triggers deploy</div></div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:20px">🏗️</span>
-        <div><div style="font-weight:600">5. Build &amp; Deploy to V2DC-ADDVERB</div><div style="color:var(--muted);font-size:12px">GitHub Actions (deploy-iis.yml) → copies DLL to C:\V2RfcTest\bin\ → recycles V2RfcTestPool</div></div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0">
-        <span style="font-size:20px">🚀</span>
-        <div><div style="font-weight:600">6. Live on sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Tunnel → V2DC-ADDVERB IIS :9292 → SAP Dev (192.168.144.174 / Client 210)</div></div>
-      </div>
-    </div>
-    <div style="margin-top:14px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#15803d;font-weight:600">
-      ⚠️ Note for NEW controllers: VS Build on .36 required once → then all future deploys are fully automated via GitHub push
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Part 2 — Data Lake Sync</div>
-    <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:20px">🕐</span>
-        <div><div style="font-weight:600">1. Scheduled Trigger — 1:30 AM IST Daily</div><div style="color:var(--muted);font-size:12px">GitHub Actions (p4_sync.yml) runs on cron schedule</div></div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:20px">📡</span>
-        <div><div style="font-weight:600">2. Call SAP RFC via sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Worker → IIS .36 → SAP Dev — fetches latest data</div></div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:20px">💾</span>
-        <div><div style="font-weight:600">3. Store in DataV2 SQL Server</div><div style="color:var(--muted);font-size:12px">192.168.151.28 — SAP data written to DataV2 database tables</div></div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0">
-        <span style="font-size:20px">🌐</span>
-        <div><div style="font-weight:600">4. Exposed via Azure DAB (82 Tables)</div><div style="color:var(--muted);font-size:12px">my-dab-app.azurewebsites.net — OData REST API with $filter, $top, $skip, $select</div></div>
-      </div>
-    </div>
-    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px">
-      <span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;padding:4px 10px;border-radius:6px">SAP Dev RFC</span>
-      <span>→</span>
-      <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">Worker /relay-rfc</span>
-      <span>→</span>
-      <span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">DataV2 SQL .28</span>
-      <span>→</span>
-      <span style="background:#faf5ff;border:1px solid #e9d5ff;color:#7e22ce;padding:4px 10px;border-radius:6px">Azure DAB API</span>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Infrastructure</div>
-    <table class="quick-ref-table">
-      <thead><tr><th>Component</th><th>Detail</th><th>Status</th></tr></thead>
-      <tbody>
-        <tr><td>V2DC-ADDVERB IIS</td><td style="font-family:var(--mono);font-size:12px">192.168.151.36:9292</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
-        <tr><td>Cloudflare Tunnel</td><td style="font-family:var(--mono);font-size:12px">v2-sap-api → sap-api.v2retail.net</td><td><span style="color:var(--green);font-weight:600">● Connected</span></td></tr>
-        <tr><td>CF Worker</td><td style="font-family:var(--mono);font-size:12px">sap-api.v2retail.net/pipeline</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
-        <tr><td>GitHub Runner (iis)</td><td style="font-family:var(--mono);font-size:12px">V2DC-ADDVERB — label: iis</td><td><span style="color:var(--green);font-weight:600">● Online</span></td></tr>
-        <tr><td>GitHub Repo</td><td style="font-family:var(--mono);font-size:12px">akash0631/rfc-api (PUBLIC)</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr>
-        <tr><td>Azure DAB</td><td style="font-family:var(--mono);font-size:12px">my-dab-app.azurewebsites.net</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr>
-        <tr><td>SAP Dev</td><td style="font-family:var(--mono);font-size:12px">192.168.144.174 · Client 210</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr>
-        <tr><td>Data Lake SQL</td><td style="font-family:var(--mono);font-size:12px">192.168.151.28 · DataV2 DB</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Active GitHub Workflows</div>
-    <table class="quick-ref-table">
-      <thead><tr><th>Workflow</th><th>File</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr><td style="font-weight:600">Build and Deploy to .36 IIS</td><td style="font-family:var(--mono);font-size:11px">deploy-iis.yml</td><td style="font-size:12px;color:var(--muted)">Auto-triggers on Controllers/** push → compiles & deploys DLL</td></tr>
-        <tr><td style="font-weight:600">Deploy RFC Portal</td><td style="font-family:var(--mono);font-size:11px">deploy-portal.yml</td><td style="font-size:12px;color:var(--muted)">Deploys portal/rfc_hub.html to Cloudflare Pages</td></tr>
-        <tr><td style="font-weight:600">Deploy RFC Worker</td><td style="font-family:var(--mono);font-size:11px">deploy-worker.yml</td><td style="font-size:12px;color:var(--muted)">Deploys worker/index.js to Cloudflare Workers</td></tr>
-        <tr><td style="font-weight:600">P4 Data Lake Sync</td><td style="font-family:var(--mono);font-size:11px">p4_sync.yml</td><td style="font-size:12px;color:var(--muted)">Daily 1:30 AM IST — SAP RFC → DataV2 SQL</td></tr>
-        <tr><td style="font-weight:600">Restart .36 Runner</td><td style="font-family:var(--mono);font-size:11px">restart36_NOW.yml</td><td style="font-size:12px;color:var(--muted)">Emergency: restarts GitHub Actions runner on .36</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <div class="card"><div class="card-title">Part 1 — RFC API Deployment</div><div style="display:flex;flex-direction:column;gap:6px;font-size:13px"><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">📄</span><div><div style="font-weight:600">1. Upload RFC Document (.docx)</div><div style="color:var(--muted);font-size:12px">SAP Function Builder export — RFC Generator tab</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🤖</span><div><div style="font-weight:600">2. AI Parses RFC Parameters</div><div style="color:var(--muted);font-size:12px">Claude extracts RFC name, import/export params, table structures</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">⚙️</span><div><div style="font-weight:600">3. C# Controller Generated</div><div style="color:var(--muted);font-size:12px">ASP.NET WebAPI controller with SAP NCo binding auto-generated</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">📦</span><div><div style="font-weight:600">4. Push to GitHub (akash0631/rfc-api)</div><div style="color:var(--muted);font-size:12px">Controllers/Finance/ or Controllers/[Module]/ — path filter auto-triggers deploy</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🏗️</span><div><div style="font-weight:600">5. Build &amp; Deploy to V2DC-ADDVERB</div><div style="color:var(--muted);font-size:12px">GitHub Actions (deploy-iis.yml) → copies DLL to C:\V2RfcTest\bin\ → recycles V2RfcTestPool</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0"><span style="font-size:20px">🚀</span><div><div style="font-weight:600">6. Live on sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Tunnel → V2DC-ADDVERB IIS :9292 → SAP Dev (192.168.144.174 / Client 210)</div></div></div></div><div style="margin-top:14px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#15803d;font-weight:600">⚠️ Note for NEW controllers: VS Build on .36 required once → then all future deploys are fully automated via GitHub push</div></div>
+  <div class="card"><div class="card-title">Part 2 — Data Lake Sync</div><div style="display:flex;flex-direction:column;gap:6px;font-size:13px"><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🕐</span><div><div style="font-weight:600">1. Scheduled Trigger — 1:30 AM IST Daily</div><div style="color:var(--muted);font-size:12px">GitHub Actions (p4_sync.yml) runs on cron schedule</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">📡</span><div><div style="font-weight:600">2. Call SAP RFC via sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Worker → IIS .36 → SAP Dev — fetches latest data</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">💾</span><div><div style="font-weight:600">3. Store in DataV2 SQL Server</div><div style="color:var(--muted);font-size:12px">192.168.151.28 — SAP data written to DataV2 database tables</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0"><span style="font-size:20px">🌐</span><div><div style="font-weight:600">4. Exposed via Azure DAB (82 Tables)</div><div style="color:var(--muted);font-size:12px">my-dab-app.azurewebsites.net — OData REST API with $filter, $top, $skip, $select</div></div></div></div></div>
+  <div class="card"><div class="card-title">Infrastructure</div><table class="quick-ref-table"><thead><tr><th>Component</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>V2DC-ADDVERB IIS</td><td style="font-family:var(--mono);font-size:12px">192.168.151.36:9292</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr><tr><td>Cloudflare Tunnel</td><td style="font-family:var(--mono);font-size:12px">v2-sap-api → sap-api.v2retail.net</td><td><span style="color:var(--green);font-weight:600">● Connected</span></td></tr><tr><td>CF Worker</td><td style="font-family:var(--mono);font-size:12px">sap-api.v2retail.net/pipeline</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr><tr><td>GitHub Runner (iis)</td><td style="font-family:var(--mono);font-size:12px">V2DC-ADDVERB — label: iis</td><td><span style="color:var(--green);font-weight:600">● Online</span></td></tr><tr><td>GitHub Repo</td><td style="font-family:var(--mono);font-size:12px">akash0631/rfc-api (PUBLIC)</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr><tr><td>Azure DAB</td><td style="font-family:var(--mono);font-size:12px">my-dab-app.azurewebsites.net</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr><tr><td>SAP Dev</td><td style="font-family:var(--mono);font-size:12px">192.168.144.174 · Client 210</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr><tr><td>Data Lake SQL</td><td style="font-family:var(--mono);font-size:12px">192.168.151.28 · DataV2 DB</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr></tbody></table></div>
+  <div class="card"><div class="card-title">Active GitHub Workflows</div><table class="quick-ref-table"><thead><tr><th>Workflow</th><th>File</th><th>Purpose</th></tr></thead><tbody><tr><td style="font-weight:600">Build and Deploy to .36 IIS</td><td style="font-family:var(--mono);font-size:11px">deploy-iis.yml</td><td style="font-size:12px;color:var(--muted)">master push → build + deploy entirely on .36 runner</td></tr><tr><td style="font-weight:600">Build Check then Merge</td><td style="font-family:var(--mono);font-size:11px">build-check-merge.yml</td><td style="font-size:12px;color:var(--muted)">staging push → build on GitHub cloud. Pass → merge to master. Fail → master untouched.</td></tr><tr><td style="font-weight:600">Deploy RFC Portal</td><td style="font-family:var(--mono);font-size:11px">deploy-portal.yml</td><td style="font-size:12px;color:var(--muted)">Deploys portal/rfc_hub.html to Cloudflare Pages</td></tr><tr><td style="font-weight:600">Deploy RFC Worker</td><td style="font-family:var(--mono);font-size:11px">deploy-worker.yml</td><td style="font-size:12px;color:var(--muted)">Deploys worker/index.js to Cloudflare Workers</td></tr><tr><td style="font-weight:600">P4 Data Lake Sync</td><td style="font-family:var(--mono);font-size:11px">p4_sync.yml</td><td style="font-size:12px;color:var(--muted)">Daily 1:30 AM IST — SAP RFC → DataV2 SQL</td></tr><tr><td style="font-weight:600">Restart .36 Runner</td><td style="font-family:var(--mono);font-size:11px">restart36_NOW.yml</td><td style="font-size:12px;color:var(--muted)">Emergency: restarts GitHub Actions runner on .36</td></tr></tbody></table></div>
 </div>
-
-<script>
-// ═══════════════════════════════════════════════════════════
-// RFC DEFINITIONS
-// ═══════════════════════════════════════════════════════════
-// RFC Explorer removed — use Swagger UI
-
-// ═══════════════════════════════════════════════════════════
-// TAB SWITCHING
-// ═══════════════════════════════════════════════════════════
-document.querySelectorAll('.tab').forEach(function(tab) {
-  tab.addEventListener('click', function() {
-    var name = this.getAttribute('data-tab');
-    // Update tab styles
-    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
-    this.classList.add('active');
-    // Show section
-    document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
-    var sec = document.getElementById('tab-' + name);
-    if (sec) sec.classList.add('active');
-  });
-});
-
-// ═══════════════════════════════════════════════════════════
-// BUILD OVERVIEW TABLE
-// ═══════════════════════════════════════════════════════════
-(function() {
-  document.getElementById('ctrl-count').textContent = '46';
-  document.getElementById('rfc-count').textContent = '';
-})();
-
-// ═══════════════════════════════════════════════════════════
-// BUILD RFC EXPLORER
-// ═══════════════════════════════════════════════════════════
-// RFC Explorer removed
-
-// toggleRFC removed
-
-// ═══════════════════════════════════════════════════════════
-// RUN RFC CALL
-// ═══════════════════════════════════════════════════════════
-// runRFC removed
-
-function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-// ═══════════════════════════════════════════════════════════
-// RFC GENERATOR
-// ═══════════════════════════════════════════════════════════
-var genFile = null;
-var genEnv = 'dev';
-var genJobId = null;
-var genPollTimer = null;
-
-function genHandleDrop(e) {
-  e.preventDefault();
-  document.getElementById('gen-dropzone').classList.remove('hover');
-  var files = e.dataTransfer.files;
-  if (files.length > 0) genHandleFile(files[0]);
-}
-
-function genHandleFile(file) {
-  if (!file) return;
-  genFile = file;
-  document.getElementById('gen-file-name').textContent = file.name + ' (' + (file.size/1024).toFixed(1) + ' KB)';
-  document.getElementById('gen-file-badge').style.display = 'flex';
-  document.getElementById('gen-dropzone').style.display = 'none';
-  document.getElementById('gen-deploy-btn').disabled = false;
-}
-
-function genClearFile() {
-  genFile = null;
-  document.getElementById('gen-file-badge').style.display = 'none';
-  document.getElementById('gen-dropzone').style.display = 'block';
-  document.getElementById('gen-deploy-btn').disabled = true;
-  document.getElementById('gen-file-input').value = '';
-}
-
-function genSetEnv(env) {
-  genEnv = env;
-  ['dev','quality','production'].forEach(function(e) {
-    document.getElementById('gen-env-' + e).classList.toggle('active', e === env);
-  });
-}
-
-function genDeploy() {
-  if (!genFile) return;
-  document.getElementById('gen-upload-view').style.display = 'none';
-  document.getElementById('gen-progress-view').style.display = 'block';
-  document.getElementById('gen-result').style.display = 'none';
-  document.getElementById('gen-reset-btn').style.display = 'none';
-
-  // Reset steps
-  ['parse','controller','github','deploy'].forEach(function(step) {
-    var el = document.getElementById('gps-' + step);
-    el.className = 'pipe-step';
-    el.querySelector('.pipe-icon').textContent = '○';
-    document.getElementById('gpd-' + step).textContent = 'Waiting…';
-  });
-
-  var form = new FormData();
-  form.append('file', genFile, genFile.name);
-  form.append('env', genEnv);
-
-  fetch('https://sap-api.v2retail.net/pipeline/deploy', {
-    method: 'POST', body: form
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    if (d.jobId) {
-      genJobId = d.jobId;
-      genPollStatus();
-    } else {
-      genShowError('Deploy failed: ' + JSON.stringify(d));
-    }
-  })
-  .catch(function(e) { genShowError(e.message); });
-}
-
-function genPollStatus() {
-  if (!genJobId) return;
-  fetch('https://sap-api.v2retail.net/pipeline/status/' + genJobId)
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      (d.steps || []).forEach(function(s) {
-        var el = document.getElementById('gps-' + s.step);
-        if (!el) return;
-        var icon = el.querySelector('.pipe-icon');
-        var detail = document.getElementById('gpd-' + s.step);
-        if (s.status === 'done') {
-          el.className = 'pipe-step ps-done';
-          icon.textContent = '✅';
-        } else if (s.status === 'running' || s.status === 'active') {
-          el.className = 'pipe-step ps-running';
-          icon.innerHTML = '<span class="spinner">⏳</span>';
-        } else if (s.status === 'error') {
-          el.className = 'pipe-step ps-error';
-          icon.textContent = '❌';
-        }
-        if (detail && s.detail) detail.textContent = s.detail;
-      });
-
-      if (d.status === 'complete') {
-        var res = document.getElementById('gen-result');
-        res.style.display = 'block';
-        var apiUrl = d.rfcApi || ('https://sap-api.v2retail.net/api/' + (d.rfcName || '???') + '/Post');
-        res.innerHTML = '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px">' +
-          '<div style="font-weight:700;color:#15803d;margin-bottom:8px">🎉 Deployed Successfully!</div>' +
-          '<div style="font-size:12px;font-family:var(--mono);color:#374151">POST ' + apiUrl + '</div>' +
-          '</div>';
-        document.getElementById('gen-reset-btn').style.display = 'block';
-      } else if (d.status === 'error') {
-        genShowError(d.error || 'Pipeline error');
-      } else {
-        genPollTimer = setTimeout(genPollStatus, 3000);
-      }
-    })
-    .catch(function(e) {
-      genPollTimer = setTimeout(genPollStatus, 4000);
-    });
-}
-
-function genShowError(msg) {
-  var res = document.getElementById('gen-result');
-  res.style.display = 'block';
-  res.innerHTML = '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 16px;color:#dc2626">' +
-    '❌ ' + escHtml(msg) + '</div>';
-  document.getElementById('gen-reset-btn').style.display = 'block';
-}
-
-function genReset() {
-  if (genPollTimer) clearTimeout(genPollTimer);
-  genJobId = null;
-  genFile = null;
-  document.getElementById('gen-file-input').value = '';
-  document.getElementById('gen-file-badge').style.display = 'none';
-  document.getElementById('gen-dropzone').style.display = 'block';
-  document.getElementById('gen-deploy-btn').disabled = true;
-  document.getElementById('gen-upload-view').style.display = 'block';
-  document.getElementById('gen-progress-view').style.display = 'none';
-}
+<div id="tab-livestatus" class="section">
+  <div class="refresh-bar">
+    <div class="refresh-dot"></div>
+    <span>Live status — auto-refreshes every 30 seconds</span>
+    <span>· Last updated: <span id="ls-last-updated">loading…</span></span>
+    <button id="ls-refresh-btn" onclick="lsRefresh()">↻ Refresh now</button>
+  </div>
+  <div class="card">
+    <div class="card-title">🚦 CI/CD Gate — Branch Protection Status</div>
+    <div id="ls-gate-rows"><div class="gate-row"><div class="gate-icon">⏳</div><div><div class="gate-label">Loading gate status…</div></div></div></div>
+  </div>
+  <div class="ls-grid">
+    <div class="ls-card"><div class="ls-card-title">Last IIS Deploy</div><div class="ls-card-val ls-loading" id="ls-kpi-deploy">loading…</div><div class="ls-card-sub" id="ls-kpi-deploy-time"></div></div>
+    <div class="ls-card"><div class="ls-card-title">Last Build Check</div><div class="ls-card-val ls-loading" id="ls-kpi-build">loading…</div><div class="ls-card-sub" id="ls-kpi-build-time"></div></div>
+    <div class="ls-card"><div class="ls-card-title">Portal / Worker</div><div class="ls-card-val ls-loading" id="ls-kpi-portal">loading…</div><div class="ls-card-sub" id="ls-kpi-portal-time"></div></div>
+    <div class="ls-card"><div class="ls-card-title">API Health</div><div class="ls-card-val ls-loading" id="ls-kpi-health">loading…</div><div class="ls-card-sub" id="ls-kpi-health-sub">sap-api.v2retail.net</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">📋 Recent GitHub Actions Runs</div>
+    <div id="ls-runs-list"><div style="font-size:13px;color:var(--muted);padding:8px 0">Loading workflow runs…</div></div>
+    <div style="margin-top:10px"><a href="https://github.com/akash0631/rfc-api/actions" target="_blank" style="font-size:12px;color:var(--navy);text-decoration:none;font-weight:600">View all runs on GitHub ↗</a></div>
+  </div>
+  <div class="card">
+    <div class="card-title">🏗️ Infrastructure Ping</div>
+    <table class="quick-ref-table"><thead><tr><th>Component</th><th>Endpoint</th><th>Live Check</th></tr></thead><tbody id="ls-infra-tbody"><tr><td colspan="3" style="color:var(--muted);font-size:13px">Checking…</td></tr></tbody></table>
+  </div>
+  <div class="card" style="background:#fffbeb;border-color:#fde68a">
+    <div class="card-title" style="color:#92400e">ℹ️ How Branch Protection Works</div>
+    <div style="font-size:13px;color:#78350f;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#fef9c3;border:1px solid #fde68a;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">1</span><div>Developer pushes to <code style="background:#fef9c3;padding:1px 5px;border-radius:3px">staging</code> branch only — <strong>never directly to master.</strong></div></div>
+      <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#fef9c3;border:1px solid #fde68a;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">2</span><div><strong>build-check-merge.yml</strong> auto-triggers: NuGet restore + MSBuild compile on GitHub cloud runner (windows-latest).</div></div>
+      <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#fef9c3;border:1px solid #fde68a;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">3</span><div><strong>✅ Build passes</strong> → auto-merges staging → master. <strong>❌ Build fails</strong> → master is <u>never touched</u>. Developer fixes and re-pushes staging.</div></div>
+      <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#fef9c3;border:1px solid #fde68a;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">4</span><div><strong>deploy-iis.yml</strong> triggers on master push — runs entirely on .36 self-hosted runner: checkout → NuGet → MSBuild → copy DLLs → recycle V2RfcTestPool → health check.</div></div>
+    </div>
+  </div>
+</div><script>
+document.querySelectorAll('.tab').forEach(function(tab){tab.addEventListener('click',function(){var name=this.getAttribute('data-tab');document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});this.classList.add('active');document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});var sec=document.getElementById('tab-'+name);if(sec)sec.classList.add('active');if(name==='livestatus')lsRefresh();});});
+(function(){document.getElementById('ctrl-count').textContent='46';document.getElementById('rfc-count').textContent='';})();
+var genFile=null,genEnv='dev',genJobId=null,genPollTimer=null;
+function genHandleDrop(e){e.preventDefault();document.getElementById('gen-dropzone').classList.remove('hover');var files=e.dataTransfer.files;if(files.length>0)genHandleFile(files[0]);}
+function genHandleFile(file){if(!file)return;genFile=file;document.getElementById('gen-file-name').textContent=file.name+' ('+(file.size/1024).toFixed(1)+' KB)';document.getElementById('gen-file-badge').style.display='flex';document.getElementById('gen-dropzone').style.display='none';document.getElementById('gen-deploy-btn').disabled=false;}
+function genClearFile(){genFile=null;document.getElementById('gen-file-badge').style.display='none';document.getElementById('gen-dropzone').style.display='block';document.getElementById('gen-deploy-btn').disabled=true;document.getElementById('gen-file-input').value='';}
+function genSetEnv(env){genEnv=env;['dev','quality','production'].forEach(function(e){document.getElementById('gen-env-'+e).classList.toggle('active',e===env);});}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function genDeploy(){if(!genFile)return;document.getElementById('gen-upload-view').style.display='none';document.getElementById('gen-progress-view').style.display='block';document.getElementById('gen-result').style.display='none';document.getElementById('gen-reset-btn').style.display='none';['parse','controller','github','deploy'].forEach(function(step){var el=document.getElementById('gps-'+step);el.className='pipe-step';el.querySelector('.pipe-icon').textContent='○';document.getElementById('gpd-'+step).textContent='Waiting…';});var form=new FormData();form.append('file',genFile,genFile.name);form.append('env',genEnv);fetch('https://sap-api.v2retail.net/pipeline/deploy',{method:'POST',body:form}).then(function(r){return r.json();}).then(function(d){if(d.jobId){genJobId=d.jobId;genPollStatus();}else{genShowError('Deploy failed: '+JSON.stringify(d));}}).catch(function(e){genShowError(e.message);});}
+function genPollStatus(){if(!genJobId)return;fetch('https://sap-api.v2retail.net/pipeline/status/'+genJobId).then(function(r){return r.json();}).then(function(d){(d.steps||[]).forEach(function(s){var el=document.getElementById('gps-'+s.step);if(!el)return;var icon=el.querySelector('.pipe-icon');var detail=document.getElementById('gpd-'+s.step);if(s.status==='done'){el.className='pipe-step ps-done';icon.textContent='✅';}else if(s.status==='running'||s.status==='active'){el.className='pipe-step ps-running';icon.innerHTML='<span class="spinner">⏳</span>';}else if(s.status==='error'){el.className='pipe-step ps-error';icon.textContent='❌';}if(detail&&s.detail)detail.textContent=s.detail;});if(d.status==='complete'){var res=document.getElementById('gen-result');res.style.display='block';var apiUrl=d.rfcApi||('https://sap-api.v2retail.net/api/'+(d.rfcName||'???')+'/Post');res.innerHTML='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px"><div style="font-weight:700;color:#15803d;margin-bottom:8px">🎉 Deployed Successfully!</div><div style="font-size:12px;font-family:var(--mono);color:#374151">POST '+apiUrl+'</div></div>';document.getElementById('gen-reset-btn').style.display='block';}else if(d.status==='error'){genShowError(d.error||'Pipeline error');}else{genPollTimer=setTimeout(genPollStatus,3000);}}).catch(function(e){genPollTimer=setTimeout(genPollStatus,4000);});}
+function genShowError(msg){var res=document.getElementById('gen-result');res.style.display='block';res.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 16px;color:#dc2626">❌ '+escHtml(msg)+'</div>';document.getElementById('gen-reset-btn').style.display='block';}
+function genReset(){if(genPollTimer)clearTimeout(genPollTimer);genJobId=null;genFile=null;document.getElementById('gen-file-input').value='';document.getElementById('gen-file-badge').style.display='none';document.getElementById('gen-dropzone').style.display='block';document.getElementById('gen-deploy-btn').disabled=true;document.getElementById('gen-upload-view').style.display='block';document.getElementById('gen-progress-view').style.display='none';}
+var lsTimer=null;var GH_API='https://api.github.com/repos/akash0631/rfc-api';
+function lsRefresh(){document.getElementById('ls-last-updated').textContent='refreshing…';lsLoadRuns();lsCheckHealth();lsUpdateInfra();}
+function lsLoadRuns(){fetch(GH_API+'/actions/runs?per_page=15&t='+Date.now()).then(function(r){return r.json();}).then(function(data){var runs=data.workflow_runs||[];lsRenderKPIs(runs);lsRenderRuns(runs);lsRenderGate(runs);var now=new Date();document.getElementById('ls-last-updated').textContent=now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';}).catch(function(e){document.getElementById('ls-last-updated').textContent='error — '+e.message;});}
+function lsRunIcon(status,conclusion){if(status==='in_progress'||status==='queued')return '<span class="run-badge progress">⏳ Running</span>';if(conclusion==='success')return '<span class="run-badge ok">✅ Success</span>';if(conclusion==='failure')return '<span class="run-badge fail">❌ Failed</span>';if(conclusion==='cancelled')return '<span class="run-badge cancelled">⊘ Cancelled</span>';return '<span class="run-badge cancelled">'+(conclusion||status)+'</span>';}
+function lsAgo(dateStr){if(!dateStr)return '';var diff=Math.floor((Date.now()-new Date(dateStr))/1000);if(diff<60)return diff+'s ago';if(diff<3600)return Math.floor(diff/60)+'m ago';if(diff<86400)return Math.floor(diff/3600)+'h ago';return Math.floor(diff/86400)+'d ago';}
+function lsRenderRuns(runs){var html='';runs.slice(0,12).forEach(function(r){var badge=lsRunIcon(r.status,r.conclusion);var branch=r.head_branch||'';var name=(r.display_title||r.name||'').slice(0,55);html+='<div class="run-row">'+badge+'<a class="run-name" href="'+r.html_url+'" target="_blank" title="'+escHtml(name)+'">'+escHtml(name)+'</a><span class="run-branch">'+escHtml(branch)+'</span><span class="run-time">'+lsAgo(r.updated_at)+'</span></div>';});document.getElementById('ls-runs-list').innerHTML=html||'<div style="color:var(--muted);font-size:13px">No runs found.</div>';}
+function lsRenderKPIs(runs){var d=runs.find(function(r){return r.path&&r.path.includes('deploy-iis.yml');});if(d){var ok=d.conclusion==='success',inp=d.status==='in_progress';document.getElementById('ls-kpi-deploy').className='ls-card-val '+(inp?'ls-warn':(ok?'ls-ok':'ls-fail'));document.getElementById('ls-kpi-deploy').textContent=inp?'⏳ Running':(ok?'✅ Success':'❌ Failed');document.getElementById('ls-kpi-deploy-time').textContent=lsAgo(d.updated_at)+' · '+(d.display_title||'').slice(0,40);}
+var b=runs.find(function(r){return r.path&&r.path.includes('build-check-merge.yml');});if(b){var ok2=b.conclusion==='success',inp2=b.status==='in_progress';document.getElementById('ls-kpi-build').className='ls-card-val '+(inp2?'ls-warn':(ok2?'ls-ok':'ls-fail'));document.getElementById('ls-kpi-build').textContent=inp2?'⏳ Running':(ok2?'✅ Success':'❌ Failed');document.getElementById('ls-kpi-build-time').textContent=lsAgo(b.updated_at)+' · '+(b.display_title||'').slice(0,40);}
+var pw=runs.find(function(r){return r.path&&(r.path.includes('deploy-worker')||r.path.includes('deploy-portal'));});if(pw){var ok3=pw.conclusion==='success';document.getElementById('ls-kpi-portal').className='ls-card-val '+(ok3?'ls-ok':'ls-fail');document.getElementById('ls-kpi-portal').textContent=ok3?'✅ Success':'❌ Failed';document.getElementById('ls-kpi-portal-time').textContent=lsAgo(pw.updated_at);}}
+function lsRenderGate(runs){var bc=runs.find(function(r){return r.path&&r.path.includes('build-check-merge.yml');});var dep=runs.find(function(r){return r.path&&r.path.includes('deploy-iis.yml');});var bcOk=bc&&bc.conclusion==='success',bcFail=bc&&bc.conclusion==='failure',bcRun=bc&&bc.status==='in_progress';var depOk=dep&&dep.conclusion==='success',depFail=dep&&dep.conclusion==='failure',depRun=dep&&dep.status==='in_progress';
+var html='<div class="gate-row"><div class="gate-icon">🌿</div><div style="flex:1"><div class="gate-label">staging branch</div><div class="gate-desc">All code pushed to staging first — never directly to master</div></div><div class="gate-status info">REQUIRED</div></div>';
+var bcSt=bcRun?'info':(bcOk?'ok':(bcFail?'fail':'info'));var bcLbl=bcRun?'⏳ Running':(bcOk?'✅ Passed':(bcFail?'❌ Failed':'— No runs'));
+html+='<div class="gate-row"><div class="gate-icon">🔨</div><div style="flex:1"><div class="gate-label">Build Check (build-check-merge.yml)</div><div class="gate-desc">NuGet + MSBuild on GitHub cloud runner · '+(bc?lsAgo(bc.updated_at):'no data')+'</div></div><div class="gate-status '+bcSt+'">'+bcLbl+'</div></div>';
+var mrgSt=bcOk?'ok':'fail';var mrgLbl=bcOk?'✅ Allowed':'🔒 Blocked';
+html+='<div class="gate-row"><div class="gate-icon">🔀</div><div style="flex:1"><div class="gate-label">Auto-merge staging → master</div><div class="gate-desc">Only when build passes. Master is never touched if build fails.</div></div><div class="gate-status '+mrgSt+'">'+mrgLbl+'</div></div>';
+var depSt=depRun?'info':(depOk?'ok':(depFail?'fail':'info'));var depLbl=depRun?'⏳ Deploying':(depOk?'✅ Deployed':(depFail?'❌ Failed':'— No runs'));
+html+='<div class="gate-row"><div class="gate-icon">🚀</div><div style="flex:1"><div class="gate-label">Deploy to .36 IIS (deploy-iis.yml)</div><div class="gate-desc">Runs on V2DC-ADDVERB runner · checkout → NuGet → MSBuild → copy DLLs → recycle pool · '+(dep?lsAgo(dep.updated_at):'no data')+'</div></div><div class="gate-status '+depSt+'">'+depLbl+'</div></div>';
+document.getElementById('ls-gate-rows').innerHTML=html;}
+function lsCheckHealth(){var el=document.getElementById('ls-kpi-health'),sub=document.getElementById('ls-kpi-health-sub');el.className='ls-card-val ls-warn';el.textContent='⏳ Checking…';fetch('https://sap-api.v2retail.net/',{method:'HEAD',mode:'no-cors',cache:'no-store'}).then(function(){el.className='ls-card-val ls-ok';el.textContent='✅ Reachable';sub.textContent='sap-api.v2retail.net responding';}).catch(function(){el.className='ls-card-val ls-fail';el.textContent='❌ Unreachable';sub.textContent='Cannot reach sap-api.v2retail.net';});}
+function lsUpdateInfra(){var rows=[{name:'V2DC-ADDVERB IIS',detail:'192.168.151.36:9292',url:'https://sap-api.v2retail.net/',check:true},{name:'Cloudflare Tunnel',detail:'v2-sap-api → sap-api.v2retail.net',url:null,st:'● Connected'},{name:'CF Worker',detail:'sap-api.v2retail.net/pipeline',url:'https://sap-api.v2retail.net/pipeline',check:true},{name:'GitHub Runner (iis)',detail:'V2DC-ADDVERB — label: iis',url:null,st:'● Online'},{name:'GitHub Repo',detail:'akash0631/rfc-api (PUBLIC)',url:'https://github.com/akash0631/rfc-api',check:true},{name:'Azure DAB',detail:'my-dab-app.azurewebsites.net',url:'https://my-dab-app.azurewebsites.net',check:true},{name:'SAP Dev',detail:'192.168.144.174 · Client 210',url:null,st:'● Active (internal)'},{name:'Data Lake SQL',detail:'192.168.151.28 · DataV2 DB',url:null,st:'● Active (internal)'}];
+var tb=document.getElementById('ls-infra-tbody'),html='';
+rows.forEach(function(r,i){var sid='ls-inf-'+i;var stHtml=r.st?'<span style="color:var(--green);font-weight:600">'+r.st+'</span>':'<span id="'+sid+'" style="color:var(--muted)">checking…</span>';html+='<tr><td style="font-weight:500">'+r.name+'</td><td style="font-family:var(--mono);font-size:11px">'+r.detail+'</td><td>'+stHtml+'</td></tr>';});
+tb.innerHTML=html;
+rows.forEach(function(r,i){if(!r.check||!r.url)return;var el=document.getElementById('ls-inf-'+i);if(!el)return;fetch(r.url,{method:'HEAD',mode:'no-cors',cache:'no-store'}).then(function(){el.innerHTML='<span style="color:var(--green);font-weight:600">● Online</span>';}).catch(function(){el.innerHTML='<span style="color:#d97706;font-weight:600">⚠ Check manually</span>';});});}
+function lsStartAutoRefresh(){if(lsTimer)clearInterval(lsTimer);lsTimer=setInterval(function(){var t=document.querySelector('.tab.active');if(t&&t.getAttribute('data-tab')==='livestatus')lsRefresh();},30000);}
+lsStartAutoRefresh();
 </script>
 </body>
 </html>
-
-<!-- sync: 2026-03-25 v3-smb -->
+<!-- sync: 2026-04-02 v4-livestatus -->
