@@ -244,24 +244,6 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
                 return Json(new { error = ex.Message });
             }
         }
-    }
-
-    // ── Request models ─────────────────────────────────────
-    public class AbapQueryRequest
-    {
-        public string sql { get; set; }
-    }
-
-    public class AbapSourceRequest
-    {
-        public string program { get; set; }
-    }
-
-    public class AbapTablesRequest
-    {
-        public string prefix { get; set; }
-    }
-
 
     // ── Deploy (Z_UPLOAD_PROGRAM) ──────────────────────
     [HttpPost]
@@ -333,6 +315,25 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
 
     }
 
+    }
+
+    // ── Request models ─────────────────────────────────────
+    public class AbapQueryRequest
+    {
+        public string sql { get; set; }
+    }
+
+    public class AbapSourceRequest
+    {
+        public string program { get; set; }
+    }
+
+    public class AbapTablesRequest
+    {
+        public string prefix { get; set; }
+    }
+
+
     public class AbapDeployRequest
     {
         public string program { get; set; }
@@ -343,7 +344,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
         public string overwrite { get; set; }
     }
 
-        public class AbapTestRequest
+    public class AbapTestRequest
     {
         public string program { get; set; }
         public string test_class { get; set; }
