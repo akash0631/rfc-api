@@ -315,8 +315,6 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
 
     }
 
-    }
-
     // ── Request models ─────────────────────────────────────
     public class AbapQueryRequest
     {
