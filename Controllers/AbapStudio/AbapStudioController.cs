@@ -259,7 +259,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
             RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
             RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
             IRfcFunction fn = dest.Repository.CreateFunction("Z_UPLOAD_PROGRAM");
-            fn.SetValue("IV_PROGRAM", request.program.Trim().ToUpper());
+            fn.SetValue("IV_PROGRAM", request.program.Trim().ToUpper().Replace(" ", ""));
             fn.SetValue("IV_SOURCE", request.source);
             fn.SetValue("IV_TITLE", request.title ?? "AI Generated Program");
             fn.SetValue("IV_PROGRAM_TYPE", request.program_type ?? "1");
@@ -294,7 +294,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
             RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
             RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
             IRfcFunction fn = dest.Repository.CreateFunction("Z_RUN_UNIT_TEST");
-            fn.SetValue("IV_PROGRAM", request.program.Trim().ToUpper());
+            fn.SetValue("IV_PROGRAM", request.program.Trim().ToUpper().Replace(" ", ""));
             fn.SetValue("IV_TEST_CLASS", request.test_class ?? "");
             fn.Invoke(dest);
 
