@@ -1,14 +1,21 @@
 name: Build and Deploy to .36 IIS
 
-# Triggered ONLY when master branch is updated.
-# In normal flow, master is updated by build-check-merge.yml after staging build passes.
-# Direct pushes to master are DISCOURAGED — use the staging branch instead.
+# HOW IT WORKS:
+# 1. Developer NEVER pushes directly to master.
+# 2. Developer pushes to 'staging' branch.
+# 3. build-check-merge.yml builds on GitHub runner (windows-latest).
+#    - If build PASSES  -> auto-merges staging to master.
+#    - If build FAILS   -> master is NOT touched. Developer fixes & re-pushes staging.
+# 4. Master push (from the merge) triggers THIS workflow.
+# 5. Single job runs entirely on the self-hosted .36 runner:
+#    checkout master -> NuGet restore -> MSBuild -> copy DLLs -> recycle pool -> health check.
+#    No artifact upload/download needed (avoids SSL issues with GitHub API on .36).
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - master            # Only deploy when master is updated (not staging)
+      - master          # Only deploy when master is updated (never staging)
     paths:
       - 'Controllers/**'
       - 'Models/**'
@@ -19,57 +26,48 @@ on:
       - '*.config'
 
 jobs:
-  build:
-    runs-on: windows-latest
-    name: Build on GitHub runner
+  build-and-deploy:
+    runs-on: [self-hosted, iis]
+    name: Build and Deploy on .36 IIS runner
+
     steps:
-      - name: Checkout
+      - name: Checkout master
         uses: actions/checkout@v4
         with:
+          ref: master
           fetch-depth: 1
 
       - name: NuGet restore
         shell: cmd
         run: |
           nuget restore Vendor_SRM_Routing_Application.sln
-          echo NuGet done: %ERRORLEVEL%
+          echo NuGet restore exit: %ERRORLEVEL%
+          if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: MSBuild compile
+      - name: MSBuild compile Release
         shell: cmd
         run: |
-          msbuild Vendor_SRM_Routing_Application.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /v:minimal
-          echo Build done: %ERRORLEVEL%
+          msbuild Vendor_SRM_Routing_Application.sln ^
+            /p:Configuration=Release ^
+            /p:Platform="Any CPU" ^
+            /t:Build ^
+            /m ^
+            /v:minimal
+          echo MSBuild exit: %ERRORLEVEL%
+          if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
-      - name: Upload compiled bin
-        uses: actions/upload-artifact@v4
-        with:
-          name: iis-bin
-          path: |
-            **/bin/*.dll
-            **/bin/*.pdb
-          if-no-files-found: error
-          retention-days: 1
-
-  deploy:
-    runs-on: [self-hosted, iis]
-    name: Deploy to .36 IIS
-    needs: build
-    steps:
-      - name: Download compiled bin
-        uses: actions/download-artifact@v4
-        with:
-          name: iis-bin
-          path: bin-artifact
-
-      - name: Copy DLL to IIS bin and recycle pool
+      - name: Deploy DLLs to IIS bin
         shell: powershell
         run: |
-          $ErrorActionPreference = 'Continue'
+          $ErrorActionPreference = 'Stop'
           $dest = 'C:\V2RfcTest\bin'
-          $dlls = Get-ChildItem -Path 'bin-artifact' -Recurse -Filter '*.dll'
+
+          # Copy all compiled DLLs
+          $dlls = Get-ChildItem -Path '.' -Recurse -Filter '*.dll' |
+                  Where-Object { $_.FullName -like '*\bin\Release\*' }
           $copied = 0
           foreach ($dll in $dlls) {
             Copy-Item $dll.FullName "$dest\$($dll.Name)" -Force
@@ -77,26 +75,43 @@ jobs:
             $copied++
           }
           Write-Host "Total DLLs copied: $copied"
+          if ($copied -eq 0) { throw "No DLLs found to deploy!" }
 
-          # Fix Web.config to SAP Dev
+      - name: Fix Web.config to SAP Dev
+        shell: powershell
+        run: |
           $wc = 'C:\V2RfcTest\Web.config'
           if (Test-Path $wc) {
             $c = Get-Content $wc -Raw
             $c = $c -replace '192\.168\.144\.170', '192.168.144.174'
             $c = $c -replace 'value=""600""', 'value=""210""'
             Set-Content $wc $c -Encoding UTF8
-            Write-Host "Web.config: SAP Dev set"
+            Write-Host "Web.config: SAP Dev (192.168.144.174 / Client 210) set"
+          } else {
+            Write-Host "Web.config not found at $wc — skipping"
           }
 
-          # Recycle app pool
+      - name: Recycle V2RfcTestPool
+        shell: powershell
+        run: |
           & C:\Windows\System32\inetsrv\appcmd.exe recycle apppool /apppool.name:V2RfcTestPool
           Start-Sleep 8
+          Write-Host "App pool recycled."
 
-          # Health check
+      - name: Health check
+        shell: powershell
+        run: |
           try {
-            $r = Invoke-WebRequest 'http://localhost:9292/api/ZPO_DD_UPD_RFC/Post' -Method POST -Body '{"PO_NO":"TEST","DELV_DATE":"20260401"}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 15
-            Write-Host "Health OK: $($r.Content.Substring(0,[Math]::Min(100,$r.Content.Length)))"
+            $body = '{"PO_NO":"TEST","DELV_DATE":"20260401"}'
+            $r = Invoke-WebRequest `
+              'http://localhost:9292/api/ZPO_DD_UPD_RFC/Post' `
+              -Method POST `
+              -Body $body `
+              -ContentType 'application/json' `
+              -UseBasicParsing `
+              -TimeoutSec 15
+            Write-Host "Health OK: $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))"
           } catch {
-            Write-Host "Health (may be normal): $_"
+            Write-Host "Health check note (may be normal on first deploy): $_"
           }
           exit 0
