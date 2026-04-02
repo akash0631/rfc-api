@@ -8,14 +8,14 @@ name: Build and Deploy to .36 IIS
 #    - If build FAILS   -> master is NOT touched. Developer fixes & re-pushes staging.
 # 4. Master push (from the merge) triggers THIS workflow.
 # 5. Single job runs entirely on the self-hosted .36 runner:
-#    checkout master -> NuGet restore -> MSBuild -> copy DLLs -> recycle pool -> health check.
-#    No artifact upload/download needed (avoids SSL issues with GitHub API on .36).
+#    - Downloads nuget.exe (since .36 runner may not have nuget in PATH)
+#    - NuGet restore -> MSBuild -> copy DLLs -> recycle pool -> health check.
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - master          # Only deploy when master is updated (never staging)
+      - master
     paths:
       - 'Controllers/**'
       - 'Models/**'
@@ -37,10 +37,24 @@ jobs:
           ref: master
           fetch-depth: 1
 
+      - name: Download nuget.exe
+        shell: powershell
+        run: |
+          $nugetPath = "$env:RUNNER_TEMP\nuget.exe"
+          if (-not (Test-Path $nugetPath)) {
+            Write-Host "Downloading nuget.exe..."
+            Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" `
+              -OutFile $nugetPath -UseBasicParsing
+          } else {
+            Write-Host "nuget.exe already cached at $nugetPath"
+          }
+          Write-Host "NuGet version: $(& $nugetPath help | Select-Object -First 1)"
+          echo "NUGET_EXE=$nugetPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: NuGet restore
         shell: cmd
         run: |
-          nuget restore Vendor_SRM_Routing_Application.sln
+          "%NUGET_EXE%" restore Vendor_SRM_Routing_Application.sln
           echo NuGet restore exit: %ERRORLEVEL%
           if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
@@ -65,7 +79,6 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $dest = 'C:\V2RfcTest\bin'
 
-          # Copy all compiled DLLs
           $dlls = Get-ChildItem -Path '.' -Recurse -Filter '*.dll' |
                   Where-Object { $_.FullName -like '*\bin\Release\*' }
           $copied = 0
@@ -87,8 +100,6 @@ jobs:
             $c = $c -replace 'value=""600""', 'value=""210""'
             Set-Content $wc $c -Encoding UTF8
             Write-Host "Web.config: SAP Dev (192.168.144.174 / Client 210) set"
-          } else {
-            Write-Host "Web.config not found at $wc — skipping"
           }
 
       - name: Recycle V2RfcTestPool
@@ -102,16 +113,14 @@ jobs:
         shell: powershell
         run: |
           try {
-            $body = '{"PO_NO":"TEST","DELV_DATE":"20260401"}'
             $r = Invoke-WebRequest `
               'http://localhost:9292/api/ZPO_DD_UPD_RFC/Post' `
               -Method POST `
-              -Body $body `
+              -Body '{"PO_NO":"TEST","DELV_DATE":"20260401"}' `
               -ContentType 'application/json' `
-              -UseBasicParsing `
-              -TimeoutSec 15
+              -UseBasicParsing -TimeoutSec 15
             Write-Host "Health OK: $($r.Content.Substring(0,[Math]::Min(200,$r.Content.Length)))"
           } catch {
-            Write-Host "Health check note (may be normal on first deploy): $_"
+            Write-Host "Health check (may be normal on first deploy): $_"
           }
           exit 0
