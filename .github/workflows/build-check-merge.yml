@@ -1,12 +1,16 @@
-name: Build Check then Merge to Master then Deploy .36 IIS
+name: Build Check then Merge to Master
 
-# HOW IT WORKS
+# HOW IT WORKS:
 # 1. Developer pushes to 'staging' branch (NEVER directly to master).
-# 2. This workflow runs a full MSBuild compile on the staging branch.
-# 3. If the build PASSES  -> automatically merges staging -> master.
-#    master push triggers deploy-iis.yml -> DLLs copied to .36 IIS, pool recycled.
-# 4. If the build FAILS   -> merge is BLOCKED. master stays clean.
-#    Developer fixes the error and pushes to staging again.
+# 2. This workflow runs a full MSBuild compile on GitHub's cloud runner (windows-latest).
+#    - If build PASSES  -> automatically merges staging -> master.
+#      The master push then triggers deploy-iis.yml which builds & deploys on .36 IIS.
+#    - If build FAILS   -> merge is BLOCKED. master stays 100% clean.
+#      Developer fixes the error and pushes to staging again.
+#
+# WHY NO ARTIFACT UPLOAD:
+#   deploy-iis.yml now runs build + deploy in one single job on the self-hosted .36 runner.
+#   No cross-runner artifact transfer needed — avoids SSL issues with GitHub API on .36.
 
 on:
   push:
@@ -47,25 +51,19 @@ jobs:
       - name: MSBuild compile Release
         shell: cmd
         run: |
-          msbuild Vendor_SRM_Routing_Application.sln /p:Configuration=Release /p:Platform="Any CPU" /t:Build /m /v:minimal
+          msbuild Vendor_SRM_Routing_Application.sln ^
+            /p:Configuration=Release ^
+            /p:Platform="Any CPU" ^
+            /t:Build ^
+            /m ^
+            /v:minimal
           echo MSBuild exit: %ERRORLEVEL%
           if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: staging-build-bin
-          path: |
-            **/bin/*.dll
-            **/bin/*.pdb
-          if-no-files-found: error
-          retention-days: 1
-
   merge-to-master:
-    name: Merge staging to master
+    name: Merge staging to master (only if build passed)
     runs-on: ubuntu-latest
     needs: build-check
-
     permissions:
       contents: write
 
@@ -85,8 +83,10 @@ jobs:
         run: |
           git fetch origin staging master
           git checkout master
-          git merge --no-ff origin/staging -m "ci: auto-merge staging to master after build check passed [skip worker]"
+          git merge --no-ff origin/staging -m "ci: auto-merge staging to master after build passed [skip worker]"
           git push origin master
 
-      - name: Merge complete
-        run: echo "staging merged into master. deploy-iis.yml will now trigger the .36 IIS deploy."
+      - name: Done
+        run: |
+          echo "staging merged into master successfully."
+          echo "deploy-iis.yml will now trigger build + deploy on .36 IIS runner."
