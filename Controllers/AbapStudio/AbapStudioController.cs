@@ -262,6 +262,93 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
         public string prefix { get; set; }
     }
 
+
+    // ── Deploy (Z_UPLOAD_PROGRAM) ──────────────────────
+    [HttpPost]
+    [Route("deploy")]
+    public IHttpActionResult Deploy([FromBody] AbapDeployRequest request)
+    {
+        if (!Authorize()) return Unauthorized();
+        if (request == null || string.IsNullOrEmpty(request.program) || string.IsNullOrEmpty(request.source))
+            return Json(new { error = "Program name and source code required" });
+
+        try
+        {
+            RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+            RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+            IRfcFunction fn = dest.Repository.CreateFunction("Z_UPLOAD_PROGRAM");
+            fn.SetValue("IV_PROGRAM", request.program.Trim().ToUpper());
+            fn.SetValue("IV_SOURCE", request.source);
+            fn.SetValue("IV_TITLE", request.title ?? "AI Generated Program");
+            fn.SetValue("IV_PROGRAM_TYPE", request.program_type ?? "1");
+            fn.SetValue("IV_TRANSPORT", request.transport ?? "");
+            fn.SetValue("IV_OVERWRITE", request.overwrite ?? "X");
+            fn.Invoke(dest);
+
+            string status = fn.GetString("EV_STATUS");
+            string message = fn.GetString("EV_MESSAGE");
+            string program = fn.GetString("EV_PROGRAM");
+            string transport = fn.GetString("EV_TRANSPORT");
+
+            return Json(new { status, message, program, transport });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = ex.Message });
+        }
+    }
+
+    // ── Test (Z_RUN_UNIT_TEST) ─────────────────────────
+    [HttpPost]
+    [Route("test")]
+    public IHttpActionResult RunTest([FromBody] AbapTestRequest request)
+    {
+        if (!Authorize()) return Unauthorized();
+        if (request == null || string.IsNullOrEmpty(request.program))
+            return Json(new { error = "Program name required" });
+
+        try
+        {
+            RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+            RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+            IRfcFunction fn = dest.Repository.CreateFunction("Z_RUN_UNIT_TEST");
+            fn.SetValue("IV_PROGRAM", request.program.Trim().ToUpper());
+            fn.SetValue("IV_TEST_CLASS", request.test_class ?? "");
+            fn.Invoke(dest);
+
+            string status = fn.GetString("EV_STATUS");
+            string result = fn.GetString("EV_RESULT");
+            string summary = fn.GetString("EV_SUMMARY");
+            int total = fn.GetInt("EV_TOTAL");
+            int passed = fn.GetInt("EV_PASSED");
+            int failed = fn.GetInt("EV_FAILED");
+
+            return Json(new { status, result, summary, total, passed, failed });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = ex.Message });
+        }
+    }
+
+    }
+
+    public class AbapDeployRequest
+    {
+        public string program { get; set; }
+        public string source { get; set; }
+        public string title { get; set; }
+        public string program_type { get; set; }
+        public string transport { get; set; }
+        public string overwrite { get; set; }
+    }
+
+        public class AbapTestRequest
+    {
+        public string program { get; set; }
+        public string test_class { get; set; }
+    }
+
     public class AbapDescribeRequest
     {
         public string table { get; set; }
