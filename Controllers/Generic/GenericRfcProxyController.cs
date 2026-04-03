@@ -114,9 +114,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 {
                     RfcParameterMetadata paramMeta = myfun.Metadata[i];
 
-                    // Only export and changing parameters (not import)
+                    // Export, changing, and tables parameters (not import)
                     if (paramMeta.Direction == RfcDirection.EXPORT ||
-                        paramMeta.Direction == RfcDirection.CHANGING)
+                        paramMeta.Direction == RfcDirection.CHANGING ||
+                        paramMeta.Direction == RfcDirection.TABLES)
                     {
                         string paramName = paramMeta.Name;
 
