@@ -323,44 +323,6 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
         }
     }
 
-    }
-
-    // ── Request models ─────────────────────────────────────
-    public class AbapQueryRequest
-    {
-        public string sql { get; set; }
-    }
-
-    public class AbapSourceRequest
-    {
-        public string program { get; set; }
-    }
-
-    public class AbapTablesRequest
-    {
-        public string prefix { get; set; }
-    }
-
-
-    public class AbapDeployRequest
-    {
-        public string program { get; set; }
-        public string source { get; set; }
-        public string title { get; set; }
-        public string program_type { get; set; }
-        public string transport { get; set; }
-        public string overwrite { get; set; }
-    }
-
-    public class AbapTestRequest
-    {
-        public string program { get; set; }
-        public string test_class { get; set; }
-    }
-
-    public class AbapDescribeRequest
-    {
-        public string table { get; set; }
 
         // ── Query any SAP system with WHERE clause ─────────────────────
         [HttpPost]
@@ -461,4 +423,44 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
             }
         }
     }
+
+
+    // ── Request models ─────────────────────────────────────
+    public class AbapQueryRequest
+    {
+        public string sql { get; set; }
+    }
+
+    public class AbapSourceRequest
+    {
+        public string program { get; set; }
+    }
+
+    public class AbapTablesRequest
+    {
+        public string prefix { get; set; }
+    }
+
+
+    public class AbapDeployRequest
+    {
+        public string program { get; set; }
+        public string source { get; set; }
+        public string title { get; set; }
+        public string program_type { get; set; }
+        public string transport { get; set; }
+        public string overwrite { get; set; }
+    }
+
+    public class AbapTestRequest
+    {
+        public string program { get; set; }
+        public string test_class { get; set; }
+    }
+
+    public class AbapDescribeRequest
+    {
+        public string table { get; set; }
+    }
+
 }
