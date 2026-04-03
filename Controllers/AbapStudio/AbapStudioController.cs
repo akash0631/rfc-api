@@ -360,21 +360,20 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
     public class AbapDescribeRequest
     {
         public string table { get; set; }
-    
 
-        // ── Query any SAP system with WHERE clause (uses standard RFC_READ_TABLE) ─────
+        // ── Query any SAP system with WHERE clause ─────────────────────
         [HttpPost]
         [Route("query-prod")]
-        public IHttpActionResult QueryProd([FromBody] dynamic req)
+        public IHttpActionResult QueryProd([FromBody] JObject body)
         {
             if (!Authorize()) return Unauthorized();
             try
             {
-                string tableName = req.table ?? "";
-                string fields = req.fields ?? "";    // comma-separated: "EXIDV,VBELN,ERDAT"
-                string where = req.where ?? "";      // SAP WHERE: "DELIVERY = '8002378281'"
-                int rowcount = req.rowcount ?? 100;
-                string env = req.system ?? "prod";   // dev, prod, qa
+                string tableName = body.Value<string>("table") ?? "";
+                string fieldsStr = body.Value<string>("fields") ?? "";
+                string whereStr = body.Value<string>("where") ?? "";
+                int rowcount = body.Value<int?>("rowcount") ?? 100;
+                string env = body.Value<string>("system") ?? "prod";
 
                 if (string.IsNullOrEmpty(tableName))
                     return Json(new { error = "table is required" });
@@ -399,26 +398,23 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
                 fn.SetValue("DELIMITER", "|");
                 fn.SetValue("ROWCOUNT", rowcount);
 
-                // Set FIELDS table (which columns to read)
-                if (!string.IsNullOrEmpty(fields))
+                if (!string.IsNullOrEmpty(fieldsStr))
                 {
                     IRfcTable fieldsTable = fn.GetTable("FIELDS");
-                    foreach (string f in fields.Split(','))
+                    foreach (string f in fieldsStr.Split(','))
                     {
                         fieldsTable.Append();
                         fieldsTable.SetValue("FIELDNAME", f.Trim().ToUpper());
                     }
                 }
 
-                // Set OPTIONS table (WHERE clause)
-                if (!string.IsNullOrEmpty(where))
+                if (!string.IsNullOrEmpty(whereStr))
                 {
                     IRfcTable optionsTable = fn.GetTable("OPTIONS");
-                    // Split long WHERE clauses into 72-char chunks (SAP limit)
-                    string w = where.Trim();
+                    string w = whereStr.Trim();
                     while (w.Length > 0)
                     {
-                        int len = Math.Min(72, w.Length);
+                        int len = System.Math.Min(72, w.Length);
                         optionsTable.Append();
                         optionsTable.SetValue("TEXT", w.Substring(0, len));
                         w = w.Substring(len);
@@ -427,21 +423,20 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
 
                 fn.Invoke(dest);
 
-                // Parse results
                 IRfcTable dataTable = fn.GetTable("DATA");
                 IRfcTable fieldsResult = fn.GetTable("FIELDS");
 
-                var fieldNames = new List<string>();
+                var fieldNames = new System.Collections.Generic.List<string>();
                 foreach (IRfcStructure row in fieldsResult)
                     fieldNames.Add(row.GetString("FIELDNAME").Trim());
 
-                var rows = new List<Dictionary<string, string>>();
+                var rows = new System.Collections.Generic.List<System.Collections.Generic.Dictionary<string, string>>();
                 foreach (IRfcStructure row in dataTable)
                 {
                     string wa = row.GetString("WA");
                     string[] vals = wa.Split('|');
-                    var obj = new Dictionary<string, string>();
-                    for (int i = 0; i < Math.Min(vals.Length, fieldNames.Count); i++)
+                    var obj = new System.Collections.Generic.Dictionary<string, string>();
+                    for (int i = 0; i < System.Math.Min(vals.Length, fieldNames.Count); i++)
                         obj[fieldNames[i]] = vals[i].Trim();
                     rows.Add(obj);
                 }
@@ -455,11 +450,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
                     rows = rows
                 });
             }
-            catch (Exception ex)
+            catch (RfcAbapException ex)
+            {
+                return Json(new { error = "SAP ABAP error: " + ex.Key });
+            }
+            catch (System.Exception ex)
             {
                 return Json(new { error = ex.Message });
             }
         }
-
     }
 }
