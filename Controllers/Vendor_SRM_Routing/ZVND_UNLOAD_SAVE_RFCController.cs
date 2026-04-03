@@ -13,13 +13,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
     {
         [HttpPost]
         [Route("api/ZVND_UNLOAD_SAVE_RFC")]
-        public async Task<HttpResponseMessage> ZVND_UNLOAD_SAVE_RFC([FromBody] ZVND_UNLOAD_SAVE_Request request)
+        public async Task<HttpResponseMessage> ExecuteRFC([FromBody] ZVND_UNLOAD_SAVE_RFCRequest request)
         {
             try
             {
                 if (request == null)
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request body cannot be null" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
                 }
 
                 if (string.IsNullOrEmpty(request.IM_USER))
@@ -32,49 +32,40 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                     return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_PARMS is required" });
                 }
 
-                await Task.Run(() =>
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                RfcRepository rfcrep = dest.Repository;
+                IRfcFunction myfun = rfcrep.CreateFunction("ZVND_UNLOAD_SAVE_RFC");
+
+                myfun.SetValue("IM_USER", request.IM_USER);
+
+                IRfcTable im_parms_table = myfun.GetTable("IM_PARMS");
+                foreach (var parm in request.IM_PARMS)
                 {
-                    RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
-                    RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                    RfcRepository rfcrep = dest.Repository;
-                    IRfcFunction myfun = rfcrep.CreateFunction("ZVND_UNLOAD_SAVE_RFC");
-
-                    myfun.SetValue("IM_USER", request.IM_USER);
-
-                    IRfcTable parmsTable = myfun.GetTable("IM_PARMS");
-                    foreach (var parm in request.IM_PARMS)
+                    IRfcStructure row = im_parms_table.AppendRow();
+                    foreach (var property in parm.GetType().GetProperties())
                     {
-                        parmsTable.Append();
-                        parmsTable.CurrentRow.SetValue("CLIENT", parm.CLIENT ?? "");
-                        parmsTable.CurrentRow.SetValue("UNLOAD_ID", parm.UNLOAD_ID ?? "");
-                        parmsTable.CurrentRow.SetValue("VENDOR_CODE", parm.VENDOR_CODE ?? "");
-                        parmsTable.CurrentRow.SetValue("PLANT", parm.PLANT ?? "");
-                        parmsTable.CurrentRow.SetValue("MATERIAL", parm.MATERIAL ?? "");
-                        parmsTable.CurrentRow.SetValue("BATCH", parm.BATCH ?? "");
-                        parmsTable.CurrentRow.SetValue("QUANTITY", parm.QUANTITY);
-                        parmsTable.CurrentRow.SetValue("UOM", parm.UOM ?? "");
-                        parmsTable.CurrentRow.SetValue("STORAGE_LOCATION", parm.STORAGE_LOCATION ?? "");
-                        parmsTable.CurrentRow.SetValue("CREATED_BY", parm.CREATED_BY ?? "");
-                        parmsTable.CurrentRow.SetValue("CREATED_DATE", parm.CREATED_DATE ?? "");
-                        parmsTable.CurrentRow.SetValue("CREATED_TIME", parm.CREATED_TIME ?? "");
+                        var value = property.GetValue(parm);
+                        if (value != null)
+                        {
+                            row.SetValue(property.Name.ToUpper(), value);
+                        }
                     }
+                }
 
-                    myfun.Invoke(dest);
+                myfun.Invoke(dest);
 
-                    IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                    
-                    string returnType = EX_RETURN.GetString("TYPE");
-                    string returnMessage = EX_RETURN.GetString("MESSAGE");
+                IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                    if (returnType == "E")
-                    {
-                        return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
-                    }
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
 
-                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = returnType, Message = returnMessage });
-                });
+                if (returnType == "E")
+                {
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
+                }
 
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "S", Message = "Operation completed successfully" });
+                return Request.CreateResponse(HttpStatusCode.OK, new { Status = returnType, Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
@@ -91,25 +82,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
         }
     }
 
-    public class ZVND_UNLOAD_SAVE_Request
+    public class ZVND_UNLOAD_SAVE_RFCRequest
     {
         public string IM_USER { get; set; }
-        public List<ZTT_UNLOAD_SAVE_Item> IM_PARMS { get; set; }
+        public List<UnloadSaveItem> IM_PARMS { get; set; }
     }
 
-    public class ZTT_UNLOAD_SAVE_Item
+    public class UnloadSaveItem
     {
-        public string CLIENT { get; set; }
-        public string UNLOAD_ID { get; set; }
-        public string VENDOR_CODE { get; set; }
-        public string PLANT { get; set; }
-        public string MATERIAL { get; set; }
-        public string BATCH { get; set; }
-        public decimal QUANTITY { get; set; }
-        public string UOM { get; set; }
-        public string STORAGE_LOCATION { get; set; }
-        public string CREATED_BY { get; set; }
-        public string CREATED_DATE { get; set; }
-        public string CREATED_TIME { get; set; }
+        public string FIELD1 { get; set; }
+        public string FIELD2 { get; set; }
+        public string FIELD3 { get; set; }
+        public string FIELD4 { get; set; }
+        public string FIELD5 { get; set; }
     }
 }
