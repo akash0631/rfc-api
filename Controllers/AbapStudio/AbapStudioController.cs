@@ -360,5 +360,106 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
     public class AbapDescribeRequest
     {
         public string table { get; set; }
+    
+
+        // ── Query any SAP system with WHERE clause (uses standard RFC_READ_TABLE) ─────
+        [HttpPost]
+        [Route("query-prod")]
+        public IHttpActionResult QueryProd([FromBody] dynamic req)
+        {
+            if (!Authorize()) return Unauthorized();
+            try
+            {
+                string tableName = req.table ?? "";
+                string fields = req.fields ?? "";    // comma-separated: "EXIDV,VBELN,ERDAT"
+                string where = req.where ?? "";      // SAP WHERE: "DELIVERY = '8002378281'"
+                int rowcount = req.rowcount ?? 100;
+                string env = req.system ?? "prod";   // dev, prod, qa
+
+                if (string.IsNullOrEmpty(tableName))
+                    return Json(new { error = "table is required" });
+
+                RfcConfigParameters rfcPar;
+                switch ((env ?? "").ToLower())
+                {
+                    case "prod": case "production":
+                        rfcPar = BaseController.rfcConfigparametersproduction();
+                        break;
+                    case "qa": case "quality":
+                        rfcPar = BaseController.rfcConfigparametersquality();
+                        break;
+                    default:
+                        rfcPar = BaseController.rfcConfigparameters();
+                        break;
+                }
+
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                IRfcFunction fn = dest.Repository.CreateFunction("RFC_READ_TABLE");
+                fn.SetValue("QUERY_TABLE", tableName.ToUpper());
+                fn.SetValue("DELIMITER", "|");
+                fn.SetValue("ROWCOUNT", rowcount);
+
+                // Set FIELDS table (which columns to read)
+                if (!string.IsNullOrEmpty(fields))
+                {
+                    IRfcTable fieldsTable = fn.GetTable("FIELDS");
+                    foreach (string f in fields.Split(','))
+                    {
+                        fieldsTable.Append();
+                        fieldsTable.SetValue("FIELDNAME", f.Trim().ToUpper());
+                    }
+                }
+
+                // Set OPTIONS table (WHERE clause)
+                if (!string.IsNullOrEmpty(where))
+                {
+                    IRfcTable optionsTable = fn.GetTable("OPTIONS");
+                    // Split long WHERE clauses into 72-char chunks (SAP limit)
+                    string w = where.Trim();
+                    while (w.Length > 0)
+                    {
+                        int len = Math.Min(72, w.Length);
+                        optionsTable.Append();
+                        optionsTable.SetValue("TEXT", w.Substring(0, len));
+                        w = w.Substring(len);
+                    }
+                }
+
+                fn.Invoke(dest);
+
+                // Parse results
+                IRfcTable dataTable = fn.GetTable("DATA");
+                IRfcTable fieldsResult = fn.GetTable("FIELDS");
+
+                var fieldNames = new List<string>();
+                foreach (IRfcStructure row in fieldsResult)
+                    fieldNames.Add(row.GetString("FIELDNAME").Trim());
+
+                var rows = new List<Dictionary<string, string>>();
+                foreach (IRfcStructure row in dataTable)
+                {
+                    string wa = row.GetString("WA");
+                    string[] vals = wa.Split('|');
+                    var obj = new Dictionary<string, string>();
+                    for (int i = 0; i < Math.Min(vals.Length, fieldNames.Count); i++)
+                        obj[fieldNames[i]] = vals[i].Trim();
+                    rows.Add(obj);
+                }
+
+                return Json(new
+                {
+                    table = tableName,
+                    system = env,
+                    row_count = rows.Count,
+                    columns = fieldNames,
+                    rows = rows
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { error = ex.Message });
+            }
+        }
+
     }
 }
