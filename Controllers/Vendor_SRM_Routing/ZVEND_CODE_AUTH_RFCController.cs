@@ -13,63 +13,74 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
     {
         [HttpPost]
         [Route("api/ZVEND_CODE_AUTH_RFC")]
-        public async Task<IHttpActionResult> AuthenticateVendor([FromBody] ZVEND_CODE_AUTH_RFCRequest request)
+        public HttpResponseMessage ZVEND_CODE_AUTH_RFC(ZVEND_CODE_AUTH_RFC_Request request)
         {
             try
             {
-                if (request == null)
-                {
-                    return Json(new { Status = "E", Message = "Request body is null" });
-                }
-
-                if (string.IsNullOrEmpty(request.IM_USER_ID))
-                {
-                    return Json(new { Status = "E", Message = "IM_USER_ID is required" });
-                }
-
-                if (string.IsNullOrEmpty(request.IM_PASSWORD))
-                {
-                    return Json(new { Status = "E", Message = "IM_PASSWORD is required" });
-                }
-
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZVEND_CODE_AUTH_RFC");
-
+                
                 myfun.SetValue("IM_USER_ID", request.IM_USER_ID);
                 myfun.SetValue("IM_PASSWORD", request.IM_PASSWORD);
-
+                
                 myfun.Invoke(dest);
-
+                
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-
-                string returnType = EX_RETURN.GetValue("TYPE")?.ToString();
-                string returnMessage = EX_RETURN.GetValue("MESSAGE")?.ToString();
-
-                if (returnType == "E")
+                
+                string status = EX_RETURN.GetValue("TYPE").ToString();
+                string message = EX_RETURN.GetValue("MESSAGE").ToString();
+                
+                if (status == "E")
                 {
-                    return Json(new { Status = "E", Message = returnMessage });
+                    var errorResponse = new
+                    {
+                        Status = "E",
+                        Message = message
+                    };
+                    return Request.CreateResponse(HttpStatusCode.OK, errorResponse);
                 }
-
-                return Json(new { Status = returnType ?? "S", Message = returnMessage ?? "Success" });
+                
+                var successResponse = new
+                {
+                    Status = status,
+                    Message = message
+                };
+                
+                return Request.CreateResponse(HttpStatusCode.OK, successResponse);
             }
             catch (RfcAbapException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                var response = new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                };
+                return Request.CreateResponse(HttpStatusCode.OK, response);
             }
             catch (RfcCommunicationException ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                var response = new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                };
+                return Request.CreateResponse(HttpStatusCode.OK, response);
             }
             catch (Exception ex)
             {
-                return Json(new { Status = "E", Message = ex.Message });
+                var response = new
+                {
+                    Status = "E",
+                    Message = ex.Message
+                };
+                return Request.CreateResponse(HttpStatusCode.OK, response);
             }
         }
     }
 
-    public class ZVEND_CODE_AUTH_RFCRequest
+    public class ZVEND_CODE_AUTH_RFC_Request
     {
         public string IM_USER_ID { get; set; }
         public string IM_PASSWORD { get; set; }
