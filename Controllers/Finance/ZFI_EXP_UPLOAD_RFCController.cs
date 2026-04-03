@@ -73,20 +73,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 
                 myfun.Invoke(dest);
 
-                IRfcTable exReturnTable = myfun.GetTable("EX_RETURN");
-                var returnData = exReturnTable.AsEnumerable().Select(row =>
+                // EX_RETURN is a STRUCTURE (BAPIRET2), not a TABLE
+                IRfcStructure exReturn = myfun.GetStructure("EX_RETURN");
+                var returnDict = new Dictionary<string, object>();
+                for (int i = 0; i < exReturn.Metadata.FieldCount; i++)
                 {
-                    var result = new Dictionary<string, object>();
-                    for (int i = 0; i < row.Metadata.FieldCount; i++)
+                    var field = exReturn.Metadata[i];
+                    if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                     {
-                        var field = row.Metadata[i];
-                        if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
-                        {
-                            result[field.Name] = row.GetValue(field.Name);
-                        }
+                        returnDict[field.Name] = exReturn.GetString(field.Name);
                     }
-                    return result;
-                }).ToList();
+                }
+                var returnData = new List<Dictionary<string, object>> { returnDict };
 
                 var hasError = returnData.Any(item => item.ContainsKey("TYPE") && item["TYPE"]?.ToString() == "E");
                 if (hasError)
@@ -148,17 +146,23 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 
     public class ZFI_INPUT_STRUC
     {
-        public string BUKRS { get; set; }
-        public string LIFNR { get; set; }
-        public string BLDAT { get; set; }
-        public string BUDAT { get; set; }
-        public string XBLNR { get; set; }
-        public string WRBTR { get; set; }
-        public string WAERS { get; set; }
-        public string BKTXT { get; set; }
-        public string KOSTL { get; set; }
-        public string SAKNR { get; set; }
-        public string SGTXT { get; set; }
+        public string COMPANY_CODE { get; set; }
+        public string VENDOR_CODE { get; set; }
+        public string INVOICE_DATE { get; set; }
+        public string POSTING_DATE { get; set; }
+        public string HEADER_TEXT { get; set; }
+        public string WH_TAX_CODE { get; set; }
+        public string REFRENCE_NUMBER { get; set; }
+        public string VENDOR_LINE_TEXT { get; set; }
+        public string GL_CODE { get; set; }
+        public string AMOUNT { get; set; }
+        public string TAX_CODE { get; set; }
+        public string COST_CENTER { get; set; }
+        public string BUSINESS_AREA { get; set; }
+        public string PROFIT_CENTER { get; set; }
+        public string ASSIGNMENT_NO { get; set; }
+        public string GL_LINE_TEXT { get; set; }
+        public string CURRENCY { get; set; }
     }
 
     public class ZFI_OUTPUT_STRUC
