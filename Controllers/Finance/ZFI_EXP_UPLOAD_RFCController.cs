@@ -30,23 +30,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 
                 // Set IM_INPUT parameter
                 if (request.IM_INPUT != null)
-                {
-                    IRfcTable inputTable = myfun.GetTable("IM_INPUT");
-                    foreach (var inputItem in request.IM_INPUT)
-                    {
-                        IRfcStructure inputRow = inputTable.Metadata.LineType.CreateStructure();
-                        
-                        foreach (var prop in inputItem.GetType().GetProperties())
-                        {
-                            var value = prop.GetValue(inputItem);
-                            if (value != null && inputRow.Metadata.ContainsField(prop.Name))
-                            {
-                                inputRow.SetValue(prop.Name, value);
-                            }
-                        }
-                        inputTable.Append(inputRow);
-                    }
-                }
+{
+    IRfcStructure inputStruct = myfun.GetStructure("IM_INPUT");
+
+    foreach (var prop in request.IM_INPUT.GetType().GetProperties())
+    {
+        var value = prop.GetValue(request.IM_INPUT);
+        if (value != null && inputStruct.Metadata.ContainsField(prop.Name))
+        {
+            inputStruct.SetValue(prop.Name, value);
+        }
+    }
+}
 
                 // Set IM_OUTPUT parameter
                 if (request.IM_OUTPUT != null)
@@ -117,7 +112,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
 
     public class ZFI_EXP_UPLOAD_RFCRequest
     {
-        public List<ZFI_INPUT_STRUC> IM_INPUT { get; set; }
+        public ZFI_INPUT_STRUC IM_INPUT { get; set; }
         public List<ZFI_OUTPUT_STRUC> IM_OUTPUT { get; set; }
     }
 
