@@ -81,7 +81,7 @@ jobs:
           $dest = 'C:\V2RfcTest\bin'
 
           $dlls = Get-ChildItem -Path '.' -Recurse -Filter '*.dll' |
-                  Where-Object { $_.FullName -like '*\bin\Release\*' }
+                  Where-Object { $_.FullName -like '*\bin\*' }
           $copied = 0
           foreach ($dll in $dlls) {
             Copy-Item $dll.FullName "$dest\$($dll.Name)" -Force
