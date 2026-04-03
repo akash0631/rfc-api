@@ -219,6 +219,66 @@ Return ONLY raw C#. No markdown.`, apiKey, 2500);
   return raw.replace(/```(?:csharp|cs)?\n?/g,'').replace(/```$/g,'').trim();
 }
 
+// ═══ Double Review — independent AI check before push ═══════════════
+async function reviewController(code, spec, apiKey) {
+  const review = await claude(`You are an independent code REVIEWER for SAP RFC C# controllers (.NET 4.7.2 Web API).
+Review this controller and return ONLY valid JSON with this format:
+{
+  "score": 8,
+  "issues": ["issue1", "issue2"],
+  "fixes": {"old_text": "new_text", "old_text2": "new_text2"}
+}
+
+CRITICAL CHECKS:
+1. EX_RETURN: If RFC has EX_RETURN as a STRUCTURE (BAPIRET2), code MUST use GetStructure("EX_RETURN"), NOT GetTable("EX_RETURN"). If it uses GetTable for a STRUCTURE param, mark as issue and provide fix.
+2. Field names: The SAP structure field names must match EXACTLY what the RFC uses. Component names like COMPANY_CODE should be used, NOT SAP data element names like BUKRS.
+3. SAP connector: Must use BaseController.rfcConfigparameters__() pattern. No other pattern.
+4. SetValue for scalar imports, GetTable for TABLE params, GetStructure for STRUCTURE params.
+5. Request model class fields must match the RFC import structure field names exactly.
+6. Proper error handling with RfcAbapException, RfcCommunicationException, Exception.
+
+RFC Spec:
+Name: ${spec.rfcName}
+Import params: ${JSON.stringify(spec.importParams||[])}
+Output type: ${spec.outputType||'structure'}
+Output table: ${spec.outputTableName||'EX_RETURN'}
+
+Controller code:
+${code}
+
+Return ONLY JSON. No markdown.`, apiKey, 1200);
+
+  try {
+    var parsed = JSON.parse(review.replace(/```json\n?/g,'').replace(/```/g,'').trim());
+    return parsed;
+  } catch(e) {
+    return { score: 7, issues: [], fixes: {} };
+  }
+}
+
+async function fixController(code, review, spec, apiKey) {
+  // Apply automatic fixes
+  var fixed = code;
+  if (review.fixes && typeof review.fixes === 'object') {
+    for (var old in review.fixes) {
+      if (review.fixes.hasOwnProperty(old) && fixed.includes(old)) {
+        fixed = fixed.replace(old, review.fixes[old]);
+      }
+    }
+  }
+
+  // If score < 6, do a full rewrite
+  if (review.score < 6 && review.issues && review.issues.length > 0) {
+    var fixPrompt = `Fix this C# controller. Issues found by reviewer:\n${review.issues.join('\n')}\n\nOriginal code:\n${code}\n\nReturn ONLY the fixed C# code. No markdown.`;
+    fixed = await claude(fixPrompt, apiKey, 2500);
+    fixed = fixed.replace(/```(?:csharp|cs)?\n?/g,'').replace(/```$/g,'').trim();
+  }
+
+  return fixed;
+}
+
+
+
 // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Push controller to GitHub Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 async function pushController(spec, code, sapEnv, token) {
   const folder = FOLDER_MAP[spec.category]||'Controllers/NSO';
@@ -290,7 +350,7 @@ async function runPipeline(text, sapEnv, jobId, env, filename='', images=[]) {
     if (existing) { existing.status=status; existing.detail=detail; }
     else job.steps.push({step, status, detail});
     if (status==='done'||status==='error') {
-     const TOTAL_STEPS = 7;
+     const TOTAL_STEPS = 8;
 const allDone = job.steps.length >= TOTAL_STEPS && job.steps.every(s=>s.status==='done'||s.status==='error');
 if (allDone) job.status = job.steps.some(s=>s.status==='error') ? 'error' : 'complete';
     }
@@ -311,6 +371,21 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
     try { code = await genController(spec, sapEnv, apiKey); }
     catch(e) { await log('controller','error',e.message); return; }
     await log('controller','done',`${code.split('\n').length} lines generated`);
+
+    // Step 2b: Double Review
+    await log('review','running','AI Reviewer checking controller...');
+    try {
+      var review = await reviewController(code, spec, apiKey);
+      var reviewScore = review.score || 7;
+      var reviewIssues = review.issues || [];
+      if (reviewIssues.length > 0 && reviewScore < 8) {
+        await log('review','running','Fixing ' + reviewIssues.length + ' issues (score: ' + reviewScore + '/10)...');
+        code = await fixController(code, review, spec, apiKey);
+        await log('review','done','Fixed ' + reviewIssues.length + ' issues \u2192 score ' + reviewScore + '/10');
+      } else {
+        await log('review','done','Passed review \u2714 (score: ' + reviewScore + '/10)');
+      }
+    } catch(e) { await log('review','done','Review skipped: ' + e.message); }
 
     // Step 3: Push controller
     await log('github','running','Pushing controller to GitHub...');
@@ -1277,7 +1352,7 @@ function reset() {
   document.getElementById('fileSel').style.display='none';
   document.getElementById('deployBtn').disabled=true;
   selEnv('dev');
-  ['parse','controller','github','deploy','dab','swagger'].forEach(s=>{
+  ['parse','controller','review','github','deploy','dab','swagger'].forEach(s=>{
     const el=document.getElementById('s-'+s);
     if(el){el.className='step';el.querySelector('.step-icon').innerHTML='Ã¢ÂÂ';const d=el.querySelector('.step-detail');if(d)d.remove();}
   });
