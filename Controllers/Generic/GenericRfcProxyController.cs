@@ -95,12 +95,28 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
 
                     try
                     {
-                        // Try to set the value — NCo will ignore unknown params
-                        myfun.SetValue(key, prop.Value.ToString());
+                        // TABLE parameters: JSON array → GetTable + CreateStructure + Append
+                        if (prop.Value is Newtonsoft.Json.Linq.JArray arr)
+                        {
+                            IRfcTable rfcTable = myfun.GetTable(key);
+                            foreach (JObject rowObj in arr)
+                            {
+                                IRfcStructure row = rfcTable.Metadata.LineType.CreateStructure();
+                                foreach (var field in rowObj.Properties())
+                                {
+                                    try { row.SetValue(field.Name, field.Value.ToString()); } catch { }
+                                }
+                                rfcTable.Append(row);
+                            }
+                        }
+                        else
+                        {
+                            myfun.SetValue(key, prop.Value.ToString());
+                        }
                     }
                     catch
                     {
-                        // Parameter doesn't exist in RFC definition — skip silently
+                        // Parameter doesn't exist in RFC — skip
                     }
                 }
 
