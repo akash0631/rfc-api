@@ -162,7 +162,6 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
         public string PROFIT_CENTER { get; set; }
         public string ASSIGNMENT_NO { get; set; }
         public string GL_LINE_TEXT { get; set; }
-        public string CURRENCY { get; set; }
     }
 
     public class ZFI_OUTPUT_STRUC
