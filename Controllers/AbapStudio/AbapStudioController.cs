@@ -30,6 +30,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
             return false;
         }
 
+        /// <summary>Get SAP connection: dev (174), prod (170), qa (179)</summary>
+        private RfcConfigParameters GetSapConnection(string system = "dev")
+        {
+            if (system != null && system.ToLower() == "prod") return BaseController.rfcConfigparametersproduction();
+            if (system != null && system.ToLower() == "qa") return BaseController.rfcConfigparametersquality();
+            return BaseController.rfcConfigparameters();
+        }
+
         // ── Connect / health check ─────────────────────────
         [HttpPost]
         [Route("connect")]
