@@ -13,74 +13,63 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
     {
         [HttpPost]
         [Route("api/ZVEND_CODE_AUTH_RFC")]
-        public HttpResponseMessage ZVEND_CODE_AUTH_RFC(ZVEND_CODE_AUTH_RFC_Request request)
+        public IHttpActionResult ExecuteZVEND_CODE_AUTH_RFC([FromBody] ZVEND_CODE_AUTH_RFCRequest request)
         {
             try
             {
+                if (request == null)
+                {
+                    return Json(new { Status = "E", Message = "Request cannot be null" });
+                }
+
+                if (string.IsNullOrEmpty(request.IM_USER_ID))
+                {
+                    return Json(new { Status = "E", Message = "IM_USER_ID is required" });
+                }
+
+                if (string.IsNullOrEmpty(request.IM_PASSWORD))
+                {
+                    return Json(new { Status = "E", Message = "IM_PASSWORD is required" });
+                }
+
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZVEND_CODE_AUTH_RFC");
-                
+
                 myfun.SetValue("IM_USER_ID", request.IM_USER_ID);
                 myfun.SetValue("IM_PASSWORD", request.IM_PASSWORD);
-                
+
                 myfun.Invoke(dest);
-                
+
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                
-                string status = EX_RETURN.GetValue("TYPE").ToString();
-                string message = EX_RETURN.GetValue("MESSAGE").ToString();
-                
-                if (status == "E")
+
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
+
+                if (returnType == "E")
                 {
-                    var errorResponse = new
-                    {
-                        Status = "E",
-                        Message = message
-                    };
-                    return Request.CreateResponse(HttpStatusCode.OK, errorResponse);
+                    return Json(new { Status = "E", Message = returnMessage });
                 }
-                
-                var successResponse = new
-                {
-                    Status = status,
-                    Message = message
-                };
-                
-                return Request.CreateResponse(HttpStatusCode.OK, successResponse);
+
+                return Json(new { Status = returnType, Message = returnMessage });
             }
             catch (RfcAbapException ex)
             {
-                var response = new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                };
-                return Request.CreateResponse(HttpStatusCode.OK, response);
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                var response = new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                };
-                return Request.CreateResponse(HttpStatusCode.OK, response);
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                var response = new
-                {
-                    Status = "E",
-                    Message = ex.Message
-                };
-                return Request.CreateResponse(HttpStatusCode.OK, response);
+                return Json(new { Status = "E", Message = ex.Message });
             }
         }
     }
 
-    public class ZVEND_CODE_AUTH_RFC_Request
+    public class ZVEND_CODE_AUTH_RFCRequest
     {
         public string IM_USER_ID { get; set; }
         public string IM_PASSWORD { get; set; }
