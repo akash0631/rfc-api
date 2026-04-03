@@ -42,13 +42,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                 IRfcTable im_parms_table = myfun.GetTable("IM_PARMS");
                 foreach (var parm in request.IM_PARMS)
                 {
-                    IRfcStructure row = im_parms_table.AppendRow();
+                    im_parms_table.Append();
                     foreach (var property in parm.GetType().GetProperties())
                     {
                         var value = property.GetValue(parm);
                         if (value != null)
                         {
-                            row.SetValue(property.Name.ToUpper(), value);
+                            im_parms_table.SetValue(property.Name.ToUpper(), value);
                         }
                     }
                 }
