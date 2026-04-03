@@ -85,7 +85,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                     if (!string.IsNullOrEmpty(item.REFRENCE_NUMBER)) row.SetValue("REFRENCE_NUMBER", item.REFRENCE_NUMBER);
                     if (!string.IsNullOrEmpty(item.VENDOR_LINE_TEXT)) row.SetValue("VENDOR_LINE_TEXT", item.VENDOR_LINE_TEXT);
                     if (!string.IsNullOrEmpty(item.GL_CODE)) row.SetValue("GL_CODE", item.GL_CODE);
-                    if (!string.IsNullOrEmpty(item.AMOUNT)) row.SetValue("AMOUNT", item.AMOUNT);
+                    if (!string.IsNullOrEmpty(item.AMOUNT))
+                    {
+                        decimal amt;
+                        if (decimal.TryParse(item.AMOUNT, out amt))
+                            row.SetValue("AMOUNT", amt);
+                        else
+                            row.SetValue("AMOUNT", item.AMOUNT);
+                    }
                     if (!string.IsNullOrEmpty(item.TAX_CODE)) row.SetValue("TAX_CODE", item.TAX_CODE);
                     if (!string.IsNullOrEmpty(item.COST_CENTER)) row.SetValue("COST_CENTER", item.COST_CENTER);
                     if (!string.IsNullOrEmpty(item.BUSINESS_AREA)) row.SetValue("BUSINESS_AREA", item.BUSINESS_AREA);
@@ -203,6 +210,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
         public string ASSIGNMENT_NO { get; set; }
         public string GL_LINE_TEXT { get; set; }
         public string HSN_SAC { get; set; }
+        public string MESSAGE { get; set; }
+        public string ROW_ID { get; set; }
+        public string TYPE { get; set; }
     }
 
     public class ZFI_OUTPUT_STRUC
