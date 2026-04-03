@@ -182,6 +182,10 @@ async function genController(spec, sapEnv, apiKey) {
     ? `Returns TABLE "${spec.outputTableName}" Ã¢ÂÂ dynamic metadata loop, skip STRUCTURE/TABLE fields. Response: {Status,Message,Data:{${spec.outputTableName}:[rows]}}`
     : `Returns EX_RETURN only. Response: {Status,Message}`;
   const raw = await claude(`You are a senior C# .NET Web API developer for V2 Retail SAP RFC REST API.
+
+KNOWLEDGE BASE — Follow these rules EXACTLY:
+${RFC_KNOWLEDGE_BASE}
+
 Generate a COMPLETE, production-ready ASP.NET Web API controller (.NET 4.7.2).
 
 RFC: ${spec.rfcName}
@@ -228,6 +232,9 @@ Review this controller and return ONLY valid JSON with this format:
   "issues": ["issue1", "issue2"],
   "fixes": {"old_text": "new_text", "old_text2": "new_text2"}
 }
+
+KNOWLEDGE BASE RULES TO VERIFY:
+${RFC_KNOWLEDGE_BASE}
 
 CRITICAL CHECKS:
 1. EX_RETURN: If RFC has EX_RETURN as a STRUCTURE (BAPIRET2), code MUST use GetStructure("EX_RETURN"), NOT GetTable("EX_RETURN"). If it uses GetTable for a STRUCTURE param, mark as issue and provide fix.
