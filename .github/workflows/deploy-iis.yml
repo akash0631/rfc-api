@@ -49,6 +49,7 @@ jobs:
             Write-Host "nuget.exe already cached at $nugetPath"
           }
           Write-Host "NuGet version: $(& $nugetPath help | Select-Object -First 1)"
+          $LASTEXITCODE = 0  # nuget.exe help exits with code 1; reset it so this step succeeds
           echo "NUGET_EXE=$nugetPath" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: NuGet restore
