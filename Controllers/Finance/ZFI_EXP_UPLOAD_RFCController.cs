@@ -164,13 +164,57 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
         public string GL_LINE_TEXT { get; set; }
     }
 
+    /// <summary>
+    /// ZFI_EXP_UPLOAD_RFC — Finance Expense Upload
+    /// System: QUALITY (192.168.144.179, Client 600)
+    /// 
+    /// POST /api/ZFI_EXP_UPLOAD_RFC
+    /// 
+    /// MANDATORY FIELDS (minimum required):
+    ///   COMPANY_CODE  — Company code (e.g. "V201")
+    ///   VENDOR_CODE   — Vendor number with leading zeros (e.g. "0000400001")  
+    ///   INVOICE_DATE  — YYYYMMDD format (e.g. "20260403")
+    ///   POSTING_DATE  — YYYYMMDD format (e.g. "20260403")
+    ///   GL_CODE       — GL Account with leading zeros (e.g. "0040000000")
+    ///   AMOUNT        — Amount with decimals (e.g. "1000.00")
+    ///   COST_CENTER   — Cost center with leading zeros (e.g. "1000000000")
+    /// 
+    /// OPTIONAL FIELDS:
+    ///   HEADER_TEXT, VENDOR_LINE_TEXT, GL_LINE_TEXT — Text fields
+    ///   TAX_CODE — Tax code (e.g. "V0")
+    ///   WH_TAX_CODE — Withholding tax code
+    ///   BUSINESS_AREA, PROFIT_CENTER, ASSIGNMENT_NO
+    ///   REFRENCE_NUMBER — Reference document number
+    ///
+    /// To check mandatory fields: SE37 → ZFI_EXP_UPLOAD_RFC → Source code
+    ///   Look for IF...IS INITIAL checks — those are mandatory.
+    ///
+    /// EX_RETURN: BAPIRET2 structure
+    ///   TYPE = S (success) or E (error)
+    ///   MESSAGE = status message from SAP
+    /// </summary>
     public class ZFI_OUTPUT_STRUC
     {
-        public string BELNR { get; set; }
-        public string GJAHR { get; set; }
-        public string BUKRS { get; set; }
-        public string XBLNR { get; set; }
-        public string MESSAGE { get; set; }
         public string STATUS { get; set; }
+        public string TYPE { get; set; }
+        public string MESSAGE { get; set; }
+        public string ROW_ID { get; set; }
+        public string COMPANY_CODE { get; set; }
+        public string INVOICE_DATE { get; set; }
+        public string POSTING_DATE { get; set; }
+        public string VENDOR_CODE { get; set; }
+        public string HEADER_TEXT { get; set; }
+        public string WH_TAX_CODE { get; set; }
+        public string REFRENCE_NUMBER { get; set; }
+        public string VENDOR_LINE_TEXT { get; set; }
+        public string GL_CODE { get; set; }
+        public string AMOUNT { get; set; }
+        public string TAX_CODE { get; set; }
+        public string COST_CENTER { get; set; }
+        public string BUSINESS_AREA { get; set; }
+        public string PROFIT_CENTER { get; set; }
+        public string ASSIGNMENT_NO { get; set; }
+        public string GL_LINE_TEXT { get; set; }
+        public string HSN_SAC { get; set; }
     }
 }
