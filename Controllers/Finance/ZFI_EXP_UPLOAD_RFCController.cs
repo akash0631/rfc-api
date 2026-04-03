@@ -71,29 +71,29 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_EXP_UPLOAD_RFC");
 
-                // IM_INPUT is a TABLE parameter — must use GetTable + Append
+                // IM_INPUT is a TABLE parameter — use CreateStructure + Append(structure)
                 IRfcTable imInputTable = myfun.GetTable("IM_INPUT");
                 foreach (var item in request.IM_INPUT)
                 {
-                    imInputTable.Append();
-                    // Set each field explicitly using TrySetValue to avoid crashes on unknown fields
-                    TrySet(imInputTable, "COMPANY_CODE", item.COMPANY_CODE);
-                    TrySet(imInputTable, "VENDOR_CODE", item.VENDOR_CODE);
-                    TrySet(imInputTable, "INVOICE_DATE", item.INVOICE_DATE);
-                    TrySet(imInputTable, "POSTING_DATE", item.POSTING_DATE);
-                    TrySet(imInputTable, "HEADER_TEXT", item.HEADER_TEXT);
-                    TrySet(imInputTable, "WH_TAX_CODE", item.WH_TAX_CODE);
-                    TrySet(imInputTable, "REFRENCE_NUMBER", item.REFRENCE_NUMBER);
-                    TrySet(imInputTable, "VENDOR_LINE_TEXT", item.VENDOR_LINE_TEXT);
-                    TrySet(imInputTable, "GL_CODE", item.GL_CODE);
-                    TrySet(imInputTable, "AMOUNT", item.AMOUNT);
-                    TrySet(imInputTable, "TAX_CODE", item.TAX_CODE);
-                    TrySet(imInputTable, "COST_CENTER", item.COST_CENTER);
-                    TrySet(imInputTable, "BUSINESS_AREA", item.BUSINESS_AREA);
-                    TrySet(imInputTable, "PROFIT_CENTER", item.PROFIT_CENTER);
-                    TrySet(imInputTable, "ASSIGNMENT_NO", item.ASSIGNMENT_NO);
-                    TrySet(imInputTable, "GL_LINE_TEXT", item.GL_LINE_TEXT);
-                    TrySet(imInputTable, "HSN_SAC", item.HSN_SAC);
+                    IRfcStructure row = imInputTable.Metadata.LineType.CreateStructure();
+                    if (!string.IsNullOrEmpty(item.COMPANY_CODE)) row.SetValue("COMPANY_CODE", item.COMPANY_CODE);
+                    if (!string.IsNullOrEmpty(item.VENDOR_CODE)) row.SetValue("VENDOR_CODE", item.VENDOR_CODE);
+                    if (!string.IsNullOrEmpty(item.INVOICE_DATE)) row.SetValue("INVOICE_DATE", item.INVOICE_DATE);
+                    if (!string.IsNullOrEmpty(item.POSTING_DATE)) row.SetValue("POSTING_DATE", item.POSTING_DATE);
+                    if (!string.IsNullOrEmpty(item.HEADER_TEXT)) row.SetValue("HEADER_TEXT", item.HEADER_TEXT);
+                    if (!string.IsNullOrEmpty(item.WH_TAX_CODE)) row.SetValue("WH_TAX_CODE", item.WH_TAX_CODE);
+                    if (!string.IsNullOrEmpty(item.REFRENCE_NUMBER)) row.SetValue("REFRENCE_NUMBER", item.REFRENCE_NUMBER);
+                    if (!string.IsNullOrEmpty(item.VENDOR_LINE_TEXT)) row.SetValue("VENDOR_LINE_TEXT", item.VENDOR_LINE_TEXT);
+                    if (!string.IsNullOrEmpty(item.GL_CODE)) row.SetValue("GL_CODE", item.GL_CODE);
+                    if (!string.IsNullOrEmpty(item.AMOUNT)) row.SetValue("AMOUNT", item.AMOUNT);
+                    if (!string.IsNullOrEmpty(item.TAX_CODE)) row.SetValue("TAX_CODE", item.TAX_CODE);
+                    if (!string.IsNullOrEmpty(item.COST_CENTER)) row.SetValue("COST_CENTER", item.COST_CENTER);
+                    if (!string.IsNullOrEmpty(item.BUSINESS_AREA)) row.SetValue("BUSINESS_AREA", item.BUSINESS_AREA);
+                    if (!string.IsNullOrEmpty(item.PROFIT_CENTER)) row.SetValue("PROFIT_CENTER", item.PROFIT_CENTER);
+                    if (!string.IsNullOrEmpty(item.ASSIGNMENT_NO)) row.SetValue("ASSIGNMENT_NO", item.ASSIGNMENT_NO);
+                    if (!string.IsNullOrEmpty(item.GL_LINE_TEXT)) row.SetValue("GL_LINE_TEXT", item.GL_LINE_TEXT);
+                    if (!string.IsNullOrEmpty(item.HSN_SAC)) row.SetValue("HSN_SAC", item.HSN_SAC);
+                    imInputTable.Append(row);
                 }
 
                 myfun.Invoke(dest);
@@ -176,11 +176,6 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
             }
         }
 
-        private void TrySet(IRfcTable table, string fieldName, string value)
-        {
-            if (string.IsNullOrEmpty(value)) return;
-            try { table.SetValue(fieldName, value); } catch { }
-        }
     }
 
     public class ZFI_EXP_UPLOAD_RFCRequest
