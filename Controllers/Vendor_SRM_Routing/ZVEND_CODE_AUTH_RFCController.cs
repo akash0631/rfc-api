@@ -13,7 +13,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
     {
         [HttpPost]
         [Route("api/ZVEND_CODE_AUTH_RFC")]
-        public HttpResponseMessage ZVEND_CODE_AUTH_RFC(ZVEND_CODE_AUTH_RFC_Request request)
+        public async Task<HttpResponseMessage> ZVEND_CODE_AUTH_RFC([FromBody] ZVEND_CODE_AUTH_RFCRequest request)
         {
             try
             {
@@ -22,14 +22,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                     return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "Request cannot be null" });
                 }
 
-                if (string.IsNullOrEmpty(request.IM_PASS_ID))
+                if (string.IsNullOrEmpty(request.IM_ASSOC_ID) || string.IsNullOrEmpty(request.IM_PASSWORD))
                 {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_PASS_ID is required" });
-                }
-
-                if (string.IsNullOrEmpty(request.IM_PASSWORD))
-                {
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_PASSWORD is required" });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = "IM_ASSOC_ID and IM_PASSWORD are required" });
                 }
 
                 RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
@@ -37,18 +32,19 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZVEND_CODE_AUTH_RFC");
 
-                myfun.SetValue("IM_PASS_ID", request.IM_PASS_ID);
+                myfun.SetValue("IM_ASSOC_ID", request.IM_ASSOC_ID);
                 myfun.SetValue("IM_PASSWORD", request.IM_PASSWORD);
 
                 myfun.Invoke(dest);
+
                 IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
 
-                string returnType = EX_RETURN.GetValue("TYPE").ToString();
-                string returnMessage = EX_RETURN.GetValue("MESSAGE").ToString();
+                string returnType = EX_RETURN.GetString("TYPE");
+                string returnMessage = EX_RETURN.GetString("MESSAGE");
 
                 if (returnType == "E")
                 {
-                    return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = returnMessage });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = "E", Message = returnMessage });
                 }
 
                 return Request.CreateResponse(HttpStatusCode.OK, new { Status = returnType, Message = returnMessage });
@@ -68,9 +64,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor
         }
     }
 
-    public class ZVEND_CODE_AUTH_RFC_Request
+    public class ZVEND_CODE_AUTH_RFCRequest
     {
-        public string IM_PASS_ID { get; set; }
+        public string IM_ASSOC_ID { get; set; }
         public string IM_PASSWORD { get; set; }
     }
 }
