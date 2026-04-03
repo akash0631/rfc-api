@@ -355,6 +355,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.AbapStudio
                         break;
                 }
 
+                // Use unique destination name to avoid NCo cache conflicts
+                rfcPar[RfcConfigParameters.Name] = "ABAP_QUERY_" + env.ToUpper();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 IRfcFunction fn = dest.Repository.CreateFunction("RFC_READ_TABLE");
                 fn.SetValue("QUERY_TABLE", tableName.ToUpper());
