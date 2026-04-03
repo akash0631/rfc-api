@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
+using System.Linq;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Finance
 {
@@ -13,111 +14,120 @@ namespace Vendor_SRM_Routing_Application.Controllers.Finance
     {
         [HttpPost]
         [Route("api/ZFI_EXP_UPLOAD_RFC")]
-        public async Task<HttpResponseMessage> UploadExpenseData(ZFI_EXP_UPLOAD_RFCRequest request)
+        public async Task<IHttpActionResult> ZFI_EXP_UPLOAD_RFC([FromBody] ZFI_EXP_UPLOAD_RFCRequest request)
         {
             try
             {
-                RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                if (request == null)
+                {
+                    return Json(new { Status = "E", Message = "Request body is required" });
+                }
+
+                RfcConfigParameters rfcPar = BaseController.rfcConfigparametersquality();
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction("ZFI_EXP_UPLOAD_RFC");
 
-                // Set IMPORT parameters
-                IRfcStructure imInput = myfun.GetStructure("IM_INPUT");
-                if (!string.IsNullOrEmpty(request.COMPANY_CODE))   imInput.SetValue("COMPANY_CODE",   request.COMPANY_CODE);
-                if (!string.IsNullOrEmpty(request.INVOICE_DATE))   imInput.SetValue("INVOICE_DATE",   request.INVOICE_DATE);
-                if (!string.IsNullOrEmpty(request.POSTING_DATE))   imInput.SetValue("POSTING_DATE",   request.POSTING_DATE);
-                if (!string.IsNullOrEmpty(request.VENDOR_CODE))    imInput.SetValue("VENDOR_CODE",    request.VENDOR_CODE);
-                if (!string.IsNullOrEmpty(request.HEADER_TEXT))    imInput.SetValue("HEADER_TEXT",    request.HEADER_TEXT);
-                if (!string.IsNullOrEmpty(request.WH_TAX_CODE))    imInput.SetValue("WH_TAX_CODE",    request.WH_TAX_CODE);
-                if (!string.IsNullOrEmpty(request.REFRENCE_NUMBER)) imInput.SetValue("REFRENCE_NUMBER", request.REFRENCE_NUMBER);
-                if (!string.IsNullOrEmpty(request.VENDOR_LINE_TEXT)) imInput.SetValue("VENDOR_LINE_TEXT", request.VENDOR_LINE_TEXT);
-                if (!string.IsNullOrEmpty(request.GL_CODE))        imInput.SetValue("GL_CODE",        request.GL_CODE);
-                if (!string.IsNullOrEmpty(request.AMOUNT))         imInput.SetValue("AMOUNT",         request.AMOUNT);
-                if (!string.IsNullOrEmpty(request.TAX_CODE))       imInput.SetValue("TAX_CODE",       request.TAX_CODE);
-                if (!string.IsNullOrEmpty(request.COST_CENTER))    imInput.SetValue("COST_CENTER",    request.COST_CENTER);
-                if (!string.IsNullOrEmpty(request.BUSINESS_AREA))  imInput.SetValue("BUSINESS_AREA",  request.BUSINESS_AREA);
-                if (!string.IsNullOrEmpty(request.PROFIT_CENTER))  imInput.SetValue("PROFIT_CENTER",  request.PROFIT_CENTER);
-                if (!string.IsNullOrEmpty(request.ASSIGNMENT_NO))  imInput.SetValue("ASSIGNMENT_NO",  request.ASSIGNMENT_NO);
-                if (!string.IsNullOrEmpty(request.GL_LINE_TEXT))   imInput.SetValue("GL_LINE_TEXT",   request.GL_LINE_TEXT);
+                // Set IM_INPUT parameter
+                if (request.IM_INPUT != null)
+                {
+                    IRfcTable inputTable = myfun.GetTable("IM_INPUT");
+                    foreach (var inputItem in request.IM_INPUT)
+                    {
+                        IRfcStructure inputRow = inputTable.Metadata.LineType.CreateStructure();
+                        
+                        foreach (var prop in inputItem.GetType().GetProperties())
+                        {
+                            var value = prop.GetValue(inputItem);
+                            if (value != null && inputRow.Metadata.ContainsField(prop.Name))
+                            {
+                                inputRow.SetValue(prop.Name, value);
+                            }
+                        }
+                        inputTable.Append(inputRow);
+                    }
+                }
+
+                // Set IM_OUTPUT parameter
+                if (request.IM_OUTPUT != null)
+                {
+                    IRfcTable outputTable = myfun.GetTable("IM_OUTPUT");
+                    foreach (var outputItem in request.IM_OUTPUT)
+                    {
+                        IRfcStructure outputRow = outputTable.Metadata.LineType.CreateStructure();
+                        
+                        foreach (var prop in outputItem.GetType().GetProperties())
+                        {
+                            var value = prop.GetValue(outputItem);
+                            if (value != null && outputRow.Metadata.ContainsField(prop.Name))
+                            {
+                                outputRow.SetValue(prop.Name, value);
+                            }
+                        }
+                        outputTable.Append(outputRow);
+                    }
+                }
 
                 myfun.Invoke(dest);
 
+                // Get EX_RETURN table
                 IRfcTable exReturnTable = myfun.GetTable("EX_RETURN");
-                var returnData = new List<Dictionary<string, object>>();
-                string errorMessage = null;
-
-                for (int i = 0; i < exReturnTable.RowCount; i++)
+                
+                var returnData = exReturnTable.AsEnumerable().Select(row =>
                 {
-                    exReturnTable.CurrentIndex = i;
-                    var rowData = new Dictionary<string, object>();
-                    int fieldCount = exReturnTable.Metadata.LineType.FieldCount;
-                    for (int f = 0; f < fieldCount; f++)
+                    var result = new Dictionary<string, object>();
+                    for (int i = 0; i < row.Metadata.FieldCount; i++)
                     {
-                        RfcFieldMetadata field = exReturnTable.Metadata.LineType[f];
+                        var field = row.Metadata[i];
                         if (field.DataType != RfcDataType.STRUCTURE && field.DataType != RfcDataType.TABLE)
                         {
-                            rowData[field.Name] = exReturnTable.GetValue(field.Name)?.ToString();
+                            result[field.Name] = row[i].GetValue();
                         }
                     }
-                    returnData.Add(rowData);
+                    return result;
+                }).ToList();
 
-                    var messageType = exReturnTable.GetValue("TYPE")?.ToString();
-                    if (messageType == "E")
-                    {
-                        errorMessage = exReturnTable.GetValue("MESSAGE")?.ToString();
-                    }
+                // Check for errors in EX_RETURN
+                var errorRows = returnData.Where(r => r.ContainsKey("TYPE") && r["TYPE"]?.ToString() == "E").ToList();
+                if (errorRows.Any())
+                {
+                    var errorMessage = errorRows.FirstOrDefault()?.ContainsKey("MESSAGE") == true 
+                        ? errorRows.First()["MESSAGE"]?.ToString() 
+                        : "Error occurred during processing";
+                    
+                    return Json(new { Status = "E", Message = errorMessage, Data = new { EX_RETURN = returnData } });
                 }
 
-                if (errorMessage != null)
-                {
-                    return Request.CreateResponse(HttpStatusCode.OK, new
-                    {
-                        Status = "E",
-                        Message = errorMessage,
-                        Data = new { EX_RETURN = returnData }
-                    });
-                }
-
-                return Request.CreateResponse(HttpStatusCode.OK, new
-                {
-                    Status = "S",
-                    Message = "Expense data uploaded successfully",
-                    Data = new { EX_RETURN = returnData }
-                });
+                return Json(new { Status = "S", Message = "Success", Data = new { EX_RETURN = returnData } });
             }
             catch (RfcAbapException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (RfcCommunicationException ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Request.CreateResponse(HttpStatusCode.OK, new { Status = "E", Message = ex.Message });
+                return Json(new { Status = "E", Message = ex.Message });
             }
         }
     }
 
     public class ZFI_EXP_UPLOAD_RFCRequest
     {
-        public string COMPANY_CODE   { get; set; }
-        public string INVOICE_DATE   { get; set; }
-        public string POSTING_DATE   { get; set; }
-        public string VENDOR_CODE    { get; set; }
-        public string HEADER_TEXT    { get; set; }
-        public string WH_TAX_CODE    { get; set; }
-        public string REFRENCE_NUMBER { get; set; }
-        public string VENDOR_LINE_TEXT { get; set; }
-        public string GL_CODE        { get; set; }
-        public string AMOUNT         { get; set; }
-        public string TAX_CODE       { get; set; }
-        public string COST_CENTER    { get; set; }
-        public string BUSINESS_AREA  { get; set; }
-        public string PROFIT_CENTER  { get; set; }
-        public string ASSIGNMENT_NO  { get; set; }
-        public string GL_LINE_TEXT   { get; set; }
+        public List<ZFI_INPUT_STRUC> IM_INPUT { get; set; }
+        public List<ZFI_OUTPUT_STRUC> IM_OUTPUT { get; set; }
+    }
+
+    public class ZFI_INPUT_STRUC
+    {
+        // Add properties based on SAP structure ZFI_INPUT_STRUC_TT
+    }
+
+    public class ZFI_OUTPUT_STRUC
+    {
+        // Add properties based on SAP structure ZFI_OUTPUT_STRUC_TT
     }
 }
