@@ -17,6 +17,7 @@ GH_WORKFLOW_ID = "245504825"
 IIS_HOST = "https://sap-api.v2retail.net"
 IIS_BASE = "https://sap-api.v2retail.net/api"
 DAB_BASE = "https://my-dab-app.azurewebsites.net/api"
+RFC_KNOWLEDGE_BASE = "true"
 
 # Secrets (set via: wrangler secret put ANTHROPIC_API_KEY)
 # ANTHROPIC_API_KEY   - set as secret
