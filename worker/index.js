@@ -2,14 +2,14 @@ const RFC_KNOWLEDGE_BASE = `
 RULE 1: EX_RETURN type detection — If RFC spec says EX_RETURN is STRUCTURE (BAPIRET2), use rfcFunction.GetStructure("EX_RETURN") NOT GetTable. If it is TABLE, use GetTable.
 RULE 2: RFC component names vs SAP data element names — Always use component names exactly as defined in RFC (e.g. COMPANY_CODE not BUKRS).
 RULE 3: TABLE parameter explicit field mapping — For TABLE params, always use explicit field mapping with CreateStructure + Append, never use reflection.
-RULE 4: SAP connector pattern — Always use SapRfcConnection.GetConnection(rfcConfigName) and rfcFunction.Invoke(connection).
+RULE 4: SAP connector pattern — Use: RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction(); RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar); RfcRepository rfcrep = dest.Repository; IRfcFunction myfun = rfcrep.CreateFunction("RFC_NAME"); myfun.Invoke(dest); No SapRfcConnection class exists.
 RULE 5: Date fields — SAP dates are YYYYMMDD strings. Parse with DateTime.ParseExact and format back as YYYYMMDD.
 RULE 6: Numeric/amount fields — CURR and QUAN types map to decimal. Use decimal.TryParse with InvariantCulture.
 RULE 7: Error handling — Wrap RFC calls in try/catch. Return {Status:"E", Message:ex.Message} on error.
 RULE 8: Controller route — Use [Route("api/RfcName")] and [HttpPost] attributes.
 RULE 9: Response shape — Return {Status, Message} for no-table RFCs. Return {Status, Message, Data:{TableName:[rows]}} for table RFCs.
-RULE 10: Namespace — Use namespace VendorSrmRoutingApplication.Controllers.
-RULE 11: Always close/dispose SAP connection in finally block.
+RULE 10: Namespace — Use namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing and add: using Vendor_Application_MVC.Controllers; for BaseController access.
+RULE 11: Use async Task<HttpResponseMessage> with return await Task.Run(() => {...}); No explicit connection dispose needed with RfcConfigParameters pattern. Return type is HttpResponseMessage not IHttpActionResult.
 RULE 12: For STRUCTURE output params use GetStructure, read fields by name.
 RULE 13: For TABLE output params use GetTable, iterate rows with foreach.
 RULE 14: Never use dynamic or reflection to read SAP RFC result fields.
