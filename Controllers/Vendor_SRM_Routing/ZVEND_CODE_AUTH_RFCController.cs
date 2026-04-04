@@ -46,7 +46,7 @@ namespace VendorSrmRoutingApplication.Controllers
                     });
                 }
 
-                var connection = SapRfcConnection.GetConnection("production");
+                connection = SapRfcConnection.GetConnection("production");
                 IRfcFunction myfun = connection.CreateFunction("ZVEND_CODE_AUTH_RFC");
 
                 myfun.SetValue("IM_VEND_ID", request.IM_VEND_ID);
