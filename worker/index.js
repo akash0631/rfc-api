@@ -1,4 +1,29 @@
-
+const RFC_KNOWLEDGE_BASE = `
+RULE 1: EX_RETURN type detection — If RFC spec says EX_RETURN is STRUCTURE (BAPIRET2), use rfcFunction.GetStructure("EX_RETURN") NOT GetTable. If it is TABLE, use GetTable.
+RULE 2: RFC component names vs SAP data element names — Always use component names exactly as defined in RFC (e.g. COMPANY_CODE not BUKRS).
+RULE 3: TABLE parameter explicit field mapping — For TABLE params, always use explicit field mapping with CreateStructure + Append, never use reflection.
+RULE 4: SAP connector pattern — Always use SapRfcConnection.GetConnection(rfcConfigName) and rfcFunction.Invoke(connection).
+RULE 5: Date fields — SAP dates are YYYYMMDD strings. Parse with DateTime.ParseExact and format back as YYYYMMDD.
+RULE 6: Numeric/amount fields — CURR and QUAN types map to decimal. Use decimal.TryParse with InvariantCulture.
+RULE 7: Error handling — Wrap RFC calls in try/catch. Return {Status:"E", Message:ex.Message} on error.
+RULE 8: Controller route — Use [Route("api/RfcName")] and [HttpPost] attributes.
+RULE 9: Response shape — Return {Status, Message} for no-table RFCs. Return {Status, Message, Data:{TableName:[rows]}} for table RFCs.
+RULE 10: Namespace — Use namespace VendorSrmRoutingApplication.Controllers.
+RULE 11: Always close/dispose SAP connection in finally block.
+RULE 12: For STRUCTURE output params use GetStructure, read fields by name.
+RULE 13: For TABLE output params use GetTable, iterate rows with foreach.
+RULE 14: Never use dynamic or reflection to read SAP RFC result fields.
+LEARNING 1: EX_RETURN must be checked by type (STRUCTURE vs TABLE) not by name.
+LEARNING 2: Field names must match RFC spec exactly — do not guess from data element names.
+LEARNING 3: TABLE params require explicit CreateStructure + row.SetValue per field.
+LEARNING 4: Missing fields in structure cause runtime SAP exceptions — always map all fields.
+LEARNING 5: CURR fields lose precision if cast to float — always use decimal.
+LEARNING 6: SAP date 00000000 means null date — handle gracefully.
+LEARNING 7: rfcFunction.Invoke() must be called before reading output params.
+LEARNING 8: Connection config names are environment-specific (dev/quality/production).
+LEARNING 9: Output TABLE rows are RfcStructure objects — access fields by name string.
+LEARNING 10: Always validate required input params before calling SAP RFC.
+`;
 
 const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'master';
