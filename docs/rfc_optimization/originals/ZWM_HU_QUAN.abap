@@ -1,0 +1,74 @@
+FUNCTION ZWM_HU_QUAN.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(P_EXIDV) TYPE  EXIDV OPTIONAL
+*"  EXPORTING
+*"     VALUE(EX_RETURN) TYPE  BAPIRET2
+*"     VALUE(EX_QUAN) TYPE  VEPO-VEMNG
+*"----------------------------------------------------------------------
+  DATA: LT_VEKP  TYPE TABLE OF VEKP,
+        LT_VEPO  TYPE TABLE OF VEPO,
+         LS_VEKP  TYPE VEKP,
+        LS_VEPO  TYPE VEPO,
+       LT_EXREF TYPE TABLE OF ZWM_EXREF,
+      LS_EXREF TYPE ZWM_EXREF.
+  BREAK-POINT ID Z_V2CHECK.
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT         = P_EXIDV
+   IMPORTING
+     OUTPUT        = P_EXIDV
+            .
+
+SELECT *
+    FROM ZWM_EXREF
+    INTO TABLE LT_EXREF
+    WHERE EXIDV = P_EXIDV.
+  IF SY-SUBRC = 0.
+    SELECT *
+      FROM VEKP
+      INTO TABLE LT_VEKP
+      FOR ALL ENTRIES IN LT_EXREF
+      WHERE EXIDV = LT_EXREF-SAP_HU.
+    IF SY-SUBRC NE 0.
+       EX_RETURN-TYPE = 'E'.
+    EX_RETURN-MESSAGE = 'No To Created'(010).
+    MESSAGE EX_RETURN-MESSAGE TYPE 'E'.
+    RETURN.
+    ENDIF.
+      SELECT *
+        FROM VEPO
+        INTO TABLE LT_VEPO
+        FOR ALL ENTRIES IN LT_VEKP
+        WHERE VENUM = LT_VEKP-VENUM.
+  ELSE.
+    SELECT *
+      FROM VEKP
+      INTO TABLE LT_VEKP
+      WHERE EXIDV = P_EXIDV.
+    IF SY-SUBRC = 0.
+      SELECT *
+        FROM VEPO
+        INTO TABLE LT_VEPO
+        FOR ALL ENTRIES IN LT_VEKP
+        WHERE VENUM = LT_VEKP-VENUM.
+    ENDIF.
+  ENDIF.
+
+  LOOP AT LT_VEPO INTO LS_VEPO.
+    EX_QUAN = EX_QUAN + LS_VEPO-VEMNG.
+  ENDLOOP.
+  IF EX_QUAN IS NOT INITIAL .
+    EX_RETURN-TYPE = 'S'.
+*    message ex_quan INTO ls_return-message.
+  ELSE.
+    EX_RETURN-TYPE = 'E'.
+    EX_RETURN-MESSAGE = 'No Stock Found'(010).
+    RETURN.
+
+  ENDIF.
+
+
+
+ENDFUNCTION.
