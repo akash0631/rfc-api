@@ -1,0 +1,276 @@
+FUNCTION ZWM_STORE_GRC_PUTWAY.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(IM_EXIDV) TYPE  EXIDV
+*"     VALUE(IM_WERKS) TYPE  WERKS_D
+*"     VALUE(IM_LGNUM) TYPE  LGNUM DEFAULT 'SDC'
+*"     VALUE(IM_PARTIAL) TYPE  XFLD OPTIONAL
+*"     VALUE(IM_USER) TYPE  WWWOBJID OPTIONAL
+*"  EXPORTING
+*"     VALUE(EX_RETURN) TYPE  BAPIRET2
+*"     VALUE(EX_TANUM) TYPE  TANUM
+*"  TABLES
+*"      IT_DATA STRUCTURE  VEPOVB OPTIONAL
+*"----------------------------------------------------------------------
+  DATA: LT_DATA  TYPE VEPOVB_TAB,
+        LR_DATA  TYPE REF TO VEPOVB,
+        LR_DATA2 TYPE REF TO VEPOVB.
+
+  DATA: L_MATNR    TYPE MATNR,
+        L_EXIDV    TYPE EXIDV,
+        L_TABIX    TYPE SYTABIX,
+        L_USER     TYPE WWWOBJID,
+        L_DOC_TYPE TYPE ZDOC_TYPE,
+        L_RC       TYPE SYSUBRC.
+
+  DATA: LT_LTAP_CREATE TYPE STANDARD TABLE OF LTAP_CREAT INITIAL SIZE 0,
+        LT_LTAP        TYPE STANDARD TABLE OF LTAP_VB    INITIAL SIZE 0,
+        LT_VEKP        TYPE STANDARD TABLE OF VEKP       INITIAL SIZE 0.
+
+  DATA: LS_LTAP_CREATE TYPE LTAP_CREAT,
+        LS_VEKP        TYPE VEKP,
+        LS_EXREF       TYPE ZWM_EXREF,
+        LS_STORE_HST   TYPE ZWM_STORE_HST,
+        L_TANUM        TYPE TANUM,
+        L_VBELN        TYPE VBELN.
+
+  DATA: LS_HUSDC TYPE ZMM_HUSDC,
+        LR_VEPO  TYPE REF TO VEPO,
+        LT_VEPO  TYPE STANDARD TABLE OF VEPO,
+        LT_HUSDC TYPE STANDARD TABLE OF ZMM_HUSDC INITIAL SIZE 0,
+        LS_MSEG  TYPE MSEG.  "VKS-12.01.2021
+
+  DATA: LV_COUNT TYPE MBLPO,
+        L_VGBEL  TYPE VGBEL,
+        L_MBLNR  TYPE MBLNR,
+        L_MJAHR  TYPE MJAHR,
+        L_NUMBER TYPE NUMC10,
+        L_TANUM2 TYPE TANUM,
+        LV_MATNR TYPE CHAR18.
+  BREAK-POINT ID Z_V2CHECK.
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = IM_EXIDV
+    IMPORTING
+      OUTPUT = L_EXIDV.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = IM_USER
+    IMPORTING
+      OUTPUT = L_USER.
+
+  TRANSLATE L_USER TO UPPER CASE.
+
+  PERFORM F_CHECK_HU USING L_EXIDV IM_WERKS L_VBELN CHANGING EX_RETURN L_RC.
+  CHECK L_RC IS INITIAL.
+
+  SELECT SINGLE exidv sap_hu vbeln datum
+    FROM ZWM_EXREF INTO LS_EXREF WHERE EXIDV = L_EXIDV.
+  IF SY-SUBRC IS INITIAL AND LS_EXREF-SAP_HU IS NOT INITIAL.
+    L_EXIDV = LS_EXREF-SAP_HU.
+  ENDIF.
+
+  SELECT SINGLE exidv venum status vpobj vpobjkey
+    FROM VEKP INTO LS_VEKP WHERE EXIDV = L_EXIDV.
+  SELECT venum vepos vbeln posnr matnr vemng meins
+    FROM VEPO INTO TABLE LT_VEPO WHERE VENUM = LS_VEKP-VENUM.
+
+  SORT LT_VEPO BY MATNR VEPOS.
+  READ TABLE LT_VEPO REFERENCE INTO LR_VEPO INDEX 1.
+  IF SY-SUBRC IS INITIAL.
+    L_VGBEL = LS_VEKP-SEALN5.  "VKS-04.01.2021
+*    SELECT SINGLE vgbel INTO l_vgbel FROM lips WHERE vbeln EQ l_vbeln.
+    SELECT SINGLE * FROM MSEG INTO LS_MSEG WHERE MBLNR = LS_VEKP-SEALN5.
+  ENDIF.
+
+  LOOP AT IT_DATA REFERENCE INTO LR_DATA.
+    TRANSLATE LR_DATA->LGPLA TO UPPER CASE.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        INPUT  = LR_DATA->MATNR
+      IMPORTING
+        OUTPUT = L_MATNR.
+
+    READ TABLE LT_DATA REFERENCE INTO LR_DATA2 WITH KEY MATNR = L_MATNR LGPLA = LR_DATA->LGPLA.
+    IF SY-SUBRC IS NOT INITIAL.
+      APPEND INITIAL LINE TO LT_DATA REFERENCE INTO LR_DATA2.
+      MOVE: L_MATNR        TO LR_DATA2->MATNR,
+            LR_DATA->LGPLA TO LR_DATA2->LGPLA.
+    ENDIF.
+
+    LR_DATA2->VEMNG = LR_DATA2->VEMNG + LR_DATA->VEMNG.
+  ENDLOOP.
+
+  LOOP AT LT_DATA REFERENCE INTO LR_DATA.
+    CLEAR: LV_MATNR.
+    LV_MATNR = LR_DATA->MATNR+22(18).
+
+      LS_LTAP_CREATE-MATNR = LV_MATNR.
+      LS_LTAP_CREATE-WERKS = IM_WERKS.
+      LS_LTAP_CREATE-LGORT = '0002'.
+      LS_LTAP_CREATE-ANFME = LR_DATA->VEMNG.
+      LS_LTAP_CREATE-ALTME = 'EA'.
+      LS_LTAP_CREATE-SQUIT = 'X'.
+      LS_LTAP_CREATE-VLTYP = 'V01'.
+      LS_LTAP_CREATE-VLBER = '001'.
+      LS_LTAP_CREATE-NLTYP = IM_WERKS+1(3).
+      LS_LTAP_CREATE-NLPLA = LR_DATA->LGPLA.
+      LS_LTAP_CREATE-NLBER = '001'.
+      LS_LTAP_CREATE-VLPLA = L_VGBEL.
+
+      IF LS_MSEG-BWART = '305'. "ls_ltap_create-vlpla IS INITIAL. VKS-12.01.2021
+        LS_LTAP_CREATE-VLPLA = 'TRANSFER'.
+      ENDIF.
+
+      APPEND LS_LTAP_CREATE TO LT_LTAP_CREATE.
+
+    READ TABLE LT_VEPO REFERENCE INTO LR_VEPO WITH KEY MATNR = LV_MATNR BINARY SEARCH.
+    IF SY-SUBRC IS INITIAL.
+      L_TABIX = SY-TABIX.
+      LOOP AT LT_VEPO  REFERENCE INTO LR_VEPO FROM L_TABIX.
+        IF LR_VEPO->MATNR NE LV_MATNR OR
+           LR_DATA->VEMNG IS INITIAL.
+          EXIT.
+        ENDIF.
+
+        LV_COUNT = LV_COUNT + 1.
+        LS_HUSDC-VENUM     = LR_VEPO->VENUM.
+        LS_HUSDC-EXIDV     = L_EXIDV.
+        LS_HUSDC-VEPOS     = LR_VEPO->VEPOS.
+        LS_HUSDC-ZEILE     = LV_COUNT.
+        LS_HUSDC-MATNR     = LR_VEPO->MATNR.
+        LS_HUSDC-LGPLA     = LR_DATA->LGPLA.
+        LS_HUSDC-LGTYP     = IM_WERKS+1(3).
+        LS_HUSDC-LGBER     = '001'.
+        LS_HUSDC-VEMNG     = LR_VEPO->VEMNG.
+        LS_HUSDC-MEINS     = LR_VEPO->VEMEH.
+        LS_HUSDC-WERKS     = IM_WERKS.
+        LS_HUSDC-BWART     = '311'.
+        LS_HUSDC-S_LGORT   = '0002'.
+        LS_HUSDC-T_LGORT   = '0002'.
+        LS_HUSDC-ERNAM_RFC = L_USER.
+
+        APPEND LS_HUSDC TO LT_HUSDC.
+        CLEAR: LS_HUSDC.
+
+        IF LR_DATA->VEMNG LE LR_VEPO->VEMNG.
+          LR_VEPO->VEMNG = LR_VEPO->VEMNG - LR_DATA->VEMNG.
+          CLEAR LR_DATA->VEMNG.
+        ELSE.
+          LR_DATA->VEMNG = LR_DATA->VEMNG - LR_VEPO->VEMNG.
+          CLEAR: LR_VEPO->VEMNG.
+        ENDIF.
+      ENDLOOP.
+
+      DELETE LT_VEPO WHERE VEMNG IS INITIAL.
+      SORT LT_VEPO BY MATNR VEPOS.
+    ENDIF.
+  ENDLOOP.
+
+  LOOP AT LT_DATA REFERENCE INTO LR_DATA WHERE VEMNG GT 0.
+
+
+    PERFORM F_SAVE_TEMP_DATA_3_TO_2 USING L_EXIDV
+                                   LT_DATA
+                                   LT_VEPO
+                                   IM_WERKS
+                                   L_USER
+                                   L_VGBEL
+                                   '0003'
+                                   '0002'
+                                   L_NUMBER
+                                   LS_MSEG
+                                   '7'.
+
+    PERFORM F_PROCESS_EXCESS_STOCK USING L_EXIDV
+                                         LT_DATA
+                                         LT_VEPO
+                                         IM_WERKS
+                                         L_USER
+                                         L_VGBEL
+                                         '0003'
+                                         '0002'
+                                         L_NUMBER
+                                         LS_MSEG
+                                         '1'.
+
+    EXIT.
+  ENDLOOP.
+  CLEAR L_NUMBER.
+  PERFORM F_SAVE_TEMP_DATA USING L_EXIDV
+                                 LT_LTAP_CREATE
+                                 LT_VEPO
+                                 IM_WERKS
+                                 L_USER
+                                 L_VGBEL
+                                 '0002'
+                                 '0003'
+                                 L_NUMBER
+                                 LS_MSEG
+                                 '1'.
+  PERFORM GET_ARFC_RESSOURCES.
+
+  G_JOBS     = G_JOBS - 1.
+  G_TASKNAME =  G_TASKNAME + 1.
+
+  CALL FUNCTION 'L_TO_CREATE_MULTIPLE'
+    STARTING NEW TASK G_TASKNAME
+    PERFORMING CHECK_RESULT_TO ON END OF TASK
+    EXPORTING
+      I_LGNUM      = IM_LGNUM
+      I_BWLVS      = '999'
+      I_KOMPL      = ''
+    TABLES
+      T_LTAP_CREAT = LT_LTAP_CREATE.
+
+  WAIT UNTIL G_COMP >= 1.
+  L_TANUM = G_TANUM.
+  CLEAR: G_COMP,G_TANUM.
+
+  IF G_SYS-SUBRC <> 0.
+    EX_RETURN-TYPE = C_ERROR.
+    CALL FUNCTION 'FORMAT_MESSAGE'
+      EXPORTING
+        ID        = G_SYS-MSGID
+        LANG      = G_SYS-LANGU
+        NO        = G_SYS-MSGNO
+        V1        = G_SYS-MSGV1
+        V2        = G_SYS-MSGV2
+        V3        = G_SYS-MSGV3
+        V4        = G_SYS-MSGV4
+      IMPORTING
+        MSG       = EX_RETURN-MESSAGE
+      EXCEPTIONS
+        NOT_FOUND = 1
+        OTHERS    = 2.
+
+    UPDATE ZWM_STORE_HST SET: MSG = EX_RETURN-MESSAGE
+                              WHERE HST_NR = L_NUMBER AND DOC_TYPE = '1'.
+    MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+          WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4 INTO EX_RETURN-MESSAGE.
+    RETURN.
+  ELSE.
+    UPDATE ZWM_STORE_HST SET: TANUM = L_TANUM MBLNR = '9999999999' MJAHR = '9999'
+                              WHERE HST_NR = L_NUMBER AND DOC_TYPE = '1'.
+
+    MODIFY ZMM_HUSDC FROM TABLE LT_HUSDC.
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        WAIT = 'X'.
+
+    CALL FUNCTION 'DEQUEUE_ALL'
+      EXPORTING
+        _SYNCHRON = 'X'.
+
+    EX_RETURN-TYPE = C_SUCCESS.
+    MESSAGE S016(L3) WITH L_TANUM INTO EX_RETURN-MESSAGE.
+    EX_TANUM = L_TANUM.
+
+    IF LT_VEPO IS NOT INITIAL.
+      CONCATENATE 'TO' L_TANUM 'Mat Doc' L_MBLNR 'TO' L_TANUM2 'Create'
+      INTO  EX_RETURN-MESSAGE SEPARATED BY SPACE.
+    ENDIF.
+  ENDIF.
+ENDFUNCTION.
