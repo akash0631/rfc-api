@@ -1,0 +1,492 @@
+FUNCTION ZWM_CREATE_HU_AND_ASSIGN_O.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(IM_LGNUM) TYPE  LGNUM DEFAULT 'V2R'
+*"     VALUE(IM_VBELN) TYPE  VBELN_VL OPTIONAL
+*"     VALUE(IM_USER) TYPE  WWWOBJID OPTIONAL
+*"     VALUE(IM_EXIDV) TYPE  EXIDV OPTIONAL
+*"  EXPORTING
+*"     VALUE(EX_RETURN) TYPE  BAPIRET2
+*"  TABLES
+*"      IT_DATA STRUCTURE  VERPO OPTIONAL
+*"      IT_BIN_EMPTY STRUCTURE  ZWM_PLESS_BIN OPTIONAL
+*"----------------------------------------------------------------------
+  CLEAR: EX_RETURN,G_SYS,G_COMP.
+
+  DATA: L_EXIDV            TYPE EXIDV,
+        LV_EXIDV           TYPE EXIDV,
+        LV_WERKS           TYPE WERKS_D,
+        L_USER             TYPE WWWOBJID,
+        LS_ZWM_HU_LOG      TYPE ZWM_HU_LOG,
+        L_TOT_QTY          TYPE TMENG,
+        L_TOT_QTY_S        TYPE STRING,
+        LT_DATA            TYPE TAB_VERPO,
+        LS_HEADER_PROPOSAL TYPE HUHDR_PROPOSAL,
+        LS_HEADER          TYPE VEKPVB,
+        LV_POSNR           TYPE POSNR,
+        LS_HU_BIN          TYPE ZWM_HU_BIN,
+        LS_VERPO           LIKE LINE OF IT_DATA,
+        LS_HHT_DATA        TYPE VERPO,
+        LS_PICKLIST        TYPE ZADVERB_PICKLIST,
+        LS_HUHEADER        TYPE BAPIHUHEADER,
+        LT_RETURN          TYPE BAPIRET2_T,
+        LT_HU_BIN          TYPE STANDARD TABLE OF ZWM_HU_BIN,
+        LR_DATA            TYPE REF TO VERPO,
+        LR_RETURN          TYPE REF TO BAPIRET2,
+        LV_EXIDV1          TYPE ZSAPHU.
+
+  DATA: L_MATNR      TYPE MATNR,
+        L_VBELN      TYPE VBELN_VL,
+        L_TMENG      TYPE TMENG,
+        LS_VBKOK_WA  TYPE VBKOK,
+        LS_PROTT     TYPE PROTT,
+        LF_ERROR_GI  TYPE XFELD,
+        L_TIME_STAMP TYPE TIMESTAMPL,
+        L_BKG_ERROR  TYPE CHAR1,
+        LS_TID       TYPE ARFCTID,
+        LT_ERRORS    TYPE TABLE OF ARFCERRORS,
+        LT_PROT      TYPE TABLE OF PROTT,
+        LS_TMP       TYPE VERPO.
+
+*Paperless Picking X mark BINS
+  DATA: GT_BIN_EMPTY     TYPE TABLE OF ZWM_PLESS_BIN,
+        GT_BIN_EMPTY_SUM TYPE TABLE OF ZWM_PLESS_BIN,
+        GW_BIN_EMPTY_SUM TYPE ZWM_PLESS_BIN,
+        GW_BIN_EMPTY     TYPE ZWM_PLESS_BIN,
+        WA_BIN_EMPTY     TYPE ZWM_PLESS_BIN,
+        GT_DATA          TYPE TABLE OF VERPO,
+        IT_PICKLIST      TYPE ZADVERB_PICKLIST_TT,
+        GT_DATA_SUM      TYPE TABLE OF VERPO,
+        GW_DATA          TYPE VERPO,
+        GW_DATA_SUM      TYPE VERPO.
+
+*DATA: GV_GRS_WT TYPE BRGEW.  " ++BHARAT ON 25.07.2022
+
+*Update HU Backup data - VKS-22.01.2021
+  DATA: LS_DATA  TYPE ZBACKUPHU_DATA,
+        LT_VEPO1 TYPE TABLE OF VEPO,
+        LS_VEPO1 TYPE VEPO,
+        LS_VEKP1 TYPE VEKP,
+*        LS_HU_BIN TYPE ZWM_HU_BIN,
+        LV_HUQTY TYPE VEMNG,
+        LS_EXREF TYPE ZWM_EXREF.
+*  GT_BIN_EMPTY = IT_BIN_EMPTY[].
+  GT_DATA = IT_DATA[].
+
+  SORT IT_BIN_EMPTY[] BY VBELN VLPLA.
+*  DELETE ADJACENT DUPLICATES FROM IT_BIN_EMPTY[] COMPARING VBELN VLPLA.
+  DELETE IT_BIN_EMPTY[] WHERE BIN_EMPTY_I EQ ''.
+  IF  IT_BIN_EMPTY[] IS NOT INITIAL.                 " ++bharat on 28.06.2022
+    MODIFY ZWM_PLESS_BIN FROM TABLE IT_BIN_EMPTY[].
+  ENDIF.                                            " ++bharat on 28.06.2022
+*End code
+
+
+  IF IT_DATA[] IS INITIAL .
+    EX_RETURN-TYPE = C_ERROR.
+    EX_RETURN-MESSAGE = 'No Data Scan'.
+    RETURN.
+  ENDIF.
+
+*Checking Zero Qnty
+  READ TABLE IT_DATA INTO LS_TMP WITH KEY TMENG = 0.
+  IF SY-SUBRC = 0.
+    EX_RETURN-TYPE = C_ERROR.
+    EX_RETURN-MESSAGE = 'Zero Qnty found in Scan Data'.
+    RETURN.
+  ENDIF.
+
+*Convert into internal format
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = IM_VBELN
+    IMPORTING
+      OUTPUT = L_VBELN.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = IM_USER
+    IMPORTING
+      OUTPUT = L_USER.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = IM_EXIDV
+    IMPORTING
+      OUTPUT = LV_EXIDV.
+
+
+  SELECT SINGLE * FROM ZWM_HU_BIN  INTO LS_HU_BIN WHERE EXIDV = LV_EXIDV .
+  IF SY-SUBRC IS INITIAL .
+    EX_RETURN-TYPE = 'S'.
+    CONCATENATE LS_HU_BIN-SAP_HU 'Created' INTO EX_RETURN-MESSAGE.
+    RETURN.
+  ENDIF.
+
+  LOOP AT IT_DATA INTO LS_VERPO.
+    CLEAR LS_VERPO-RFBEL .
+    COLLECT LS_VERPO INTO LT_DATA .
+    CLEAR: LS_VERPO.
+  ENDLOOP.
+
+*Delete duplicate material
+*  LT_DATA = IT_DATA[].
+  SORT LT_DATA BY P_MATERIAL.
+  DELETE ADJACENT DUPLICATES FROM LT_DATA COMPARING P_MATERIAL.
+
+*Generate Handling Unit
+  IF LINES( LT_DATA ) GT 1.
+    EX_RETURN-TYPE = C_ERROR.
+    EX_RETURN-MESSAGE = 'Use only one packaging material at a time'.
+    RETURN.
+  ELSE.
+    READ TABLE LT_DATA REFERENCE INTO LR_DATA INDEX 1.
+    IF SY-SUBRC IS INITIAL.
+      CLEAR LR_DATA->MATNR.
+      LV_WERKS = LR_DATA->WERKS .
+
+* Create a HU without ITEMS
+      CALL FUNCTION 'ZWM_UPDATE_PACKAGING' DESTINATION 'NONE'
+        EXPORTING
+          IM_LGNUM            = IM_LGNUM
+          IM_VBELN            = L_VBELN
+          IM_EXIDV            = '$1'
+        IMPORTING
+          EX_EXIDV            = L_EXIDV
+        TABLES
+          IT_DATA             = LT_DATA
+        EXCEPTIONS
+          UPDATE_NOT_POSSIBLE = 1
+          OTHERS              = 2.
+
+      IF SY-SUBRC <> 0.
+        EX_RETURN-TYPE = C_ERROR.
+        MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+                WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4 INTO EX_RETURN-MESSAGE.
+        RETURN.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+  GET TIME STAMP FIELD L_TIME_STAMP.
+  CALL FUNCTION 'ZWM_UPDATE_PACKAGING'
+    EXPORTING
+      IM_LGNUM            = IM_LGNUM
+      IM_VBELN            = L_VBELN
+      IM_EXIDV            = L_EXIDV
+*     im_user             = l_user
+*     im_time_stamp       = l_time_stamp
+    TABLES
+      IT_DATA             = IT_DATA
+    EXCEPTIONS
+      UPDATE_NOT_POSSIBLE = 1
+      ERROR_MESSAGE       = 2.
+
+  IF SY-SUBRC IS NOT INITIAL.
+    MESSAGE ID SY-MSGID
+           TYPE SY-MSGTY
+           NUMBER SY-MSGNO
+           WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4
+           INTO EX_RETURN-MESSAGE.
+    EX_RETURN-TYPE = C_ERROR.
+    RETURN.
+  ENDIF.
+
+  COMMIT WORK AND WAIT.
+
+*Check Blank,Zero Qty & Differ Qty Created HU - VKS-22.01.2021
+  DATA: LS_VEKP TYPE VEKP,
+        LS_VEPO TYPE VEPO,
+        LT_VEPO TYPE TABLE OF VEPO,
+        LV_FLAG TYPE C VALUE '',
+        LS_TEMP TYPE VERPO,
+        LV_QTY  TYPE TMENG.
+
+  SELECT SINGLE exidv venum status vpobj vpobjkey
+    FROM VEKP INTO LS_VEKP WHERE EXIDV = L_EXIDV.
+  IF SY-SUBRC = 0.
+    DO 10 TIMES.
+      SELECT SINGLE venum vepos vbeln posnr matnr vemng meins
+        FROM VEPO INTO LS_VEPO WHERE VENUM = LS_VEKP-VENUM.
+      IF SY-SUBRC IS INITIAL.
+        EXIT.
+      ELSE.
+        WAIT UP TO 3 SECONDS.
+      ENDIF.
+    ENDDO.
+
+    IF LS_VEPO IS INITIAL.
+      DELETE FROM VEKP WHERE EXIDV = L_EXIDV.
+      DELETE FROM VEPO WHERE VENUM = LS_VEKP-VENUM.
+*        DELETE FROM zwm_hudata WHERE sap_hu = l_exidv." --bharat on 28.06.2022
+      DELETE FROM ZWM_HU_BIN WHERE SAP_HU = L_EXIDV.  " ++bharat on 28.06.2022
+      EX_RETURN-TYPE = C_ERROR.
+      EX_RETURN-MESSAGE = 'ERROR: HU is blank can not be saved, Try again'.
+      LV_FLAG = 'X'.
+    ELSE.
+      EX_RETURN-TYPE = C_SUCCESS.
+       L_EXIDV = |{ L_EXIDV ALPHA = OUT }|.
+       CONDENSE L_EXIDV NO-GAPS.
+*      ex_return-message = |Handling Unit { l_exidv ALPHA = OUT } created successfully|.
+       EX_RETURN-MESSAGE = |Handling Unit { L_EXIDV } created successfully|.
+*        ex_return-message = |Handling Unit| & | | & | { l_exidv } created successfully|.
+      EX_RETURN-MESSAGE_V1 = L_EXIDV.
+*** Start bharat on 26.07.2022
+*IF GT_DATA IS NOT INITIAL.
+*  data(gt_data2) = gt_data .
+*  sort gt_data2 ASCENDING by matnr.
+*   SELECT A~MATNR, SUM( A~BRGEW ) AS BRGEW FROM MARA AS A
+*       INNER JOIN @GT_DATA2 AS B
+*       ON  A~MATNR = B~MATNR
+*        GROUP BY A~MATNR
+*       INTO TABLE @DATA(GT_BRGEW).
+*ENDIF.
+*
+*IF LT_DATA IS NOT INITIAL.
+*   SELECT A~MATNR, SUM( A~BRGEW ) AS BRGEW FROM MARA AS A
+*       INNER JOIN @LT_DATA AS B
+*       ON  A~MATNR = B~P_MATERIAL
+*        GROUP BY A~MATNR
+*       INTO TABLE @DATA(GT_BRGEW2).
+*ENDIF.
+*
+*APPEND LINES OF GT_BRGEW TO GT_BRGEW2.
+*LOOP AT GT_BRGEW2 INTO DATA(GW_BRGEW).
+*GV_GRS_WT = GV_GRS_WT + GW_BRGEW-BRGEW.
+*ENDLOOP.
+*
+* UPDATE vekp SET: ntgew = GV_GRS_WT
+*        WHERE exidv = L_EXIDV.
+*   COMMIT WORK AND WAIT.
+*** end bharat on 26.07.2022
+    ENDIF.
+    CLEAR: LS_VEPO.
+
+    SELECT SINGLE venum vepos vbeln posnr matnr vemng meins
+      FROM VEPO INTO LS_VEPO WHERE VENUM = LS_VEKP-VENUM AND VEMNG = 0.
+    IF SY-SUBRC = 0.
+      DELETE FROM VEKP WHERE EXIDV = L_EXIDV.
+      DELETE FROM VEPO WHERE VENUM = LS_VEKP-VENUM.
+*        DELETE FROM zwm_hudata WHERE sap_hu = l_exidv. "--bharat on 28.06.0222
+      DELETE FROM ZWM_HU_BIN WHERE SAP_HU = L_EXIDV.  "  ++bharat on 28.06.2022
+      EX_RETURN-TYPE = C_ERROR.
+      EX_RETURN-MESSAGE = 'ERROR: Zero Qty HU can not be saved, Try again'.
+      LV_FLAG = 'X'.
+    ENDIF.
+    CLEAR: LS_VEPO.
+
+    SELECT venum vepos vbeln posnr matnr vemng meins
+      FROM VEPO INTO TABLE LT_VEPO WHERE VENUM = LS_VEKP-VENUM.
+    SORT LT_VEPO BY VBELN MATNR.  SORT LT_DATA BY VBELN MATNR.
+    LOOP AT LT_VEPO INTO LS_VEPO WHERE VBELN = L_VBELN. "Parallel cussor
+      READ TABLE IT_DATA INTO LS_TEMP WITH KEY VBELN = L_VBELN MATNR = LS_VEPO-MATNR BINARY SEARCH.
+      IF SY-SUBRC = 0.
+        LOOP AT IT_DATA INTO LS_TEMP FROM SY-TABIX.
+          IF LS_TEMP-MATNR <> LS_VEPO-MATNR.
+            EXIT.
+          ENDIF.
+          LV_QTY = LV_QTY + LS_TEMP-TMENG.
+        ENDLOOP.
+        IF LS_VEPO-VEMNG <> LV_QTY.
+          DELETE FROM VEKP WHERE EXIDV = L_EXIDV.
+          DELETE FROM VEPO WHERE VENUM = LS_VEKP-VENUM.
+*            DELETE FROM zwm_hudata WHERE sap_hu = l_exidv.  " --Bharat on 28.06.2022
+          DELETE FROM ZWM_HU_BIN WHERE SAP_HU = L_EXIDV.  " ++Bharat on 28.06.2022
+          EX_RETURN-TYPE = C_ERROR.
+          EX_RETURN-MESSAGE = 'ERROR: Article Qty in Generated Int.HU & Scanning is not match, Try again'.
+          LV_FLAG = 'X'.
+        ENDIF.
+      ENDIF.
+      CLEAR: LS_VEPO,LV_QTY.
+    ENDLOOP.
+    CLEAR: LS_VEKP.
+  ENDIF.
+*End code
+
+*    IF l_bkg_error = '' AND lv_flag = ''.
+*      WRITE l_exidv TO g_exidv.
+*      CONCATENATE 'Hu'(013) g_exidv 'Created Successfully'(011) '& submitted in background'(019) INTO ex_return-message SEPARATED BY space.
+*      ex_return-message_v1 = g_exidv.
+*      ls_zwm_hu_log-exidv = l_exidv.
+*      ls_zwm_hu_log-ernam = l_user.
+*      INSERT zwm_hu_log FROM ls_zwm_hu_log.
+*    ENDIF.
+*  ELSE.
+*    ROLLBACK WORK.
+*    ex_return-type = c_error.
+*    ex_return-message = ' Executing in background'(018).
+*  ENDIF.
+
+  SELECT SINGLE exidv sap_hu vbeln datum
+    FROM ZWM_EXREF INTO LS_EXREF WHERE EXIDV = LV_EXIDV.
+*Update HU in table
+  IF L_EXIDV IS NOT INITIAL AND LV_FLAG = ''.
+    CLEAR: LV_EXIDV1.
+
+    SELECT SINGLE SAP_HU FROM ZWM_EXREF INTO LV_EXIDV1  WHERE SAP_HU = L_EXIDV.
+    IF SY-SUBRC = 0.
+      EX_RETURN-TYPE = C_ERROR.
+      EX_RETURN-MESSAGE = ' Internal Hu Already Exist'(023).
+    ELSE.
+      UPDATE ZWM_EXREF SET: SAP_HU = L_EXIDV
+                            ADATUM = SY-DATUM
+                            HHT_ID = L_USER
+                      WHERE EXIDV = LV_EXIDV.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+  ENDIF.
+
+  IF IM_USER NE 'PTL'.
+    CLEAR LV_POSNR .
+    LOOP AT IT_DATA INTO LS_HHT_DATA .
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          INPUT  = LS_HHT_DATA-MATNR
+        IMPORTING
+          OUTPUT = LS_HHT_DATA-MATNR.
+
+      LV_POSNR = LV_POSNR + 1.
+      LS_HU_BIN-SAP_HU = L_EXIDV .
+      LS_HU_BIN-POSNR = LV_POSNR  .
+      LS_HU_BIN-EXIDV = LV_EXIDV .
+      LS_HU_BIN-VBELN = L_VBELN .
+      LS_HU_BIN-HHT_USER = L_USER .
+      LS_HU_BIN-WERKS = LS_EXREF-DWERKS.
+      LS_HU_BIN-MATNR = LS_HHT_DATA-MATNR.
+      LS_HU_BIN-MENGE = LS_HHT_DATA-TMENG.
+      LS_HU_BIN-LGPLA = LS_HHT_DATA-RFBEL.
+      LS_HU_BIN-ERDAT = SY-DATUM.
+      LS_HU_BIN-UZEIT = SY-UZEIT.
+
+      APPEND LS_HU_BIN TO LT_HU_BIN .
+      CLEAR LS_HU_BIN.
+
+      LS_PICKLIST-SAP_HU = L_EXIDV .
+      LS_PICKLIST-EXIDV = LV_EXIDV .
+      LS_PICKLIST-ERNAM = L_USER .
+      LS_PICKLIST-WERKS = LS_EXREF-DWERKS .
+      LS_PICKLIST-CRATE =  '' .
+      LS_PICKLIST-PROCESS =  'CLA' .
+      LS_PICKLIST-DESTINATION =  'CLA' .
+      LS_PICKLIST-MATNR =  LS_HHT_DATA-MATNR .
+      LS_PICKLIST-PICKLISTNO =  L_VBELN .
+      LS_PICKLIST-MENGE =  LS_HHT_DATA-TMENG.
+
+      COLLECT LS_PICKLIST INTO IT_PICKLIST.
+      CLEAR LS_PICKLIST.
+      CLEAR LS_DATA .
+    ENDLOOP.
+
+    DATA : EV_DOCNO TYPE ZZDOCNO.
+    DATA : LS_RETURN TYPE BAPIRET2 .
+
+    MODIFY ZWM_HU_BIN FROM TABLE  LT_HU_BIN  .
+    COMMIT WORK AND WAIT.
+    CALL FUNCTION 'ZAPI_ADVERB_SAVE_CARTHU'
+      IMPORTING
+        EX_RETURN   = LS_RETURN
+        EV_DOCNO    = EV_DOCNO
+      TABLES
+        IT_PICKLIST = IT_PICKLIST.
+  ENDIF.
+
+  SELECT SINGLE exidv venum status vpobj vpobjkey
+    FROM VEKP INTO LS_VEKP1 WHERE EXIDV = L_EXIDV.
+  IF SY-SUBRC = 0 AND SY-TCODE = ''.
+    LS_DATA-SWERKS = LS_VEKP1-WERKS.
+    LS_DATA-VENUM  = LS_VEKP1-VENUM.
+    LS_DATA-SAP_HU = LS_VEKP1-EXIDV.
+    LS_DATA-VBELN  = L_VBELN.
+    LS_DATA-DATUM  = SY-DATUM.
+    LS_DATA-ERZET  = SY-UZEIT.
+    LS_DATA-UNAME  = SY-UNAME.
+    LS_DATA-TCODE  = 'HHT'.
+
+*    IF SY-SUBRC = 0.
+    LS_DATA-DWERKS = LS_EXREF-DWERKS.
+    LS_DATA-EXIDV  = LS_EXREF-EXIDV.
+*    ENDIF.
+
+    SELECT venum vepos vbeln posnr matnr vemng meins
+      FROM VEPO INTO TABLE LT_VEPO1 WHERE VENUM = LS_VEKP1-VENUM.
+    LOOP AT LT_VEPO1 INTO LS_VEPO1.
+      LV_HUQTY = LV_HUQTY + LS_VEPO1-VEMNG.
+    ENDLOOP.
+    LS_DATA-PQNTY  = LV_HUQTY.
+
+    DELETE FROM ZBACKUPHU_DATA WHERE EXIDV = LS_DATA-EXIDV.
+    MODIFY ZBACKUPHU_DATA FROM LS_DATA.
+    CLEAR: LS_DATA,LS_VEPO1,LS_VEKP1,LV_HUQTY.
+    REFRESH: LT_VEPO1.
+  ENDIF.
+
+*Paperless Picking Remove Del.from Drop Down after Complete Scan
+  IF L_BKG_ERROR = '' AND LV_FLAG = ''.
+    DATA: LT_LIPS      TYPE TABLE OF LIPS,
+          LT_VEKP2     TYPE TABLE OF VEKP,
+          LT_VEPO2     TYPE TABLE OF VEPO,
+          LT_BIN_EMPTY TYPE TABLE OF ZWM_PLESS_BIN,
+          LS_BIN_EMPTY TYPE ZWM_PLESS_BIN,
+          LS_VEKP2     TYPE VEKP,
+          LS_VEPO2     TYPE VEPO,
+          LS_LIPS      TYPE LIPS,
+          LS_ITDATA    TYPE VERPO.
+
+    SELECT vbeln posnr matnr lfimg meins werks lgort
+      FROM LIPS INTO TABLE LT_LIPS WHERE VBELN = IM_VBELN AND POSNR < 900000.
+    IF SY-SUBRC = 0.
+      SELECT vbeln matnr bin_empty_i FROM zwm_pless_bin INTO TABLE lt_bin_empty WHERE VBELN = IM_VBELN.
+      IF SY-SUBRC = 0.
+        LOOP AT LT_BIN_EMPTY INTO LS_BIN_EMPTY WHERE BIN_EMPTY_I = 'X'. "Check Mark delete
+          DELETE LT_LIPS WHERE MATNR = LS_BIN_EMPTY-MATNR.
+        ENDLOOP.
+      ENDIF.
+
+      LOOP AT IT_DATA INTO LS_ITDATA. "Current Scan mins
+        CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+          EXPORTING
+            INPUT  = LS_ITDATA-MATNR
+          IMPORTING
+            OUTPUT = LS_ITDATA-MATNR.
+
+        READ TABLE LT_LIPS INTO LS_LIPS WITH KEY MATNR = LS_ITDATA-MATNR.
+        IF SY-SUBRC = 0.
+          LS_LIPS-LFIMG = LS_LIPS-LFIMG - LS_ITDATA-TMENG.
+          MODIFY LT_LIPS FROM LS_LIPS INDEX SY-TABIX.
+        ENDIF.
+      ENDLOOP.
+
+      SELECT exidv venum status vpobj vpobjkey
+        FROM VEKP INTO TABLE LT_VEKP2 WHERE VBELN_GEN = IM_VBELN "Old Partial Del.mins
+        AND EXIDV <> L_EXIDV %_HINTS ORACLE 'INDEX("VEKP" "VEPO~ZEK")'.
+      IF SY-SUBRC = 0.
+        SELECT venum vepos vbeln posnr matnr vemng meins
+          FROM VEPO INTO TABLE LT_VEPO2 FOR ALL ENTRIES IN LT_VEKP2
+          WHERE VENUM = LT_VEKP2-VENUM.
+        IF SY-SUBRC = 0.
+          LOOP AT LT_VEPO2 INTO LS_VEPO2.
+            CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+              EXPORTING
+                INPUT  = LS_VEPO2-MATNR
+              IMPORTING
+                OUTPUT = LS_VEPO2-MATNR.
+
+            READ TABLE LT_LIPS INTO LS_LIPS WITH KEY MATNR = LS_VEPO2-MATNR.
+            IF SY-SUBRC = 0.
+              LS_LIPS-LFIMG = LS_LIPS-LFIMG - LS_VEPO2-VEMNG.
+              MODIFY LT_LIPS FROM LS_LIPS INDEX SY-TABIX.
+            ENDIF.
+          ENDLOOP.
+        ENDIF.
+      ENDIF.
+
+      DELETE LT_LIPS WHERE LFIMG = 0.
+      IF LT_LIPS IS INITIAL.
+        UPDATE ZWM_DEL_HHT_MAP SET DLVFLAG = 'X' WHERE VBELN = IM_VBELN.
+      ENDIF.
+
+    ENDIF.
+  ENDIF.
+  REFRESH IT_DATA .
+ENDFUNCTION.
