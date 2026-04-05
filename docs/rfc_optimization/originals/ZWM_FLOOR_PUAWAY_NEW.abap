@@ -1,0 +1,209 @@
+FUNCTION ZWM_FLOOR_PUAWAY_NEW.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(P_WERKS) TYPE  WERKS_D OPTIONAL
+*"     VALUE(P_EXIDV) TYPE  EXIDV OPTIONAL
+*"     VALUE(P_LGPLA) TYPE  LGPLA OPTIONAL
+*"  EXPORTING
+*"     VALUE(EX_RETURN) TYPE  BAPIRET2
+*"     VALUE(L_TANUM) TYPE  TANUM
+*"----------------------------------------------------------------------
+  BREAK-POINT ID Z_V2CHECK.
+ DATA: LT_VEKP  TYPE TABLE OF VEKP,
+      LT_VEPO  TYPE TABLE OF VEPO,
+      LT_LAGP  TYPE TABLE OF LAGP,
+      LT_EXREF TYPE TABLE OF ZWM_EXREF,
+      LS_EXREF TYPE ZWM_EXREF,
+      LS_LAGP  TYPE LAGP,
+      LS_VEKP  TYPE VEKP,
+      LS_VEPO  TYPE VEPO.
+
+DATA: LT_GOODSMVT_ITEM   TYPE  BAPI2017_GM_ITEM_CREATE_T,
+      LS_GOODSMVT_ITEM   TYPE  BAPI2017_GM_ITEM_CREATE,
+      LS_GOODSMVT_CODE   TYPE BAPI2017_GM_CODE ,
+      LS_GOODSMVT_HEADER TYPE  BAPI2017_GM_HEAD_01,
+      LT_RETURN          TYPE BAPIRET2_T,
+      LS_RETURN          TYPE BAPIRET2,
+      LV_MAT_NO          TYPE BAPI2017_GM_HEAD_RET-MAT_DOC,
+      LV_DOC_YEAR        TYPE BAPI2017_GM_HEAD_RET-DOC_YEAR.
+
+*BIN Validation
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT         = P_EXIDV
+   IMPORTING
+     OUTPUT        = P_EXIDV
+            .
+
+
+  SELECT *
+    FROM LAGP
+    INTO TABLE LT_LAGP
+    WHERE LGPLA =  P_LGPLA
+      AND LGTYP =  P_WERKS+1(3).
+  IF LT_LAGP[] IS INITIAL .
+*    ex_return-type = 'E'.
+    EX_RETURN-MESSAGE = 'No Storage bin data found'(001).
+*    message ls_return-message type 'E'.
+    RETURN.
+  ENDIF.
+
+*Get Data from tables
+  SELECT *
+    FROM ZWM_EXREF
+    INTO TABLE LT_EXREF
+    WHERE EXIDV = P_EXIDV.
+  IF SY-SUBRC = 0.
+    SELECT *
+      FROM VEKP
+      INTO TABLE LT_VEKP
+      FOR ALL ENTRIES IN LT_EXREF
+      WHERE EXIDV = LT_EXREF-SAP_HU.
+*    if sy-subrc = 0.
+      SELECT *
+        FROM VEPO
+        INTO TABLE LT_VEPO
+        FOR ALL ENTRIES IN LT_VEKP
+        WHERE VENUM = LT_VEKP-VENUM.
+*    endif.
+  ELSE.
+    SELECT *
+      FROM VEKP
+      INTO TABLE LT_VEKP
+      WHERE EXIDV = P_EXIDV.
+    IF SY-SUBRC = 0.
+      SELECT *
+        FROM VEPO
+        INTO TABLE LT_VEPO
+        FOR ALL ENTRIES IN LT_VEKP
+        WHERE VENUM = LT_VEKP-VENUM.
+    ENDIF.
+  ENDIF.
+
+  LOOP AT LT_VEPO INTO LS_VEPO.
+    LS_GOODSMVT_ITEM-MATERIAL      = LS_VEPO-MATNR.
+    LS_GOODSMVT_ITEM-ENTRY_QNT     = LS_VEPO-VEMNG.
+    LS_GOODSMVT_ITEM-PLANT         = P_WERKS .
+    LS_GOODSMVT_ITEM-MOVE_PLANT    = P_WERKS .
+    LS_GOODSMVT_ITEM-STGE_LOC      = '0006'.
+    LS_GOODSMVT_ITEM-MOVE_STLOC    = '0002'.
+    LS_GOODSMVT_ITEM-MOVE_TYPE     = '311' .
+    LS_GOODSMVT_ITEM-ENTRY_UOM     = 'EA'  .
+    LS_GOODSMVT_ITEM-ENTRY_UOM_ISO = 'EA'.
+    APPEND LS_GOODSMVT_ITEM TO LT_GOODSMVT_ITEM.
+  ENDLOOP.
+
+  IF LT_GOODSMVT_ITEM[] IS NOT INITIAL.
+    LS_GOODSMVT_HEADER-PSTNG_DATE = SY-DATUM.
+    LS_GOODSMVT_HEADER-DOC_DATE   = SY-DATUM.
+    LS_GOODSMVT_HEADER-HEADER_TXT = 'HHT_0006_TO_0002'.
+
+    CALL FUNCTION 'BAPI_GOODSMVT_CREATE'
+      EXPORTING
+        GOODSMVT_HEADER  = LS_GOODSMVT_HEADER
+        GOODSMVT_CODE    = '04'
+      IMPORTING
+        MATERIALDOCUMENT = LV_MAT_NO
+        MATDOCUMENTYEAR  = LV_DOC_YEAR
+      TABLES
+        GOODSMVT_ITEM    = LT_GOODSMVT_ITEM
+        RETURN           = LT_RETURN.
+  ENDIF.
+
+  IF LV_MAT_NO IS NOT INITIAL .
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        WAIT = 'X'.
+  ELSE.
+    CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+    READ TABLE LT_RETURN INTO LS_RETURN INDEX 1.
+    EX_RETURN-MESSAGE = LS_RETURN-MESSAGE.
+*    ex_return-type = 'E,'.
+*    message ex_return-message type 'E'.
+    RETURN.
+  ENDIF.
+
+   DATA: LT_LTAP TYPE TABLE OF LTAP_CREAT,
+        LS_LTAP TYPE LTAP_CREAT.
+*        l_tanum type ltak-tanum.
+
+  LOOP AT LT_VEPO INTO LS_VEPO.
+    LS_LTAP-MATNR = LS_VEPO-MATNR.
+    LS_LTAP-ANFME = LS_VEPO-VEMNG.
+    LS_LTAP-WERKS = P_WERKS.
+    LS_LTAP-LGORT = '0002' .
+    LS_LTAP-ALTME = 'EA'.
+    LS_LTAP-VLTYP = 'V01'.
+    LS_LTAP-VLPLA = LV_MAT_NO.
+    LS_LTAP-NLPLA = P_LGPLA.
+    LS_LTAP-NLBER = '001'.
+    LS_LTAP-VLBER = '001'.
+    LS_LTAP-NLTYP = P_WERKS+1(3).
+    APPEND LS_LTAP TO LT_LTAP.
+  ENDLOOP.
+
+  CALL FUNCTION 'L_TO_CREATE_MULTIPLE'
+    EXPORTING
+      I_LGNUM                = 'SDC'
+      I_BWLVS                = '999'
+    IMPORTING
+      E_TANUM                = L_TANUM
+    TABLES
+      T_LTAP_CREAT           = LT_LTAP
+    EXCEPTIONS
+      NO_TO_CREATED          = 1
+      BWLVS_WRONG            = 2
+      BETYP_WRONG            = 3
+      BENUM_MISSING          = 4
+      BETYP_MISSING          = 5
+      FOREIGN_LOCK           = 6
+      VLTYP_WRONG            = 7
+      VLPLA_WRONG            = 8
+      VLTYP_MISSING          = 9
+      NLTYP_WRONG            = 10
+      NLPLA_WRONG            = 11
+      NLTYP_MISSING          = 12
+      RLTYP_WRONG            = 13
+      RLPLA_WRONG            = 14
+      RLTYP_MISSING          = 15
+      SQUIT_FORBIDDEN        = 16
+      MANUAL_TO_FORBIDDEN    = 17
+      LETYP_WRONG            = 18
+      VLPLA_MISSING          = 19
+      NLPLA_MISSING          = 20
+      SOBKZ_WRONG            = 21
+      SOBKZ_MISSING          = 22
+      SONUM_MISSING          = 23
+      BESTQ_WRONG            = 24
+      LGBER_WRONG            = 25
+      XFELD_WRONG            = 26
+      DATE_WRONG             = 27
+      DRUKZ_WRONG            = 28
+      LDEST_WRONG            = 29
+      UPDATE_WITHOUT_COMMIT  = 30
+      NO_AUTHORITY           = 31
+      MATERIAL_NOT_FOUND     = 32
+      LENUM_WRONG            = 33
+      MATNR_MISSING          = 34
+      WERKS_MISSING          = 35
+      ANFME_MISSING          = 36
+      ALTME_MISSING          = 37
+      LGORT_WRONG_OR_MISSING = 38
+      OTHERS                 = 39.
+  IF SY-SUBRC <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*      WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+
+  IF L_TANUM IS NOT INITIAL.
+    EX_RETURN-TYPE = 'S'.
+    MESSAGE S016(L3) WITH L_TANUM INTO LS_RETURN-MESSAGE.
+  ELSE.
+    EX_RETURN-TYPE = 'E'.
+    EX_RETURN-MESSAGE = 'No To Created'(010).
+    MESSAGE EX_RETURN-MESSAGE TYPE 'E'.
+  ENDIF.
+
+ENDFUNCTION.
