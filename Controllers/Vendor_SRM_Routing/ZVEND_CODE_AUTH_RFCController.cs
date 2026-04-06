@@ -49,7 +49,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                     }
 
                     // SAP RFC connector pattern
-                    RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
+                    RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
                     RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                     RfcRepository rfcrep = dest.Repository;
                     IRfcFunction myfun = rfcrep.CreateFunction("ZVEND_CODE_AUTH_RFC");
