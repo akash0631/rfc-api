@@ -30,12 +30,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                         });
                     }
 
-                    if (string.IsNullOrEmpty(request.IM_ACCT_ID))
+                    if (string.IsNullOrEmpty(request.IM_USER_ID))
                     {
                         return Request.CreateResponse(HttpStatusCode.OK, new
                         {
                             Status = "E",
-                            Message = "IM_ACCT_ID is required"
+                            Message = "IM_USER_ID is required"
                         });
                     }
 
@@ -55,7 +55,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                     IRfcFunction myfun = rfcrep.CreateFunction("ZVEND_CODE_AUTH_RFC");
 
                     // Set import parameters
-                    myfun.SetValue("IM_ACCT_ID", request.IM_ACCT_ID);
+                    myfun.SetValue("IM_USER_ID", request.IM_USER_ID);
                     myfun.SetValue("IM_PASSWORD", request.IM_PASSWORD);
 
                     // Invoke the RFC
@@ -113,7 +113,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
 
     public class ZVEND_CODE_AUTH_RFCRequest
     {
-        public string IM_ACCT_ID { get; set; }
+        public string IM_USER_ID { get; set; }
         public string IM_PASSWORD { get; set; }
     }
 }
