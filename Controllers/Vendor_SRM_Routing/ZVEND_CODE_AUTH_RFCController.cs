@@ -9,22 +9,33 @@ using Vendor_Application_MVC.Controllers;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
 {
+    [Route("api/ZVEND_CODE_AUTH_RFC")]
     public class ZVEND_CODE_AUTH_RFCController : BaseController
     {
         [HttpPost]
         [Route("api/ZVEND_CODE_AUTH_RFC")]
-        public async Task<HttpResponseMessage> ZVEND_CODE_AUTH_RFC(ZVEND_CODE_AUTH_RFC_Request request)
+        public async Task<HttpResponseMessage> ExecuteZVEND_CODE_AUTH_RFC([FromBody] ZVEND_CODE_AUTH_RFCRequest request)
         {
             return await Task.Run(() =>
             {
                 try
                 {
-                    if (string.IsNullOrEmpty(request.IM_USER_ID))
+                    // Validate required input parameters
+                    if (request == null)
                     {
                         return Request.CreateResponse(HttpStatusCode.OK, new
                         {
                             Status = "E",
-                            Message = "IM_USER_ID is required"
+                            Message = "Request cannot be null"
+                        });
+                    }
+
+                    if (string.IsNullOrEmpty(request.IM_ACCT_ID))
+                    {
+                        return Request.CreateResponse(HttpStatusCode.OK, new
+                        {
+                            Status = "E",
+                            Message = "IM_ACCT_ID is required"
                         });
                     }
 
@@ -37,18 +48,23 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                         });
                     }
 
+                    // SAP RFC connector pattern
                     RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction();
                     RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                     RfcRepository rfcrep = dest.Repository;
                     IRfcFunction myfun = rfcrep.CreateFunction("ZVEND_CODE_AUTH_RFC");
 
-                    myfun.SetValue("IM_USER_ID", request.IM_USER_ID);
+                    // Set import parameters
+                    myfun.SetValue("IM_ACCT_ID", request.IM_ACCT_ID);
                     myfun.SetValue("IM_PASSWORD", request.IM_PASSWORD);
 
+                    // Invoke the RFC
                     myfun.Invoke(dest);
 
+                    // Get EX_RETURN structure
                     IRfcStructure EX_RETURN = myfun.GetStructure("EX_RETURN");
-                    
+
+                    // Check return status
                     string returnType = EX_RETURN.GetString("TYPE");
                     string returnMessage = EX_RETURN.GetString("MESSAGE");
 
@@ -64,7 +80,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                     return Request.CreateResponse(HttpStatusCode.OK, new
                     {
                         Status = "S",
-                        Message = returnMessage
+                        Message = !string.IsNullOrEmpty(returnMessage) ? returnMessage : "Vendor code authentication successful"
                     });
                 }
                 catch (RfcAbapException ex)
@@ -95,9 +111,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
         }
     }
 
-    public class ZVEND_CODE_AUTH_RFC_Request
+    public class ZVEND_CODE_AUTH_RFCRequest
     {
-        public string IM_USER_ID { get; set; }
+        public string IM_ACCT_ID { get; set; }
         public string IM_PASSWORD { get; set; }
     }
 }
