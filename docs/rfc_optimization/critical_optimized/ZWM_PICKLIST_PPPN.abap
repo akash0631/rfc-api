@@ -1,0 +1,76 @@
+FUNCTION ZWM_PICKLIST_PPPN.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(IM_USER) TYPE  SYUNAME OPTIONAL
+*"     VALUE(IM_WERKS) TYPE  WERKS_D OPTIONAL
+*"     VALUE(IM_PICKLIST) TYPE  ZZPICK_NO OPTIONAL
+*"  EXPORTING
+*"     VALUE(EX_RETURN) TYPE  BAPIRET2
+*"  TABLES
+*"      ET_DATA TYPE  ZWM_PICKLIST_PPN_TT OPTIONAL
+*"----------------------------------------------------------------------
+  DATA : LT_SAVE TYPE ZWM_RFC_PUT_SAVE_TT .
+*  DATA : LT_SAVE TYPE ZWM_PICKLIST_PPN_TT .
+  DATA : LS_SAVE TYPE ZWM_RFC_PUT_SAVE.
+  DATA : IT_DATA1 TYPE   ZWM_RFC_PUT_SAVE_TT.
+
+  IF IM_USER IS INITIAL.
+    EX_RETURN-MESSAGE = |User Id Cannot Be Blank.|.
+    EX_RETURN-TYPE = 'E'.
+    RETURN.
+  ENDIF.
+
+
+
+  SELECT SINGLE WERKS FROM T001W INTO @DATA(LV_WERKS) WHERE WERKS = @IM_WERKS.
+  IF SY-SUBRC IS NOT INITIAL.
+    EX_RETURN-MESSAGE = |Site Cannot Be Blank/Wrong|.
+    EX_RETURN-TYPE = 'E'.
+    RETURN.
+  ELSE.
+    GV_WERKS = IM_WERKS.
+  ENDIF.
+
+  IF IM_PICKLIST IS INITIAL.
+    EX_RETURN-MESSAGE = |Pick List No. Cannot Be Blank/Wrong|.
+    EX_RETURN-TYPE = 'E'.
+    RETURN.
+  ENDIF.
+
+**VALIDATE PICK LIST NO
+*BREAK SAP_ABAP.
+  SELECT
+         A~PICKLIST_NO ,
+         A~SAP_HU AS HU_NO,
+         B~EXIDV AS EX_HU,
+         A~STORAGE_BIN AS BIN ,
+         A~WERKS AS DEST_ST
+        FROM ZCLA_HU AS A
+        LEFT OUTER JOIN ZWM_EXREF AS B
+        ON B~SAP_HU = A~SAP_HU
+        INTO TABLE @ET_DATA " @DATA(LT_PICKING)
+        WHERE STORAGE_BIN <> ''
+        AND  UNTAG       =  ''
+        AND  PICKLIST_NO = @IM_PICKLIST.
+
+  IF SY-SUBRC IS NOT INITIAL.
+
+    EX_RETURN-MESSAGE = |Pick List No. Doesn't Found|.
+    EX_RETURN-TYPE = 'E'.
+    RETURN.
+  ENDIF.
+
+
+  LOOP AT et_data ASSIGNING FIELD-SYMBOL(<lfs_Data>).
+
+CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+  EXPORTING
+    INPUT         = <lfs_Data>-ex_hu
+ IMPORTING
+   OUTPUT        = <lfs_Data>-ex_hu
+          .
+
+  ENDLOOP.
+
+ENDFUNCTION.
