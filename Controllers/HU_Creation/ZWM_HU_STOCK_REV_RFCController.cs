@@ -6,7 +6,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Vendor_Application_MVC.Controllers;
-using Vendor_Application_MVC.Controllers;
+using Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing;
 
 namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
 {
@@ -14,28 +14,19 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
     {
         [HttpPost]
         [Route("api/ZWM_HU_STOCK_REV_RFC")]
-        public async Task<HttpResponseMessage> ExecuteZWM_HU_STOCK_REV_RFC(ZWM_HU_STOCK_REV_RFCRequest request)
+        public async Task<HttpResponseMessage> ProcessHUStockReversal(ZWM_HU_STOCK_REV_RFC_Request request)
         {
             return await Task.Run(() =>
             {
                 try
                 {
-                    // Validate required parameters
-                    if (request == null)
-                    {
-                        return Request.CreateResponse(HttpStatusCode.OK, new
-                        {
-                            Status = "E",
-                            Message = "Request cannot be null"
-                        });
-                    }
-
+                    // Validate required input parameters
                     if (string.IsNullOrEmpty(request.IV_WERKS))
                     {
                         return Request.CreateResponse(HttpStatusCode.OK, new
                         {
                             Status = "E",
-                            Message = "IV_WERKS is required"
+                            Message = "Plant (IV_WERKS) is required"
                         });
                     }
 
@@ -44,7 +35,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                         return Request.CreateResponse(HttpStatusCode.OK, new
                         {
                             Status = "E",
-                            Message = "IV_HU is required"
+                            Message = "Handling Unit (IV_HU) is required"
                         });
                     }
 
@@ -53,7 +44,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                         return Request.CreateResponse(HttpStatusCode.OK, new
                         {
                             Status = "E",
-                            Message = "IV_LGTYP is required"
+                            Message = "Storage Type (IV_LGTYP) is required"
                         });
                     }
 
@@ -77,6 +68,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                     string returnType = EX_RETURN.GetString("TYPE");
                     string returnMessage = EX_RETURN.GetString("MESSAGE");
 
+                    // Check for errors in EX_RETURN
                     if (returnType == "E")
                     {
                         return Request.CreateResponse(HttpStatusCode.OK, new
@@ -89,7 +81,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
                     return Request.CreateResponse(HttpStatusCode.OK, new
                     {
                         Status = "S",
-                        Message = string.IsNullOrEmpty(returnMessage) ? "HU Stock Reversal executed successfully" : returnMessage
+                        Message = string.IsNullOrEmpty(returnMessage) ? "HU Stock Reversal completed successfully" : returnMessage
                     });
                 }
                 catch (RfcAbapException ex)
@@ -120,7 +112,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing
         }
     }
 
-    public class ZWM_HU_STOCK_REV_RFCRequest
+    public class ZWM_HU_STOCK_REV_RFC_Request
     {
         public string IV_WERKS { get; set; }
         public string IV_HU { get; set; }
