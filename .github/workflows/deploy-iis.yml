@@ -31,6 +31,10 @@ jobs:
     name: Build and Deploy on .36 IIS runner
 
     steps:
+      - name: Fix git safe directory
+        shell: cmd
+        run: git config --global --add safe.directory *
+
       - name: Checkout master
         uses: actions/checkout@v4
         with:
