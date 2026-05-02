@@ -523,6 +523,7 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
         bestScore = reviewScore;
         if (reviewScore >= 9) {
           await log('review','done','Passed review \u2714 score=' + reviewScore + '/10 (attempt ' + attempt + ')');
+        try{const _rj=JSON.parse(await kv.get(jobId)||'{}');_rj.reviewScore=reviewScore;_rj.reviewAttempts=attempt;_rj.issuesCount=finalIssues.length;await kv.put(jobId,JSON.stringify(_rj),{expirationTtl:86400});}catch(_){}
           break;
         }
         if (attempt < 3) {
@@ -616,6 +617,31 @@ if (!runId) throw new Error('Could not find push-triggered deploy run for commit
     // Final: write summary
     const job = JSON.parse(await kv.get(jobId)||'{}');
     job.status  = 'complete';
+    // ── Persistent deploy log (no TTL — permanent history) ──────────────
+    try {
+      const logEntry = {
+        rfcName:     job.rfcName || spec?.rfcName || 'unknown',
+        fileName:    filename || '',
+        category:    spec?.category || '',
+        sapEnv:      sapEnv || 'dev',
+        controllerPath: job.controllerPath || '',
+        reviewScore:    job.reviewScore || 0,
+        reviewAttempts: job.reviewAttempts || 1,
+        issuesCount:    job.issuesCount || 0,
+        commitUrl:      job.commitUrl || '',
+        apiEndpoint:    IIS_HOST + '/api/' + (job.rfcName || spec?.rfcName || ''),
+        deployedAt:     new Date().toISOString(),
+        buildStatus:    'success'
+      };
+      // Store in DEPLOY_HISTORY list (no TTL = permanent)
+      const histKey = 'deploy:' + Date.now() + ':' + (logEntry.rfcName);
+      await env.RFC_JOBS.put(histKey, JSON.stringify(logEntry));
+      // Also append to deploy_index for fast listing
+      const idx = JSON.parse(await env.RFC_JOBS.get('deploy_index') || '[]');
+      idx.unshift(histKey);
+      if (idx.length > 200) idx.splice(200); // keep last 200
+      await env.RFC_JOBS.put('deploy_index', JSON.stringify(idx));
+    } catch(e) { /* non-blocking — don't fail pipeline */ }
     job.rfcName  = spec.rfcName;
     job.rfcApi   = `${IIS_HOST}/api/${spec.rfcName}`;
     job.dataLake = dabResult.endpoint;
@@ -1534,7 +1560,24 @@ export default {
     }
 
     // GET /swagger Ã¢ÂÂ redirect
-    if (url.pathname === '/swagger') {
+    if (url.pathname === '/api/deploy-history' && request.method === 'GET') {
+      try {
+        const n = parseInt(new URL(request.url).searchParams.get('limit') || '50');
+        const idx = JSON.parse(await env.RFC_JOBS.get('deploy_index') || '[]');
+        const entries = [];
+        for (const key of idx.slice(0, Math.min(n, 100))) {
+          const val = await env.RFC_JOBS.get(key);
+          if (val) entries.push(JSON.parse(val));
+        }
+        return new Response(JSON.stringify({success:true, count:entries.length, data:entries}),
+          {headers:{...CORS,'Content-Type':'application/json'}});
+      } catch(e) {
+        return new Response(JSON.stringify({success:false, error:e.message}),
+          {status:500, headers:{...CORS,'Content-Type':'application/json'}});
+      }
+    }
+
+        if (url.pathname === '/swagger') {
       return new Response(SWAGGER_HTML, {headers:{'Content-Type':'text/html;charset=utf-8'}});
     }
 
