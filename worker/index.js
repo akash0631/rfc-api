@@ -29,7 +29,7 @@ const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'staging'; // Portal pushes to staging -> build-check-merge.yml compiles -> only merges to master if build passes
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
 const IIS_HOST         = 'https://sap-api.v2retail.net';
-const GH_WORKFLOW_ID   = '245492878';  // deploy-test-vm.yml
+const GH_WORKFLOW_ID   = '255255794';  // build-check-merge.yml (staging gate: compiles → merges → IIS deploy auto-triggers)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
