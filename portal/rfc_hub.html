@@ -73,7 +73,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 </head>
 <body>
 <div id="topbar">
-  <div class="logo-wrap"><div class="logo-icon">V2</div><div><div class="logo-text">V2 Retail — SAP RFC Portal</div><div class="logo-sub">Part 1: RFC API · Part 2: Data Lake · 46 Controllers · 82 DAB Tables</div></div></div>
+  <div class="logo-wrap"><div class="logo-icon">V2</div><div><div class="logo-text">V2 Retail — SAP RFC Portal</div><div class="logo-sub">Part 1: RFC API · Part 2: Data Lake · <span id="topbar-count">108</span> Controllers · 82 DAB Tables</div></div></div>
   <div class="live-badge"><div class="live-dot"></div> sap-api.v2retail.net — Live</div>
   <div class="topbar-links">
     <a class="tl" href="https://github.com/akash0631/rfc-api" target="_blank">GitHub ↗</a>
@@ -88,6 +88,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
   <div class="tab" data-tab="pipeline"><span class="dot"></span> Pipeline</div>
   <div class="tab" data-tab="livestatus"><span class="dot"></span> Live Status <span class="new-chip">LIVE</span></div>
+  <div class="tab" data-tab="testconsole"><span class="dot"></span> Test Console <span class="new-chip" style="background:#7c3aed">NEW</span></div>
 </div>
 <div id="tab-overview" class="section active">
   <div class="stats-grid">
@@ -134,6 +135,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
       <div class="pipe-steps">
         <div class="pipe-step" id="gps-parse"><div class="pipe-icon">○</div><div><div class="pipe-name">📄 Parse RFC Document</div><div class="pipe-detail" id="gpd-parse">Waiting…</div></div></div>
         <div class="pipe-step" id="gps-controller"><div class="pipe-icon">○</div><div><div class="pipe-name">⚙️ Generate C# Controller</div><div class="pipe-detail" id="gpd-controller">Waiting…</div></div></div>
+        <div class="pipe-step" id="gps-review"><div class="pipe-icon">○</div><div><div class="pipe-name">🔍 Deep Review (15-point checklist)</div><div class="pipe-detail" id="gpd-review">Waiting… — score must reach 9/10</div></div></div>
         <div class="pipe-step" id="gps-github"><div class="pipe-icon">○</div><div><div class="pipe-name">📦 Push to GitHub</div><div class="pipe-detail" id="gpd-github">Waiting…</div></div></div>
         <div class="pipe-step" id="gps-deploy"><div class="pipe-icon">○</div><div><div class="pipe-name">🚀 Build &amp; Deploy to IIS</div><div class="pipe-detail" id="gpd-deploy">Waiting…</div></div></div>
       </div>
@@ -148,10 +150,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   <div class="card"><div class="card-title">RFC → Data Lake Sync</div><p style="font-size:13px;color:var(--muted);margin-bottom:12px">Daily sync at 1:30 AM IST via GitHub Actions. SAP RFC data flows to DataV2 SQL → Azure DAB.</p><div style="font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;padding:4px 10px;border-radius:6px">SAP Dev RFC</span><span>→</span><span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">Worker /relay-rfc</span><span>→</span><span style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:4px 10px;border-radius:6px">DataV2 SQL .28</span><span>→</span><span style="background:#faf5ff;border:1px solid #e9d5ff;color:#7e22ce;padding:4px 10px;border-radius:6px">Azure DAB API</span></div></div>
 </div>
 <div id="tab-pipeline" class="section">
-  <div class="card"><div class="card-title">Part 1 — RFC API Deployment</div><div style="display:flex;flex-direction:column;gap:6px;font-size:13px"><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">📄</span><div><div style="font-weight:600">1. Upload RFC Document (.docx)</div><div style="color:var(--muted);font-size:12px">SAP Function Builder export — RFC Generator tab</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🤖</span><div><div style="font-weight:600">2. AI Parses RFC Parameters</div><div style="color:var(--muted);font-size:12px">Claude extracts RFC name, import/export params, table structures</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">⚙️</span><div><div style="font-weight:600">3. C# Controller Generated</div><div style="color:var(--muted);font-size:12px">ASP.NET WebAPI controller with SAP NCo binding auto-generated</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">📦</span><div><div style="font-weight:600">4. Push to GitHub (akash0631/rfc-api)</div><div style="color:var(--muted);font-size:12px">Controllers/Finance/ or Controllers/[Module]/ — path filter auto-triggers deploy</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🏗️</span><div><div style="font-weight:600">5. Build &amp; Deploy to V2DC-ADDVERB</div><div style="color:var(--muted);font-size:12px">GitHub Actions (deploy-iis.yml) → copies DLL to C:\V2RfcTest\bin\ → recycles V2RfcTestPool</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0"><span style="font-size:20px">🚀</span><div><div style="font-weight:600">6. Live on sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Tunnel → V2DC-ADDVERB IIS :9292 → SAP Dev (192.168.144.174 / Client 210)</div></div></div></div><div style="margin-top:14px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#15803d;font-weight:600">⚠️ Note for NEW controllers: VS Build on .36 required once → then all future deploys are fully automated via GitHub push</div></div>
+  <div class="card"><div class="card-title">Part 1 — RFC API Deployment</div><div style="display:flex;flex-direction:column;gap:6px;font-size:13px"><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">📄</span><div><div style="font-weight:600">1. Upload RFC Document (.docx)</div><div style="color:var(--muted);font-size:12px">SAP Function Builder export — RFC Generator tab</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🤖</span><div><div style="font-weight:600">2. AI Parses RFC Parameters</div><div style="color:var(--muted);font-size:12px">Claude extracts RFC name, import/export params, table structures</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">⚙️</span><div><div style="font-weight:600">3. C# Controller Generated</div><div style="color:var(--muted);font-size:12px">ASP.NET WebAPI controller with SAP NCo binding auto-generated</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🔍</span><div><div style="font-weight:600">4. Deep Review (15-point checklist, up to 3 iterations)</div><div style="color:var(--muted);font-size:12px">Claude reviews: STRUCTURE/TABLE detection, exact field names, Append()+SetValue() pattern, Invoke() order. Score must reach 9/10.</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">📦</span><div><div style="font-weight:600">5. Push to GitHub (akash0631/rfc-api)</div><div style="color:var(--muted);font-size:12px">Controllers/Finance/ or Controllers/[Module]/ — path filter auto-triggers deploy</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🏗️</span><div><div style="font-weight:600">6. Build &amp; Deploy to V2DC-ADDVERB</div><div style="color:var(--muted);font-size:12px">GitHub Actions (deploy-iis.yml) → copies DLL to C:\V2RfcTest\bin\ → recycles V2RfcTestPool</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0"><span style="font-size:20px">🚀</span><div><div style="font-weight:600">7. Live on sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Tunnel → V2DC-ADDVERB IIS :9292 → SAP Dev (192.168.144.174 / Client 210)</div></div></div></div><div style="margin-top:14px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#15803d;font-weight:600">⚠️ Note for NEW controllers: VS Build on .36 required once → then all future deploys are fully automated via GitHub push</div></div>
   <div class="card"><div class="card-title">Part 2 — Data Lake Sync</div><div style="display:flex;flex-direction:column;gap:6px;font-size:13px"><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">🕐</span><div><div style="font-weight:600">1. Scheduled Trigger — 1:30 AM IST Daily</div><div style="color:var(--muted);font-size:12px">GitHub Actions (p4_sync.yml) runs on cron schedule</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">📡</span><div><div style="font-weight:600">2. Call SAP RFC via sap-api.v2retail.net</div><div style="color:var(--muted);font-size:12px">Cloudflare Worker → IIS .36 → SAP Dev — fetches latest data</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-size:20px">💾</span><div><div style="font-weight:600">3. Store in DataV2 SQL Server</div><div style="color:var(--muted);font-size:12px">192.168.151.28 — SAP data written to DataV2 database tables</div></div></div><div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0"><span style="font-size:20px">🌐</span><div><div style="font-weight:600">4. Exposed via Azure DAB (82 Tables)</div><div style="color:var(--muted);font-size:12px">my-dab-app.azurewebsites.net — OData REST API with $filter, $top, $skip, $select</div></div></div></div></div>
   <div class="card"><div class="card-title">Infrastructure</div><table class="quick-ref-table"><thead><tr><th>Component</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr><td>V2DC-ADDVERB IIS</td><td style="font-family:var(--mono);font-size:12px">192.168.151.36:9292</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr><tr><td>Cloudflare Tunnel</td><td style="font-family:var(--mono);font-size:12px">v2-sap-api → sap-api.v2retail.net</td><td><span style="color:var(--green);font-weight:600">● Connected</span></td></tr><tr><td>CF Worker</td><td style="font-family:var(--mono);font-size:12px">sap-api.v2retail.net/pipeline</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr><tr><td>GitHub Runner (iis)</td><td style="font-family:var(--mono);font-size:12px">V2DC-ADDVERB — label: iis</td><td><span style="color:var(--green);font-weight:600">● Online</span></td></tr><tr><td>GitHub Repo</td><td style="font-family:var(--mono);font-size:12px">akash0631/rfc-api (PUBLIC)</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr><tr><td>Azure DAB</td><td style="font-family:var(--mono);font-size:12px">my-dab-app.azurewebsites.net</td><td><span style="color:var(--green);font-weight:600">● Live</span></td></tr><tr><td>SAP Dev</td><td style="font-family:var(--mono);font-size:12px">192.168.144.174 · Client 210</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr><tr><td>Data Lake SQL</td><td style="font-family:var(--mono);font-size:12px">192.168.151.28 · DataV2 DB</td><td><span style="color:var(--green);font-weight:600">● Active</span></td></tr></tbody></table></div>
-  <div class="card"><div class="card-title">Active GitHub Workflows</div><table class="quick-ref-table"><thead><tr><th>Workflow</th><th>File</th><th>Purpose</th></tr></thead><tbody><tr><td style="font-weight:600">Build and Deploy to .36 IIS</td><td style="font-family:var(--mono);font-size:11px">deploy-iis.yml</td><td style="font-size:12px;color:var(--muted)">master push → build + deploy entirely on .36 runner</td></tr><tr><td style="font-weight:600">Build Check then Merge</td><td style="font-family:var(--mono);font-size:11px">build-check-merge.yml</td><td style="font-size:12px;color:var(--muted)">staging push → build on GitHub cloud. Pass → merge to master. Fail → master untouched.</td></tr><tr><td style="font-weight:600">Deploy RFC Portal</td><td style="font-family:var(--mono);font-size:11px">deploy-portal.yml</td><td style="font-size:12px;color:var(--muted)">Deploys portal/rfc_hub.html to Cloudflare Pages</td></tr><tr><td style="font-weight:600">Deploy RFC Worker</td><td style="font-family:var(--mono);font-size:11px">deploy-worker.yml</td><td style="font-size:12px;color:var(--muted)">Deploys worker/index.js to Cloudflare Workers</td></tr><tr><td style="font-weight:600">P4 Data Lake Sync</td><td style="font-family:var(--mono);font-size:11px">p4_sync.yml</td><td style="font-size:12px;color:var(--muted)">Daily 1:30 AM IST — SAP RFC → DataV2 SQL</td></tr><tr><td style="font-weight:600">Restart .36 Runner</td><td style="font-family:var(--mono);font-size:11px">restart36_NOW.yml</td><td style="font-size:12px;color:var(--muted)">Emergency: restarts GitHub Actions runner on .36</td></tr></tbody></table></div>
+  <div class="card"><div class="card-title">Active GitHub Workflows</div><table class="quick-ref-table"><thead><tr><th>Workflow</th><th>File</th><th>Purpose</th></tr></thead><tbody><tr><td style="font-weight:600">Build and Deploy to .36 IIS</td><td style="font-family:var(--mono);font-size:11px">deploy-iis.yml</td><td style="font-size:12px;color:var(--muted)">master push → build + deploy entirely on .36 runner</td></tr><tr><td style="font-weight:600">Build Check then Merge</td><td style="font-family:var(--mono);font-size:11px">build-check-merge.yml</td><td style="font-size:12px;color:var(--muted)">staging push → build on GitHub cloud. Pass → merge to master. Fail → master untouched.</td></tr><tr><td style="font-weight:600">Deploy RFC Portal</td><td style="font-family:var(--mono);font-size:11px">deploy-portal.yml</td><td style="font-size:12px;color:var(--muted)">Deploys portal/rfc_hub.html to Cloudflare Pages</td></tr><tr><td style="font-weight:600">Deploy RFC Worker</td><td style="font-family:var(--mono);font-size:11px">deploy-worker.yml</td><td style="font-size:12px;color:var(--muted)">Deploys worker/index.js to Cloudflare Workers</td></tr><tr><td style="font-weight:600">P4 Data Lake Sync <span style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 5px;border-radius:4px;margin-left:4px">PLANNED</span></td><td style="font-family:var(--mono);font-size:11px">p4_sync.yml</td><td style="font-size:12px;color:var(--muted)">Planned: daily SAP→DataV2 sync. Currently: DataSyncScheduler (IIS) handles Snowflake path.</td></tr><tr><td style="font-weight:600">Restart .36 Runner</td><td style="font-family:var(--mono);font-size:11px">restart36_NOW.yml</td><td style="font-size:12px;color:var(--muted)">Emergency: restarts GitHub Actions runner on .36</td></tr></tbody></table></div>
 </div>
 <div id="tab-livestatus" class="section">
   <div class="refresh-bar">
@@ -190,14 +192,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   </div>
 </div><script>
 document.querySelectorAll('.tab').forEach(function(tab){tab.addEventListener('click',function(){var name=this.getAttribute('data-tab');document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});this.classList.add('active');document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});var sec=document.getElementById('tab-'+name);if(sec)sec.classList.add('active');if(name==='livestatus')lsRefresh();});});
-(function(){document.getElementById('ctrl-count').textContent='46';document.getElementById('rfc-count').textContent='';})();
+(function(){
+  fetch('https://sap-api.v2retail.net/swagger/docs/v1')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var count=Object.keys(d.paths||{}).length;
+      var ctrl=Math.round(count*0.97); // ~controllers from paths
+      document.getElementById('ctrl-count').textContent=count;
+      document.getElementById('rfc-count').textContent=count;
+    })
+    .catch(function(){
+      document.getElementById('ctrl-count').textContent='108';
+      document.getElementById('rfc-count').textContent='108';
+    });
+})();
 var genFile=null,genEnv='dev',genJobId=null,genPollTimer=null;
 function genHandleDrop(e){e.preventDefault();document.getElementById('gen-dropzone').classList.remove('hover');var files=e.dataTransfer.files;if(files.length>0)genHandleFile(files[0]);}
 function genHandleFile(file){if(!file)return;genFile=file;document.getElementById('gen-file-name').textContent=file.name+' ('+(file.size/1024).toFixed(1)+' KB)';document.getElementById('gen-file-badge').style.display='flex';document.getElementById('gen-dropzone').style.display='none';document.getElementById('gen-deploy-btn').disabled=false;}
 function genClearFile(){genFile=null;document.getElementById('gen-file-badge').style.display='none';document.getElementById('gen-dropzone').style.display='block';document.getElementById('gen-deploy-btn').disabled=true;document.getElementById('gen-file-input').value='';}
 function genSetEnv(env){genEnv=env;['dev','quality','production'].forEach(function(e){document.getElementById('gen-env-'+e).classList.toggle('active',e===env);});}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function genDeploy(){if(!genFile)return;document.getElementById('gen-upload-view').style.display='none';document.getElementById('gen-progress-view').style.display='block';document.getElementById('gen-result').style.display='none';document.getElementById('gen-reset-btn').style.display='none';['parse','controller','github','deploy'].forEach(function(step){var el=document.getElementById('gps-'+step);el.className='pipe-step';el.querySelector('.pipe-icon').textContent='○';document.getElementById('gpd-'+step).textContent='Waiting…';});var form=new FormData();form.append('file',genFile,genFile.name);form.append('env',genEnv);fetch('https://sap-api.v2retail.net/pipeline/deploy',{method:'POST',body:form}).then(function(r){return r.json();}).then(function(d){if(d.jobId){genJobId=d.jobId;genPollStatus();}else{genShowError('Deploy failed: '+JSON.stringify(d));}}).catch(function(e){genShowError(e.message);});}
+function genDeploy(){if(!genFile)return;document.getElementById('gen-upload-view').style.display='none';document.getElementById('gen-progress-view').style.display='block';document.getElementById('gen-result').style.display='none';document.getElementById('gen-reset-btn').style.display='none';['parse','controller','review','github','deploy'].forEach(function(step){var el=document.getElementById('gps-'+step);el.className='pipe-step';el.querySelector('.pipe-icon').textContent='○';document.getElementById('gpd-'+step).textContent='Waiting…';});var form=new FormData();form.append('file',genFile,genFile.name);form.append('env',genEnv);fetch('https://sap-api.v2retail.net/pipeline/deploy',{method:'POST',body:form}).then(function(r){return r.json();}).then(function(d){if(d.jobId){genJobId=d.jobId;genPollStatus();}else{genShowError('Deploy failed: '+JSON.stringify(d));}}).catch(function(e){genShowError(e.message);});}
 function genPollStatus(){if(!genJobId)return;fetch('https://sap-api.v2retail.net/pipeline/status/'+genJobId).then(function(r){return r.json();}).then(function(d){(d.steps||[]).forEach(function(s){var el=document.getElementById('gps-'+s.step);if(!el)return;var icon=el.querySelector('.pipe-icon');var detail=document.getElementById('gpd-'+s.step);if(s.status==='done'){el.className='pipe-step ps-done';icon.textContent='✅';}else if(s.status==='running'||s.status==='active'){el.className='pipe-step ps-running';icon.innerHTML='<span class="spinner">⏳</span>';}else if(s.status==='error'){el.className='pipe-step ps-error';icon.textContent='❌';}if(detail&&s.detail)detail.textContent=s.detail;if(s.step==='github'&&s.status==='done'){document.getElementById('gen-reset-btn').style.display='block';}});if(d.status==='complete'){var res=document.getElementById('gen-result');res.style.display='block';var apiUrl=d.rfcApi||('https://sap-api.v2retail.net/api/'+(d.rfcName||'???')+'/Post');res.innerHTML='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px"><div style="font-weight:700;color:#15803d;margin-bottom:8px">🎉 Deployed Successfully!</div><div style="font-size:12px;font-family:var(--mono);color:#374151">POST '+apiUrl+'</div></div>';document.getElementById('gen-reset-btn').style.display='block';}else if(d.status==='error'){genShowError(d.error||'Pipeline error');}else{genPollTimer=setTimeout(genPollStatus,3000);}}).catch(function(e){genPollTimer=setTimeout(genPollStatus,4000);});}
 function genShowError(msg){var res=document.getElementById('gen-result');res.style.display='block';res.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 16px;color:#dc2626">❌ '+escHtml(msg)+'</div>';document.getElementById('gen-reset-btn').style.display='block';}
 function genReset(){if(genPollTimer)clearTimeout(genPollTimer);genJobId=null;genFile=null;document.getElementById('gen-file-input').value='';document.getElementById('gen-file-badge').style.display='none';document.getElementById('gen-dropzone').style.display='block';document.getElementById('gen-deploy-btn').disabled=true;document.getElementById('gen-upload-view').style.display='block';document.getElementById('gen-progress-view').style.display='none';}
@@ -228,6 +243,112 @@ rows.forEach(function(r,i){if(!r.check||!r.url)return;var el=document.getElement
 function lsStartAutoRefresh(){if(lsTimer)clearInterval(lsTimer);lsTimer=setInterval(function(){var t=document.querySelector('.tab.active');if(t&&t.getAttribute('data-tab')==='livestatus')lsRefresh();},30000);}
 lsStartAutoRefresh();
 </script>
+
+<div id="tab-testconsole" class="section">
+  <div class="card">
+    <div class="card-title">RFC Test Console</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Call any live RFC endpoint directly. Select an RFC or type the name, enter your JSON body, and POST to sap-api.v2retail.net.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">RFC Endpoint</label>
+        <div style="position:relative">
+          <input id="tc-rfc-input" placeholder="e.g. ZRFI_CREDITOR02_RFC" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--mono);outline:none;transition:.15s" onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'" oninput="tcFilter(this.value)" list="tc-rfc-list" />
+          <datalist id="tc-rfc-list"></datalist>
+        </div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px;margin-top:14px">JSON Body</label>
+        <textarea id="tc-body" rows="10" placeholder="{}" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--mono);resize:vertical;outline:none;transition:.15s" onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'">{
+  
+}</textarea>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="tcRun()" style="flex:1;background:var(--navy);color:#fff;border:none;border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer">POST →</button>
+          <button onclick="tcClear()" style="background:#f1f5f9;color:var(--navy);border:1px solid var(--border);border-radius:8px;padding:11px 16px;font-size:13px;cursor:pointer">Clear</button>
+        </div>
+        <div style="margin-top:10px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Quick Templates</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <button onclick="tcTemplate('ZRFI_CREDITOR02_RFC','{"IM_DATE":"20260502"}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:#f8fafc;cursor:pointer;color:var(--navy)">Creditor Report</button>
+            <button onclick="tcTemplate('ZWM_GATE_ENTRY01_RFC','{"IM_EBELN":"4500016789"}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:#f8fafc;cursor:pointer;color:var(--navy)">Gate Entry</button>
+            <button onclick="tcTemplate('ZWM_HU_STOCK_REV_RFC','{"IV_WERKS":"HO10","IV_HU":"000000001000007776","IV_LGTYP":"V11"}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:#f8fafc;cursor:pointer;color:var(--navy)">HU Reversal</button>
+            <button onclick="tcTemplate('ZRFC_ACC_DOC_POST','{"OBJ_KEY":"OBJ001","ACT_NO":"1000","LT_ACCOUNTGL":[{"ACCOUNT":"0010101001","COSTCENTER":"CC001"}],"LT_CURRENCYAMOUNT":[{"CURRENCY":"INR","AMT_DOCCUR":"10000"}],"LT_PAYBLE":[{"VENDOR_NO":"V001","BLINE_DATE":"20260502","REF_TEXT":"Test"}]}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:#f8fafc;cursor:pointer;color:var(--navy)">Acc Posting</button>
+            <button onclick="tcTemplate('ZMM_VAR_ART_CREATION_RFC','{"IM_DATA":[{"GENERIC_ARTICLE":"GEN001","VARIANT_ARTICLE":"VAR001A","VENDOR":"V001","SITE":"B03","MRP_TYPE":"ND"}]}')" style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:#f8fafc;cursor:pointer;color:var(--navy)">Var Article</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Response</label>
+          <span id="tc-status" style="font-size:11px;font-family:var(--mono)"></span>
+        </div>
+        <pre id="tc-response" style="background:#0d1117;color:#e6edf3;border-radius:8px;padding:14px;font-size:12px;font-family:var(--mono);min-height:280px;overflow:auto;white-space:pre-wrap;word-break:break-all;border:1px solid #30363d">Ready — select an RFC and hit POST</pre>
+        <div id="tc-timing" style="font-size:11px;color:var(--muted);margin-top:6px;font-family:var(--mono)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div class="card-title">All Live Endpoints (<span id="tc-count">loading...</span>)</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="tc-search" placeholder="Search RFC name..." oninput="tcRenderList(this.value)" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--mono);outline:none" />
+    </div>
+    <div id="tc-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;max-height:320px;overflow-y:auto;padding-right:4px"></div>
+  </div>
+</div>
+
+<script>
+var tcEndpoints=[];
+(function(){
+  fetch('https://sap-api.v2retail.net/swagger/docs/v1').then(function(r){return r.json();}).then(function(d){
+    tcEndpoints=Object.keys(d.paths||{}).map(function(p){return p.replace('/api/','').replace(/^\/+/,'');}).filter(Boolean).sort();
+    document.getElementById('tc-count').textContent=tcEndpoints.length;
+    document.getElementById('topbar-count').textContent=tcEndpoints.length;
+    document.getElementById('ctrl-count').textContent=tcEndpoints.length;
+    document.getElementById('rfc-count').textContent=tcEndpoints.length;
+    var dl=document.getElementById('tc-rfc-list');
+    tcEndpoints.forEach(function(e){var opt=document.createElement('option');opt.value=e;dl.appendChild(opt);});
+    tcRenderList('');
+  }).catch(function(){
+    document.getElementById('tc-count').textContent='108';
+    tcRenderList('');
+  });
+})();
+function tcRenderList(q){
+  q=(q||'').toLowerCase();
+  var list=q?tcEndpoints.filter(function(e){return e.toLowerCase().includes(q);}):tcEndpoints;
+  document.getElementById('tc-list').innerHTML=list.map(function(e){
+    return '<div onclick="document.getElementById(\'tc-rfc-input\').value=\''+e+'\';tcSetActive(this)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--mono);background:#fafbfd;transition:.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onmouseover="this.style.borderColor=\'var(--navy)\'" onmouseout="this.style.borderColor=\'var(--border)\'" title="'+e+'">'+e+'</div>';
+  }).join('');
+}
+function tcSetActive(el){document.querySelectorAll('#tc-list div').forEach(function(d){d.style.background='#fafbfd';d.style.color='';});el.style.background='var(--navy)';el.style.color='#fff';}
+function tcFilter(v){tcRenderList(v);}
+function tcTemplate(name,body){document.getElementById('tc-rfc-input').value=name;try{document.getElementById('tc-body').value=JSON.stringify(JSON.parse(body),null,2);}catch(e){document.getElementById('tc-body').value=body;}}
+function tcClear(){document.getElementById('tc-response').textContent='Ready — select an RFC and hit POST';document.getElementById('tc-status').textContent='';document.getElementById('tc-timing').textContent='';}
+function tcRun(){
+  var rfc=document.getElementById('tc-rfc-input').value.trim();
+  if(!rfc){alert('Enter an RFC name');return;}
+  var bodyStr=document.getElementById('tc-body').value.trim()||'{}';
+  try{JSON.parse(bodyStr);}catch(e){alert('Invalid JSON: '+e.message);return;}
+  var url='https://sap-api.v2retail.net/api/'+rfc;
+  document.getElementById('tc-response').textContent='Calling '+url+' ...';
+  document.getElementById('tc-status').textContent='';
+  var t0=Date.now();
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:bodyStr})
+    .then(function(r){
+      var ms=Date.now()-t0;
+      var statusColor=r.ok?'#15803d':'#dc2626';
+      document.getElementById('tc-status').innerHTML='<span style="color:'+statusColor+';font-weight:700">'+r.status+' '+r.statusText+'</span>';
+      document.getElementById('tc-timing').textContent=ms+'ms · '+url;
+      return r.json().then(function(d){return {ok:r.ok,data:d,ms:ms};}).catch(function(){return r.text().then(function(t){return {ok:r.ok,data:t,ms:ms};});});
+    })
+    .then(function(res){
+      var pretty=typeof res.data==='object'?JSON.stringify(res.data,null,2):String(res.data);
+      document.getElementById('tc-response').textContent=pretty;
+    })
+    .catch(function(e){
+      document.getElementById('tc-response').textContent='Error: '+e.message;
+      document.getElementById('tc-status').innerHTML='<span style="color:#dc2626">Network Error</span>';
+    });
+}
+</script>
+
 </body>
 </html>
 <!-- sync: 2026-04-02 v4-livestatus -->
