@@ -1,29 +1,69 @@
 const RFC_KNOWLEDGE_BASE = `
-RULE 1: EX_RETURN type detection — If RFC spec says EX_RETURN is STRUCTURE (BAPIRET2), use rfcFunction.GetStructure("EX_RETURN") NOT GetTable. If it is TABLE, use GetTable.
-RULE 2: RFC component names vs SAP data element names — Always use component names exactly as defined in RFC (e.g. COMPANY_CODE not BUKRS).
-RULE 3: TABLE INPUT parameter row population — For TABLE INPUT params, always use: table.Append(); then table.SetValue("FIELD", value); per field. NEVER call table.CreateStructure() — that method does not exist on IRfcTable in SAP NCo and causes a compile error CS1061.
-RULE 4: SAP connector pattern — Use: RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction(); RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar); RfcRepository rfcrep = dest.Repository; IRfcFunction myfun = rfcrep.CreateFunction("RFC_NAME"); myfun.Invoke(dest); No SapRfcConnection class exists.
-RULE 5: Date fields — SAP dates are YYYYMMDD strings. Parse with DateTime.ParseExact and format back as YYYYMMDD.
-RULE 6: Numeric/amount fields — CURR and QUAN types map to decimal. Use decimal.TryParse with InvariantCulture.
-RULE 7: Error handling — Wrap RFC calls in try/catch. Return {Status:"E", Message:ex.Message} on error.
-RULE 8: Controller route — Use [Route("api/RfcName")] and [HttpPost] attributes.
-RULE 9: Response shape — Return {Status, Message} for no-table RFCs. Return {Status, Message, Data:{TableName:[rows]}} for table RFCs.
-RULE 10: Namespace — Use namespace Vendor_SRM_Routing_Application.Controllers.Vendor_SRM_Routing and add: using Vendor_Application_MVC.Controllers; for BaseController access.
-RULE 11: Use async Task<HttpResponseMessage> with return await Task.Run(() => {...}); No explicit connection dispose needed with RfcConfigParameters pattern. Return type is HttpResponseMessage not IHttpActionResult.
-RULE 12: For STRUCTURE output params use GetStructure, read fields by name.
-RULE 13: For TABLE output params use GetTable, iterate rows with foreach.
-RULE 14: Never use dynamic or reflection to read SAP RFC result fields.
-LEARNING 1: EX_RETURN must be checked by type (STRUCTURE vs TABLE) not by name.
-LEARNING 2: Field names must match RFC spec exactly — do not guess from data element names.
-LEARNING 3: TABLE INPUT params use Append() + SetValue on the table directly. CreateStructure() does not exist on IRfcTable — it causes CS1061 compile error. Correct: table.Append(); table.SetValue("F", v); Wrong (DO NOT USE): IRfcStructure row = table.CreateStructure();
-LEARNING 4: Missing fields in structure cause runtime SAP exceptions — always map all fields.
-LEARNING 5: CURR fields lose precision if cast to float — always use decimal.
-LEARNING 6: SAP date 00000000 means null date — handle gracefully.
-LEARNING 7: rfcFunction.Invoke() must be called before reading output params.
-LEARNING 8: Connection config names are environment-specific (dev/quality/production).
-LEARNING 9: Output TABLE rows are RfcStructure objects — access fields by name string.
-LEARNING 10: Always validate required input params before calling SAP RFC.
+RULE 1: EX_RETURN / ES_RETURN — STRUCTURE vs TABLE detection (CRITICAL)
+  - BAPIRET2 type → ALWAYS GetStructure("EX_RETURN"). Never GetTable.
+  - Pass-by-reference params (shown as "Pass by Ref" in SAP) → GetStructure.
+  - If the type name ends in _MSG, _TT, _IT, _TAB, _TABLE, _T, _MSGS → it is a TABLE type → GetTable, iterate rows.
+  - ZMM_VAR_ART_MSG → TABLE → GetTable("EX_RETURN") and iterate rows, NOT GetStructure.
+  - When in doubt: BAPIRET2 = GetStructure. Any other type ending in T/TT/IT/MSG = GetTable.
+
+RULE 2: RFC field names — use EXACTLY as shown in SAP spec. Never infer from context.
+  - SAP ageing bucket fields: R030, R60, R120, R180, R365, R730, RGT731.
+    R60 NOT R060. R030 NOT R30. Copy character-for-character from spec.
+  - Never rename BUKRS to COMPANY_CODE, LIFNR to VENDOR_CODE etc. unless spec shows that name.
+  - If spec shows "ACCOUNT" — use GetString("ACCOUNT"), not GetString("GL_ACCOUNT").
+
+RULE 3: TABLE INPUT parameter row population. For any TABLE INPUT:
+  IRfcTable tbl = rfcFunction.GetTable("TABLE_NAME");
+  foreach (var item in request.Items) { tbl.Append(); tbl.SetValue("FIELD", item.Field); }
+  NEVER: IRfcStructure row = tbl.CreateStructure(); — CS1061 compile error, method does not exist.
+
+RULE 4: SAP connector pattern (copy exactly, no variations):
+  RfcConfigParameters rfcPar = BaseController.rfcConfigparameters[env]();
+  RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+  IRfcFunction rfcFunction = dest.Repository.CreateFunction("RFC_NAME");
+  // set imports here
+  rfcFunction.Invoke(dest);
+  // read exports after invoke
+
+RULE 5: Date fields — yyyyMMdd string format. Parse: DateTime.ParseExact(s,"yyyyMMdd",null). Format: .ToString("yyyyMMdd").
+
+RULE 6: Amount/quantity fields — CURR and QUAN types → decimal. Use decimal.TryParse with InvariantCulture.
+
+RULE 7: Error handling — wrap all RFC code in try/catch. Catch RfcAbapException, RfcCommunicationException, Exception. Return {Status:"E", Message:ex.Message}.
+
+RULE 8: Route — [HttpPost] [Route("api/EXACT_RFC_NAME")] — the route must match the RFC function name exactly.
+
+RULE 9: Response shape:
+  - Return-only RFC: {Status, Message}
+  - Table RFC: {Status, Message, RecordCount=rows.Count, Data:{TABLE_NAME:[rows]}}
+  - Write RFC with BAPIRET2: {Status=exReturn.GetString("TYPE"), Message=exReturn.GetString("MESSAGE"), Data:{ES_RETURN:{TYPE,ID,NUMBER,MESSAGE}}}
+
+RULE 10: Namespace — Vendor_SRM_Routing_Application.Controllers.[Category]. Add: using Vendor_Application_MVC.Controllers; for BaseController.
+
+RULE 11: Use HttpResponseMessage (not IHttpActionResult). Use Request.CreateResponse(HttpStatusCode.OK, obj).
+
+RULE 12: STRUCTURE output params:
+  IRfcStructure exReturn = rfcFunction.GetStructure("EX_RETURN");
+  string status = exReturn.GetString("TYPE");
+  string msg    = exReturn.GetString("MESSAGE");
+
+RULE 13: TABLE output params:
+  IRfcTable tbl = rfcFunction.GetTable("ET_DATA");
+  var rows = new List<object>();
+  foreach (IRfcStructure row in tbl) { rows.Add(new { FIELD = row.GetString("FIELD") }); }
+
+RULE 14: Never use dynamic, reflection, or var for SAP field reading. Always use GetString/GetInt/GetDecimal by exact field name string.
+
+RULE 15: Null-check request body at start: if (request == null) request = new RequestModel(); or return BadRequest if param is required.
+
+KNOWN BUGS — these caused production failures, NEVER repeat:
+  BUG-1: GetTable on BAPIRET2 → runtime exception. BAPIRET2 is always GetStructure.
+  BUG-2: GetStructure on table-type export (e.g. ZMM_VAR_ART_MSG) → runtime exception. Table types need GetTable.
+  BUG-3: row.GetString("R060") when field is named "R60" → returns empty. Field names must match exactly.
+  BUG-4: tbl.CreateStructure() → CS1061 compile error. Use Append()+SetValue() instead.
+  BUG-5: rfcConfigparameters.GetFunction() → does not exist. Use Repository.CreateFunction().
 `;
+
 
 const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'staging'; // Portal pushes to staging -> build-check-merge.yml compiles -> only merges to master if build passes
@@ -178,7 +218,7 @@ async function claude(prompt, apiKey, maxTokens=2500) {
 async function parseRfc(text, apiKey, filename, images) {
   images = images || [];
   var hint = filename ? ('\nHint: filename is "' + filename + '" - use to infer RFC name.') : '';
-  var schema = '{\n  "rfcName": "RFC function name e.g. ZADVANCE_PAYMENT_RFC",\n  "description": "one-line description",\n  "category": "Finance or GateEntry or Vendor or HUCreation or FabricPutway or HRMS or NSO or PaperlessPicklist or Sampling or VehicleLoading",\n  "importParams": [{"name":"PARAM","sapType":"TYPE","description":"desc"}],\n  "outputType": "table OR return_only",\n  "outputTableName": "TABLE name or null",\n  "outputFields": [{"fieldName":"F","sapType":"T","length":"L"}],\n  "suggestedSqlTable": "ET_RFCNAME"\n}';
+  var schema = '{\n  "rfcName": "RFC function name e.g. ZADVANCE_PAYMENT_RFC",\n  "description": "one-line description",\n  "category": "Finance or GateEntry or Vendor or HUCreation or FabricPutway or HRMS or NSO or PaperlessPicklist or Sampling or VehicleLoading",\n  "importParams": [{"name":"PARAM","sapType":"TYPE","description":"desc"}],\n  "exportParams": [{"name":"EX_RETURN","sapType":"BAPIRET2","paramKind":"STRUCTURE or TABLE","passByRef":false}],\n  "outputType": "table OR return_only",\n  "outputTableName": "TABLE name or null",\n  "outputFields": [{"fieldName":"EXACT_FIELD_NAME_AS_IN_SAP","sapType":"T","length":"L"}],\n  "suggestedSqlTable": "ET_RFCNAME"\n}';
   var msgs;
   if (images.length > 0 && text.length < 200) {
     var parts = images.map(function(img){return{type:'image',source:{type:'base64',media_type:img.mime,data:img.b64}};});
@@ -248,45 +288,129 @@ Return ONLY raw C#. No markdown.`, apiKey, 2500);
   return raw.replace(/```(?:csharp|cs)?\n?/g,'').replace(/```$/g,'').trim();
 }
 
-// ═══ Double Review — independent AI check before push ═══════════════
+// ═══ Deep Review — mandatory 15-point checklist ════════════════════════════
 async function reviewController(code, spec, apiKey) {
-  const review = await claude(`You are an independent code REVIEWER for SAP RFC C# controllers (.NET 4.7.2 Web API).
-Review this controller and return ONLY valid JSON with this format:
+  // Determine expected export param kind from spec
+  const exportParams = spec.exportParams || [];
+  const exReturnParam = exportParams.find(p => p.name === 'EX_RETURN' || p.name === 'ES_RETURN') || {};
+  const exReturnKind = exReturnParam.paramKind || 'STRUCTURE';
+  const exReturnType = exReturnParam.sapType || 'BAPIRET2';
+  const isTableReturn = exReturnKind === 'TABLE' ||
+    /(_MSG|_TT|_IT|_TAB|_TABLE)$/i.test(exReturnType);
+
+  const importFieldNames = (spec.importParams||[]).map(p=>p.name).join(', ');
+  const outputFieldNames = (spec.outputFields||[]).map(f=>f.fieldName).join(', ');
+
+  const review = await claude(`You are a MANDATORY CODE REVIEW GATE for SAP RFC C# controllers.
+You MUST find every bug before this code deploys to production.
+Respond ONLY with valid JSON — no markdown, no prose.
+
+RESPONSE FORMAT:
 {
-  "score": 8,
-  "issues": ["issue1", "issue2"],
-  "fixes": {"old_text": "new_text", "old_text2": "new_text2"}
+  "score": <0-10 integer>,
+  "critical_failures": ["list of critical bugs that MUST block deploy"],
+  "issues": ["list of non-critical warnings"],
+  "fixes": {"exact_old_text": "exact_new_text"}
 }
 
-KNOWLEDGE BASE RULES TO VERIFY:
-${RFC_KNOWLEDGE_BASE}
+SCORE GUIDE: 10=perfect, 9=ship, 8=ship with warning, <=7=BLOCK and fix, <=4=full rewrite needed
 
-CRITICAL CHECKS:
-1. EX_RETURN: If RFC has EX_RETURN as a STRUCTURE (BAPIRET2), code MUST use GetStructure("EX_RETURN"), NOT GetTable("EX_RETURN"). If it uses GetTable for a STRUCTURE param, mark as issue and provide fix.
-2. Field names: The SAP structure field names must match EXACTLY what the RFC uses. Component names like COMPANY_CODE should be used, NOT SAP data element names like BUKRS.
-3. SAP connector: Must use BaseController.rfcConfigparameters__() pattern. No other pattern.
-4. SetValue for scalar imports, GetTable for TABLE params, GetStructure for STRUCTURE params.
-5. Request model class fields must match the RFC import structure field names exactly.
-6. Proper error handling with RfcAbapException, RfcCommunicationException, Exception.
+=== MANDATORY 15-POINT CHECKLIST — check each one explicitly ===
+
+CRITICAL (score drops to <=5 if any fail):
+1. STRUCTURE vs TABLE: Export param "${exReturnParam.name||'EX_RETURN'}" type is "${exReturnType}" paramKind="${exReturnKind}".
+   ${isTableReturn
+     ? 'This is a TABLE TYPE. Code MUST use GetTable("'+( exReturnParam.name||'EX_RETURN')+'") and iterate rows. If it uses GetStructure, that is a CRITICAL BUG.'
+     : 'This is a STRUCTURE (BAPIRET2 or similar). Code MUST use GetStructure("'+(exReturnParam.name||'EX_RETURN')+'"). If it uses GetTable, that is a CRITICAL BUG.'}
+2. TABLE INPUT rows: Any TABLE INPUT must use: tbl.Append(); tbl.SetValue("F", v); per row. NEVER tbl.CreateStructure() — that is CS1061.
+3. SAP connector: Must use BaseController.rfcConfigparameters...() -> GetDestination -> CreateFunction -> Invoke. No other pattern.
+4. Field names in GetString() calls must be EXACTLY as in SAP spec. Known exact output field names: [${outputFieldNames}]. No guessing, no reformatting.
+5. Invoke() called BEFORE any GetStructure/GetTable/GetString. If Invoke is missing or after a Get, CRITICAL bug.
+
+HIGH (score drops 1-2 each):
+6. Request model fields match RFC import param names exactly. Expected import names: [${importFieldNames}].
+7. Null/empty validation on required params before calling SAP.
+8. Route [Route("api/${spec.rfcName}")] matches RFC name exactly.
+9. Using Vendor_Application_MVC.Controllers namespace for BaseController.
+10. Error handling catches RfcAbapException, RfcCommunicationException, Exception.
+
+MEDIUM (score drops 0.5 each):
+11. Response includes Status, Message fields.
+12. Table RFC response includes RecordCount.
+13. No dynamic/reflection for SAP field reading.
+14. All SAP field name strings are UPPERCASE strings matching spec — check for any lowercase or camelCase.
+15. Request class defined at end of file, fields match import param names.
+
+For "fixes" object: provide EXACT text snippets to replace. The old_text must exist verbatim in the code. Only include fixes you are CERTAIN about.
 
 RFC Spec:
-Name: ${spec.rfcName}
-Import params: ${JSON.stringify(spec.importParams||[])}
-Output type: ${spec.outputType||'structure'}
-Output table: ${spec.outputTableName||'EX_RETURN'}
+  Name: ${spec.rfcName}
+  Import params: ${JSON.stringify(spec.importParams||[])}
+  Export params: ${JSON.stringify(exportParams)}
+  Output type: ${spec.outputType||'return_only'}
+  Output table: ${spec.outputTableName||'none'}
+  Output field names: [${outputFieldNames}]
 
-Controller code:
+Controller code to review:
 ${code}
 
-Return ONLY JSON. No markdown.`, apiKey, 1200);
+Return ONLY the JSON object. No markdown.`, apiKey, 2000);
 
   try {
     var parsed = JSON.parse(review.replace(/```json\n?/g,'').replace(/```/g,'').trim());
+    // Merge critical_failures into issues for backward compat
+    if (parsed.critical_failures && parsed.critical_failures.length > 0) {
+      parsed.issues = (parsed.critical_failures || []).concat(parsed.issues || []);
+      // Force score to <=5 if any critical failures
+      if (parsed.score > 5) parsed.score = 4;
+    }
     return parsed;
   } catch(e) {
-    return { score: 7, issues: [], fixes: {} };
+    return { score: 6, issues: ['Review parse failed: '+e.message], fixes: {} };
   }
 }
+
+async function fixController(code, review, spec, apiKey) {
+  var fixed = code;
+
+  // Apply text-level fixes from review
+  if (review.fixes && typeof review.fixes === 'object') {
+    for (var old in review.fixes) {
+      if (review.fixes.hasOwnProperty(old) && fixed.includes(old)) {
+        fixed = fixed.replace(old, review.fixes[old]);
+      }
+    }
+  }
+
+  // Full rewrite if score < 8 (was < 6 — now more aggressive)
+  if (review.score < 8 && review.issues && review.issues.length > 0) {
+    const exportInfo = JSON.stringify(spec.exportParams || []);
+    var fixPrompt = `You are fixing a broken SAP RFC C# controller. Fix ALL issues listed below.
+
+KNOWLEDGE BASE — these rules are absolute:
+${RFC_KNOWLEDGE_BASE}
+
+ISSUES TO FIX:
+${review.issues.join('\n')}
+
+RFC SPEC (use exact field names from here):
+  Name: ${spec.rfcName}
+  Import params: ${JSON.stringify(spec.importParams||[])}
+  Export params: ${exportInfo}
+  Output type: ${spec.outputType||'return_only'}
+  Output table: ${spec.outputTableName||'none'}
+  Output fields: ${JSON.stringify(spec.outputFields||[])}
+
+ORIGINAL CODE:
+${code}
+
+Return ONLY the corrected C# code. No markdown, no explanation.`;
+    fixed = await claude(fixPrompt, apiKey, 2800);
+    fixed = fixed.replace(/\`\`\`(?:csharp|cs)?\n?/g,'').replace(/\`\`\`$/g,'').trim();
+  }
+  return fixed;
+}
+
 
 async function fixController(code, review, spec, apiKey) {
   // Apply automatic fixes
@@ -405,19 +529,30 @@ try{const _pj=JSON.parse(await kv.get(jobId)||'{}');_pj.rfcName=spec.rfcName;_pj
     await log('controller','done',`${code.split('\n').length} lines generated`);
 
     // Step 2b: Double Review
-    await log('review','running','AI Reviewer checking controller...');
+    await log('review','running','Deep review — 15-point SAP NCo checklist...');
     try {
-      var review = await reviewController(code, spec, apiKey);
-      var reviewScore = review.score || 7;
-      var reviewIssues = review.issues || [];
-      if (reviewIssues.length > 0 && reviewScore < 8) {
-        await log('review','running','Fixing ' + reviewIssues.length + ' issues (score: ' + reviewScore + '/10)...');
-        code = await fixController(code, review, spec, apiKey);
-        await log('review','done','Fixed ' + reviewIssues.length + ' issues \u2192 score ' + reviewScore + '/10');
-      } else {
-        await log('review','done','Passed review \u2714 (score: ' + reviewScore + '/10)');
+      var bestScore = 0;
+      var finalIssues = [];
+      // Up to 3 review+fix iterations — must reach score >= 9 to pass
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        var review = await reviewController(code, spec, apiKey);
+        var reviewScore = review.score || 0;
+        var reviewIssues = review.issues || [];
+        finalIssues = reviewIssues;
+        bestScore = reviewScore;
+        if (reviewScore >= 9) {
+          await log('review','done','Passed review \u2714 score=' + reviewScore + '/10 (attempt ' + attempt + ')');
+          break;
+        }
+        if (attempt < 3) {
+          await log('review','running','Score=' + reviewScore + '/10, ' + reviewIssues.length + ' issues — fixing (attempt ' + attempt + '/3)...');
+          code = await fixController(code, review, spec, apiKey);
+        } else {
+          // Final attempt failed — deploy anyway with warning
+          await log('review','done','Score=' + reviewScore + '/10 after 3 attempts — ' + reviewIssues.length + ' warnings remain. Deploying with caution.');
+        }
       }
-    } catch(e) { await log('review','done','Review skipped: ' + e.message); }
+    } catch(e) { await log('review','done','Review error (deploying anyway): ' + e.message); }
 
     // Step 3: Push controller
     await log('github','running','Pushing controller to GitHub...');
