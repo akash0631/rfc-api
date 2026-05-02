@@ -1,7 +1,7 @@
 const RFC_KNOWLEDGE_BASE = `
 RULE 1: EX_RETURN type detection — If RFC spec says EX_RETURN is STRUCTURE (BAPIRET2), use rfcFunction.GetStructure("EX_RETURN") NOT GetTable. If it is TABLE, use GetTable.
 RULE 2: RFC component names vs SAP data element names — Always use component names exactly as defined in RFC (e.g. COMPANY_CODE not BUKRS).
-RULE 3: TABLE parameter explicit field mapping — For TABLE params, always use explicit field mapping with CreateStructure + Append, never use reflection.
+RULE 3: TABLE INPUT parameter row population — For TABLE INPUT params, always use: table.Append(); then table.SetValue("FIELD", value); per field. NEVER call table.CreateStructure() — that method does not exist on IRfcTable in SAP NCo and causes a compile error CS1061.
 RULE 4: SAP connector pattern — Use: RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction(); RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar); RfcRepository rfcrep = dest.Repository; IRfcFunction myfun = rfcrep.CreateFunction("RFC_NAME"); myfun.Invoke(dest); No SapRfcConnection class exists.
 RULE 5: Date fields — SAP dates are YYYYMMDD strings. Parse with DateTime.ParseExact and format back as YYYYMMDD.
 RULE 6: Numeric/amount fields — CURR and QUAN types map to decimal. Use decimal.TryParse with InvariantCulture.
@@ -15,7 +15,7 @@ RULE 13: For TABLE output params use GetTable, iterate rows with foreach.
 RULE 14: Never use dynamic or reflection to read SAP RFC result fields.
 LEARNING 1: EX_RETURN must be checked by type (STRUCTURE vs TABLE) not by name.
 LEARNING 2: Field names must match RFC spec exactly — do not guess from data element names.
-LEARNING 3: TABLE params require explicit CreateStructure + row.SetValue per field.
+LEARNING 3: TABLE INPUT params use Append() + SetValue on the table directly. CreateStructure() does not exist on IRfcTable — it causes CS1061 compile error. Correct: table.Append(); table.SetValue("F", v); Wrong (DO NOT USE): IRfcStructure row = table.CreateStructure();
 LEARNING 4: Missing fields in structure cause runtime SAP exceptions — always map all fields.
 LEARNING 5: CURR fields lose precision if cast to float — always use decimal.
 LEARNING 6: SAP date 00000000 means null date — handle gracefully.
@@ -26,7 +26,7 @@ LEARNING 10: Always validate required input params before calling SAP RFC.
 `;
 
 const GITHUB_REPO      = 'akash0631/rfc-api';
-const GITHUB_BRANCH    = 'master';
+const GITHUB_BRANCH    = 'staging'; // Portal pushes to staging -> build-check-merge.yml compiles -> only merges to master if build passes
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
 const IIS_HOST         = 'https://sap-api.v2retail.net';
 const GH_WORKFLOW_ID   = '245492878';  // deploy-test-vm.yml
@@ -2291,3 +2291,4 @@ onRfcChange();
 
 
 // CRON handled by IIS SyncController + Windows Task Scheduler (02:00 IST)
+
