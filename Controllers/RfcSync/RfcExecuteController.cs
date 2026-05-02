@@ -221,14 +221,19 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
             try
             {
                 IRfcTable tbl = func.GetTable(tableName);
+                // Build field name list once from the table metadata
+                var fieldNames = new List<string>();
+                var meta = tbl.Metadata;
+                for (int i = 0; i < meta.FieldCount; i++)
+                    fieldNames.Add(meta[i].Name);
+
                 foreach (IRfcStructure row in tbl)
                 {
                     var dict = new Dictionary<string, object>();
-                    for (int i = 0; i < row.Count; i++)
+                    foreach (var name in fieldNames)
                     {
-                        var f = row.GetElementDefinition(i);
-                        try { dict[f.Name] = row.GetString(f.Name); }
-                        catch { dict[f.Name] = null; }
+                        try { dict[name] = row.GetString(name); }
+                        catch { dict[name] = null; }
                     }
                     rows.Add(dict);
                 }
