@@ -412,26 +412,7 @@ Return ONLY the corrected C# code. No markdown, no explanation.`;
 }
 
 
-async function fixController(code, review, spec, apiKey) {
-  // Apply automatic fixes
-  var fixed = code;
-  if (review.fixes && typeof review.fixes === 'object') {
-    for (var old in review.fixes) {
-      if (review.fixes.hasOwnProperty(old) && fixed.includes(old)) {
-        fixed = fixed.replace(old, review.fixes[old]);
-      }
-    }
-  }
 
-  // If score < 6, do a full rewrite
-  if (review.score < 6 && review.issues && review.issues.length > 0) {
-    var fixPrompt = `Fix this C# controller. Issues found by reviewer:\n${review.issues.join('\n')}\n\nOriginal code:\n${code}\n\nReturn ONLY the fixed C# code. No markdown.`;
-    fixed = await claude(fixPrompt, apiKey, 2500);
-    fixed = fixed.replace(/```(?:csharp|cs)?\n?/g,'').replace(/```$/g,'').trim();
-  }
-
-  return fixed;
-}
 
 
 
