@@ -255,6 +255,10 @@
     <Compile Include="Utils\Logger\Logger.cs" />
     <Compile Include="Services\SnowflakeService.cs" />
     <Compile Include="Services\EndpointRegistryService.cs" />
+    <Compile Include="Services\SapConnectionService.cs" />
+    <Compile Include="Services\RfcSyncExecutionService.cs" />
+    <Compile Include="Services\SyncJobService.cs" />
+    <Compile Include="Services\DataSyncScheduler.cs" />
     <Compile Include="Controllers\RfcSync\RfcCatalogController.cs" />
     <Compile Include="Controllers\RfcSync\RfcExecuteController.cs" />
     <Compile Include="Controllers\RfcSync\SnowflakeQueryController.cs" />
