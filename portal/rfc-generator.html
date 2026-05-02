@@ -114,7 +114,7 @@
     <a href="index.html">Hub</a>
     <a href="rfc_explorer.html">RFC Explorer</a>
     <a href="rfc-generator.html" class="active">&#9889; Generator</a>
-    <a href="http://192.168.151.46:8888/swagger/ui/index" target="_blank">Swagger</a>
+    <a href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank">Swagger</a>
   </div>
   <span class="badge">AUTO CI/CD</span>
 </div>
@@ -193,30 +193,37 @@
             <div class="step-detail">Production-ready C# Web API code</div>
           </div>
         </div>
-        <div class="step pending" id="s-github">
+        <div class="step pending" id="s-review">
           <div class="step-num">3</div>
           <div class="step-body">
-            <div class="step-label">Push to GitHub</div>
+            <div class="step-label">Deep Review (15-point checklist)</div>
+            <div class="step-detail">Score must reach 9/10 — up to 3 auto-fix iterations</div>
+          </div>
+        </div>
+        <div class="step pending" id="s-github">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-label">Push to GitHub (staging)</div>
             <div class="step-detail">Controllers/{Module}/{RFC}Controller.cs</div>
           </div>
         </div>
-    <div class="step pending" id="s-build"><div class="step-num">4</div><div class="step-body"><div class="step-label">Build Check (MSBuild)</div><div class="step-detail">NuGet restore &#8594; MSBuild compile &#8594; verify pass</div></div></div>
+    <div class="step pending" id="s-build"><div class="step-num">5</div><div class="step-body"><div class="step-label">Build Check (MSBuild)</div><div class="step-detail">NuGet restore &#8594; MSBuild compile &#8594; verify pass</div></div></div>
         <div class="step pending" id="s-deploy">
-          <div class="step-num">5</div>
+          <div class="step-num">6</div>
           <div class="step-body">
-            <div class="step-label">Deploy to IIS (192.168.151.46)</div>
+            <div class="step-label">Deploy to IIS (192.168.151.36)</div>
             <div class="step-detail">NuGet restore &rarr; MSBuild &rarr; robocopy &rarr; IIS recycle</div>
           </div>
         </div>
         <div class="step pending" id="s-dab">
-          <div class="step-num">6</div>
+          <div class="step-num">7</div>
           <div class="step-body">
             <div class="step-label">Register Data Lake endpoint</div>
             <div class="step-detail">Update dab-config.json in GitHub</div>
           </div>
         </div>
         <div class="step pending" id="s-swagger">
-          <div class="step-num">7</div>
+          <div class="step-num">8</div>
           <div class="step-body">
             <div class="step-label">Update RFC Swagger docs</div>
             <div class="step-detail">New endpoint card added to API explorer</div>
@@ -254,8 +261,8 @@
 
 <footer>
   V2 Retail &middot; RFC Pipeline &nbsp;|&nbsp;
-  <a href="http://192.168.151.46:8888/" target="_blank">API Server</a> &nbsp;&middot;&nbsp;
-  <a href="http://192.168.151.46:8888/swagger/ui/index" target="_blank">Swagger</a> &nbsp;&middot;&nbsp;
+  <a href="https://sap-api.v2retail.net/" target="_blank">API Server</a> &nbsp;&middot;&nbsp;
+  <a href="https://sap-api.v2retail.net/swagger/ui/index" target="_blank">Swagger</a> &nbsp;&middot;&nbsp;
   <a href="https://github.com/akash0631/rfc-api" target="_blank">GitHub</a>
 </footer>
 
