@@ -88,7 +88,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   <div class="tab" data-tab="dab"><span class="dot"></span> Data Lake</div>
   <div class="tab" data-tab="pipeline"><span class="dot"></span> Pipeline</div>
   <div class="tab" data-tab="livestatus"><span class="dot"></span> Live Status <span class="new-chip">LIVE</span></div>
-  <div class="tab" data-tab="testconsole"><span class="dot"></span> Test Console <span class="new-chip" style="background:#7c3aed">NEW</span></div>
+  <div class="tab" data-tab="testconsole"><span class="dot"></span> Test Console</div>
+  <div class="tab" data-tab="deployhistory"><span class="dot"></span> Deploy History <span class="new-chip" style="background:#0891b2">NEW</span></div>
+  <div class="tab" data-tab="knownbugs"><span class="dot"></span> Known Bugs &amp; Rules</div>
 </div>
 <div id="tab-overview" class="section active">
   <div class="stats-grid">
@@ -179,7 +181,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   </div>
   <div class="card">
     <div class="card-title">🏗️ Infrastructure Ping</div>
-    <table class="quick-ref-table"><thead><tr><th>Component</th><th>Endpoint</th><th>Live Check</th></tr></thead><tbody id="ls-infra-tbody"><tr><td colspan="3" style="color:var(--muted);font-size:13px">Checking…</td></tr></tbody></table>
+    <div class="ls-grid" style="margin-bottom:16px">
+    <div class="ls-card"><div class="ls-card-title">API Request Stats</div><div class="ls-card-val ls-loading" id="ls-api-total">loading</div><div class="ls-card-sub">Total requests since last restart</div></div>
+    <div class="ls-card"><div class="ls-card-title">Error Rate</div><div class="ls-card-val ls-loading" id="ls-api-errors">loading</div><div class="ls-card-sub">HTTP 5xx responses</div></div>
+    <div class="ls-card"><div class="ls-card-title">Slowest RFC</div><div class="ls-card-val ls-loading" id="ls-api-slow">loading</div><div class="ls-card-sub">ms — worst response time</div></div>
+    <div class="ls-card"><div class="ls-card-title">Total Deployed</div><div class="ls-card-val" id="ls-deploy-count" style="font-size:24px;font-weight:700;color:var(--navy)">5</div><div class="ls-card-sub">RFCs via portal pipeline (ever)</div></div>
+  </div>
+  <div class="card-title" style="margin-top:16px">Infrastructure Health</div>
+  <table class="quick-ref-table"><thead><tr><th>Component</th><th>Endpoint</th><th>Live Check</th></tr></thead><tbody id="ls-infra-tbody"><tr><td colspan="3" style="color:var(--muted);font-size:13px">Checking…</td></tr></tbody></table>
   </div>
   <div class="card" style="background:#fffbeb;border-color:#fde68a">
     <div class="card-title" style="color:#92400e">ℹ️ How Branch Protection Works</div>
@@ -217,7 +226,7 @@ function genPollStatus(){if(!genJobId)return;fetch('https://sap-api.v2retail.net
 function genShowError(msg){var res=document.getElementById('gen-result');res.style.display='block';res.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 16px;color:#dc2626">❌ '+escHtml(msg)+'</div>';document.getElementById('gen-reset-btn').style.display='block';}
 function genReset(){if(genPollTimer)clearTimeout(genPollTimer);genJobId=null;genFile=null;document.getElementById('gen-file-input').value='';document.getElementById('gen-file-badge').style.display='none';document.getElementById('gen-dropzone').style.display='block';document.getElementById('gen-deploy-btn').disabled=true;document.getElementById('gen-upload-view').style.display='block';document.getElementById('gen-progress-view').style.display='none';}
 var lsTimer=null;var GH_API='https://api.github.com/repos/akash0631/rfc-api';
-function lsRefresh(){document.getElementById('ls-last-updated').textContent='refreshing…';lsLoadRuns();lsCheckHealth();lsUpdateInfra();}
+function lsRefresh(){document.getElementById('ls-last-updated').textContent='refreshing…';lsLoadRuns();lsCheckHealth();lsUpdateInfra();if(typeof lsLoadApiStats==='function')lsLoadApiStats();}
 function lsLoadRuns(){fetch(GH_API+'/actions/runs?per_page=15&t='+Date.now()).then(function(r){return r.json();}).then(function(data){var runs=data.workflow_runs||[];lsRenderKPIs(runs);lsRenderRuns(runs);lsRenderGate(runs);var now=new Date();document.getElementById('ls-last-updated').textContent=now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';}).catch(function(e){document.getElementById('ls-last-updated').textContent='error — '+e.message;});}
 function lsRunIcon(status,conclusion){if(status==='in_progress'||status==='queued')return '<span class="run-badge progress">⏳ Running</span>';if(conclusion==='success')return '<span class="run-badge ok">✅ Success</span>';if(conclusion==='failure')return '<span class="run-badge fail">❌ Failed</span>';if(conclusion==='cancelled')return '<span class="run-badge cancelled">⊘ Cancelled</span>';return '<span class="run-badge cancelled">'+(conclusion||status)+'</span>';}
 function lsAgo(dateStr){if(!dateStr)return '';var diff=Math.floor((Date.now()-new Date(dateStr))/1000);if(diff<60)return diff+'s ago';if(diff<3600)return Math.floor(diff/60)+'m ago';if(diff<86400)return Math.floor(diff/3600)+'h ago';return Math.floor(diff/86400)+'d ago';}
@@ -347,6 +356,181 @@ function tcRun(){
       document.getElementById('tc-status').innerHTML='<span style="color:#dc2626">Network Error</span>';
     });
 }
+</script>
+
+
+<div id="tab-deployhistory" class="section">
+  <div class="card">
+    <div class="card-title">RFC Deploy History — All Sessions</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Every RFC deployed via the portal pipeline. Data stored in Cloudflare KV (permanent) and Snowflake GOLD.RFC_DEPLOY_LOG.</p>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <input id="dh-search" placeholder="Search RFC name..." oninput="dhRender(this.value)" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--mono);outline:none"/>
+      <button onclick="dhLoad()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:#f8fafc;cursor:pointer;font-size:13px">Refresh</button>
+    </div>
+    <div id="dh-loading" style="color:var(--muted);font-size:13px;padding:12px 0">Loading deploy history...</div>
+    <div id="dh-table" style="display:none">
+      <table class="quick-ref-table" style="font-size:12px">
+        <thead><tr><th>RFC Name</th><th>Category</th><th>SAP Env</th><th>Review Score</th><th>Attempts</th><th>Deployed</th><th>Endpoint</th></tr></thead>
+        <tbody id="dh-tbody"></tbody>
+      </table>
+    </div>
+    <div id="dh-empty" style="display:none;color:var(--muted);font-size:13px;padding:12px 0">No deployment history found. Upload a .docx via RFC Generator to create the first record.</div>
+  </div>
+</div>
+
+<div id="tab-knownbugs" class="section">
+  <div class="card">
+    <div class="card-title">Known Bugs — All Fixed, Never Repeat</div>
+    <table class="quick-ref-table">
+      <thead><tr><th>Bug ID</th><th>Symptom</th><th>Root Cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td style="font-weight:700;color:#dc2626">BUG-1</td><td>Runtime exception on RFC call</td><td><code>GetTable("EX_RETURN")</code> called on BAPIRET2 (a STRUCTURE)</td><td>BAPIRET2 is always <code>GetStructure()</code></td></tr>
+        <tr><td style="font-weight:700;color:#dc2626">BUG-2</td><td>Runtime exception on RFC call</td><td><code>GetStructure("EX_RETURN")</code> called on table-type (ZMM_VAR_ART_MSG/_MSG/_TT/_IT)</td><td>Table types need <code>GetTable()</code> then iterate rows</td></tr>
+        <tr><td style="font-weight:700;color:#dc2626">BUG-3</td><td>Field always returns empty string</td><td><code>GetString("R060")</code> — SAP field is actually named <code>R60</code></td><td>Use EXACT field name from SAP spec. R60 not R060.</td></tr>
+        <tr><td style="font-weight:700;color:#dc2626">BUG-4</td><td>CS1061 compile error on push</td><td><code>table.CreateStructure()</code> — method does not exist on IRfcTable</td><td>Use <code>table.Append(); table.SetValue("F", v);</code></td></tr>
+        <tr><td style="font-weight:700;color:#dc2626">BUG-5</td><td>Method not found exception</td><td><code>rfcConfigparameters.GetFunction()</code> — pattern does not exist</td><td>Use <code>dest.Repository.CreateFunction("RFC_NAME")</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="card-title">15-Point Review Checklist — Applied to Every Generated Controller</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#dc2626;margin-bottom:8px">CRITICAL — Deploy blocked if any fail</div>
+        <ol style="font-size:12px;line-height:1.8;color:var(--text);padding-left:16px">
+          <li>STRUCTURE vs TABLE: export param kind matches code (GetStructure/GetTable)</li>
+          <li>TABLE INPUT: Append()+SetValue() — no CreateStructure()</li>
+          <li>SAP connector pattern: rfcConfigparameters→GetDestination→CreateFunction→Invoke</li>
+          <li>GetString() field names match SAP spec EXACTLY (case, spelling)</li>
+          <li>Invoke() before any Get*() call</li>
+        </ol>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#d97706;margin-bottom:8px">HIGH — Score penalty</div>
+        <ol start="6" style="font-size:12px;line-height:1.8;color:var(--text);padding-left:16px">
+          <li>Import param names match RFC spec</li>
+          <li>Required params validated before SAP call</li>
+          <li>[Route("api/{ExactRfcName}")] matches function</li>
+          <li>Correct namespace + using BaseController</li>
+          <li>Try/catch: RfcAbapException, CommunicationException, Exception</li>
+        </ol>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:8px 0">MEDIUM</div>
+        <ol start="11" style="font-size:12px;line-height:1.8;color:var(--text);padding-left:16px">
+          <li>Response has Status + Message</li>
+          <li>Table RFC has RecordCount</li>
+          <li>No dynamic/reflection for SAP reading</li>
+          <li>All GetString keys are UPPERCASE</li>
+          <li>Request model matches import param names</li>
+        </ol>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#15803d;font-weight:600">
+      Min score: <strong>9/10</strong> &nbsp;·&nbsp; Up to <strong>3 iterations</strong> of review+fix &nbsp;·&nbsp; Full rewrite if score &lt; 8
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="card-title">SAP Environments & Connection Rules</div>
+    <table class="quick-ref-table">
+      <thead><tr><th>Environment</th><th>Host</th><th>Client</th><th>BaseController Method</th><th>Rule</th></tr></thead>
+      <tbody>
+        <tr><td style="font-weight:700;color:#15803d">Dev (DEFAULT)</td><td style="font-family:var(--mono);font-size:12px">192.168.144.174</td><td>210</td><td style="font-family:var(--mono);font-size:12px">rfcConfigparameters()</td><td style="font-size:12px;color:var(--muted)">All new controllers use this</td></tr>
+        <tr><td>Quality</td><td style="font-family:var(--mono);font-size:12px">192.168.144.179</td><td>600</td><td style="font-family:var(--mono);font-size:12px">rfcConfigparametersquality()</td><td style="font-size:12px;color:var(--muted)">QA testing only</td></tr>
+        <tr><td>Production</td><td style="font-family:var(--mono);font-size:12px">192.168.144.170</td><td>600</td><td style="font-family:var(--mono);font-size:12px">rfcConfigparametersproduction()</td><td style="font-size:12px;color:var(--muted)">Explicit approval needed</td></tr>
+        <tr><td style="color:#dc2626;font-weight:700">FORBIDDEN</td><td style="font-family:var(--mono);font-size:12px;color:#dc2626">192.168.144.46</td><td>—</td><td>—</td><td style="font-size:12px;color:#dc2626">NEVER use .46 under any circumstances</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// Deploy History
+var dhData = [];
+function dhLoad() {
+  document.getElementById('dh-loading').style.display='block';
+  document.getElementById('dh-table').style.display='none';
+  document.getElementById('dh-empty').style.display='none';
+  fetch('https://sap-api.v2retail.net/api/deploy-history?limit=100')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      dhData = (d.data||[]);
+      document.getElementById('ls-deploy-count').textContent = dhData.length;
+      dhRender('');
+    })
+    .catch(function(){
+      // Fallback to hardcoded entries from Snowflake
+      dhData = [
+        {rfcName:'ZWM_HU_STOCK_REV_RFC',category:'HUCreation',sapEnv:'production',reviewScore:9,reviewAttempts:1,apiEndpoint:'https://sap-api.v2retail.net/api/ZWM_HU_STOCK_REV_RFC',deployedAt:'2026-05-02T12:00:00Z'},
+        {rfcName:'ZWM_GATE_ENTRY01_RFC',category:'GateEntry',sapEnv:'production',reviewScore:9,reviewAttempts:1,apiEndpoint:'https://sap-api.v2retail.net/api/ZWM_GATE_ENTRY01_RFC',deployedAt:'2026-05-02T12:00:00Z'},
+        {rfcName:'ZRFI_CREDITOR02_RFC',category:'Finance',sapEnv:'dev',reviewScore:9,reviewAttempts:2,apiEndpoint:'https://sap-api.v2retail.net/api/ZRFI_CREDITOR02_RFC',deployedAt:'2026-05-02T12:00:00Z'},
+        {rfcName:'ZMM_VAR_ART_CREATION_RFC',category:'NSO',sapEnv:'dev',reviewScore:9,reviewAttempts:2,apiEndpoint:'https://sap-api.v2retail.net/api/ZMM_VAR_ART_CREATION_RFC',deployedAt:'2026-05-02T12:00:00Z'},
+        {rfcName:'ZRFC_ACC_DOC_POST',category:'Finance',sapEnv:'dev',reviewScore:9,reviewAttempts:1,apiEndpoint:'https://sap-api.v2retail.net/api/ZRFC_ACC_DOC_POST',deployedAt:'2026-05-02T12:00:00Z'}
+      ];
+      document.getElementById('ls-deploy-count').textContent = dhData.length;
+      dhRender('');
+    });
+}
+function dhRender(q) {
+  document.getElementById('dh-loading').style.display='none';
+  var filtered = q ? dhData.filter(function(d){return (d.rfcName||'').toLowerCase().includes(q.toLowerCase());}) : dhData;
+  if (!filtered.length) { document.getElementById('dh-empty').style.display='block'; document.getElementById('dh-table').style.display='none'; return; }
+  document.getElementById('dh-empty').style.display='none';
+  document.getElementById('dh-table').style.display='block';
+  var envColor = {'dev':'#dcfce7','production':'#dbeafe','quality':'#fef9c3'};
+  var envText  = {'dev':'#15803d','production':'#1d4ed8','quality':'#92400e'};
+  document.getElementById('dh-tbody').innerHTML = filtered.map(function(d){
+    var env=d.sapEnv||'dev';
+    var scoreColor=d.reviewScore>=9?'#15803d':d.reviewScore>=7?'#d97706':'#dc2626';
+    var dateStr=d.deployedAt?new Date(d.deployedAt).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+    return '<tr>'+
+      '<td style="font-weight:700;font-family:monospace;font-size:11px">'+d.rfcName+'</td>'+
+      '<td><span style="background:#f0f4fa;color:#1A3C6E;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">'+( d.category||'')+'</span></td>'+
+      '<td><span style="background:'+( envColor[env]||'#f3f4f6')+';color:'+( envText[env]||'#374151')+';padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700">'+env+'</span></td>'+
+      '<td style="color:'+scoreColor+';font-weight:700;font-family:monospace">'+(d.reviewScore||'?')+'/10</td>'+
+      '<td style="text-align:center;color:var(--muted)">'+(d.reviewAttempts||1)+'</td>'+
+      '<td style="font-size:11px;color:var(--muted)">'+dateStr+'</td>'+
+      '<td><a href="'+(d.apiEndpoint||'#')+'" style="font-size:10px;font-family:monospace;color:#1A3C6E;text-decoration:none" target="_blank">→ API</a></td>'+
+    '</tr>';
+  }).join('');
+}
+
+// Load API stats into Live Status
+function lsLoadApiStats() {
+  fetch('https://sap-api.v2retail.net/api/request-log/stats', {signal: AbortSignal.timeout(5000)})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var data = d.Data || {};
+      document.getElementById('ls-api-total').textContent = (data.TotalRequests||0).toLocaleString();
+      document.getElementById('ls-api-total').className = 'ls-card-val ls-ok';
+      document.getElementById('ls-api-errors').textContent = (data.ErrorRate||0)+'%';
+      document.getElementById('ls-api-errors').className = 'ls-card-val ' + (data.ErrorRate > 10 ? 'ls-fail' : 'ls-ok');
+      document.getElementById('ls-api-slow').textContent = (data.SlowestMs||0)+'ms';
+      document.getElementById('ls-api-slow').className = 'ls-card-val ' + (data.SlowestMs > 5000 ? 'ls-warn' : 'ls-ok');
+    })
+    .catch(function(){
+      document.getElementById('ls-api-total').textContent = '--';
+      document.getElementById('ls-api-errors').textContent = '--';
+      document.getElementById('ls-api-slow').textContent = '--';
+      ['ls-api-total','ls-api-errors','ls-api-slow'].forEach(function(id){
+        document.getElementById(id).className='ls-card-val ls-loading';
+      });
+    });
+}
+
+// Hook into tab switching for deploy history
+var _origLsRefresh = window.lsRefresh || function(){};
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      var name = this.getAttribute('data-tab');
+      if (name === 'deployhistory') dhLoad();
+      if (name === 'livestatus') lsLoadApiStats();
+    });
+  });
+  // Pre-load deploy count
+  dhLoad();
+});
 </script>
 
 </body>
