@@ -78,6 +78,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                         var existingCols = GetColumns(conn, req.TableName);
                         foreach (var col in allKeys.Except(existingCols, StringComparer.OrdinalIgnoreCase))
                             AlterAddColumn(conn, req.TableName, col);
+                    // Always ensure _SYNCED_AT meta-column exists
+                    if (!existingCols.Contains("_SYNCED_AT", StringComparer.OrdinalIgnoreCase))
+                        AlterAddColumn(conn, req.TableName, "_SYNCED_AT");
                     }
 
                     // 2. Upsert all records in a single transaction
@@ -245,7 +248,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
         private void CreateDynamicTable(SqlConnection conn, string table, List<string> cols, string key)
         {
             var colDefs = cols.Select(c =>
-                $"[{c}] NVARCHAR(500) NULL").ToList();
+                c.Equals(key, StringComparison.OrdinalIgnoreCase)
+                    ? $"[{c}] NVARCHAR(500) NOT NULL"
+                    : $"[{c}] NVARCHAR(500) NULL").ToList();
             colDefs.Add("[_SYNCED_AT] DATETIME DEFAULT GETDATE()");
 
             string sql =
