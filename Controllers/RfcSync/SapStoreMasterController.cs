@@ -259,6 +259,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                 string updateSet  = string.Join(", ",
                     cols.Where(c => c != KEY_COL).Select(c => "T.[" + c + "]=S.[" + c + "]"));
 
+                // Ensure all columns exist (schema evolution for existing tables)
+                EnsureColumns(conn, cols);
+
                 // Create temp
                 string createTmp = "SELECT TOP 0 " + colList + " INTO " + tmpTable +
                                    " FROM [dbo].[" + TABLE_NAME + "]";
@@ -308,6 +311,26 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                         throw;
                     }
                 }
+            }
+        }
+
+        private void EnsureColumns(SqlConnection conn, List<string> cols)
+        {
+            // Get existing columns
+            var existing = new List<string>();
+            using (var cmd = new SqlCommand(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=@T", conn))
+            {
+                cmd.Parameters.AddWithValue("@T", TABLE_NAME);
+                using (var rdr = cmd.ExecuteReader())
+                    while (rdr.Read()) existing.Add(rdr.GetString(0).ToUpper());
+            }
+            // Add any missing columns
+            foreach (var col in cols.Where(c => !existing.Contains(c.ToUpper())))
+            {
+                string sql = "ALTER TABLE [dbo].[" + TABLE_NAME + "] ADD [" + col + "] NVARCHAR(500) NULL";
+                using (var cmd = new SqlCommand(sql, conn))
+                    cmd.ExecuteNonQuery();
             }
         }
 
