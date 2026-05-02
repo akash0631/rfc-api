@@ -77,7 +77,10 @@
       <HintPath>packages\Newtonsoft.Json.Bson.1.0.3\lib\net45\Newtonsoft.Json.Bson.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
-        <Reference Include="Snowflake.Data">
+            <Reference Include="log4net">
+      <HintPath>packages\log4net.2.0.12\lib\net45\log4net.dll</HintPath>
+    </Reference>
+    <Reference Include="Snowflake.Data">
       <HintPath>packages\Snowflake.Data.2.1.5\lib\net472\Snowflake.Data.dll</HintPath>
     </Reference>
     <Reference Include="sapnco, Version=3.0.0.42, Culture=neutral, PublicKeyToken=50436dca5c7f7d23, processorArchitecture=AMD64">
