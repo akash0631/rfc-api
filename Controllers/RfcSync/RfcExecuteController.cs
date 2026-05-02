@@ -221,11 +221,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
             try
             {
                 IRfcTable tbl = func.GetTable(tableName);
-                // Build field name list once from the table metadata
+                // Build field name list from table line type metadata (NCo 3.0 API)
                 var fieldNames = new List<string>();
-                var meta = tbl.Metadata;
-                for (int i = 0; i < meta.FieldCount; i++)
-                    fieldNames.Add(meta[i].Name);
+                var lineMeta = tbl.Metadata.LineType;
+                for (int i = 0; i < lineMeta.FieldCount; i++)
+                    fieldNames.Add(lineMeta[i].Name);
 
                 foreach (IRfcStructure row in tbl)
                 {
