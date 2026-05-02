@@ -333,14 +333,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                     }
 
                     // MERGE into main table
-                    string merge =
-                        $"MERGE [dbo].[{table}] AS T " +
-                        $"USING {tmpTable} AS S ON T.[{key}] = S.[{key}] " +
-                        $"WHEN MATCHED THEN UPDATE SET {updateSet}, T.[_SYNCED_AT]=GETDATE() " +
-                        $"WHEN NOT MATCHED THEN INSERT ({colList}, [_SYNCED_AT]) VALUES ({paramList.Replace("@", "S.[").Replace(", S.[", "], S.[")
-                            .Replace(string.Join(", ", cols.Select(c => $"S.[{c}")), string.Join(", ", cols.Select(c => $"S.[{c}]")))}, GETDATE());";
-
-                    // Simpler equivalent that avoids MERGE parameter complexity:
+                    // Pre-compute column lists (C# 7.3: no multi-line interpolated strings)
+                    string insertColsForMerge = string.Join(",", cols.Select(c => "S.[" + c + "]"));
                     string mergeSql =
                         $"MERGE [dbo].[{table}] WITH (HOLDLOCK) AS T " +
                         $"USING {tmpTable} AS S ON T.[{key}] = S.[{key}] " +
@@ -349,7 +343,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                                               .Select(c => $"T.[{c}]=S.[{c}]")) +
                         $", T.[_SYNCED_AT]=GETDATE() " +
                         $"WHEN NOT MATCHED THEN INSERT ({colList},[_SYNCED_AT]) " +
-                        $"VALUES ({string.Join(",", cols.Select(c => $"S.[{c}]"))},GETDATE());";
+                        "VALUES (" + insertColsForMerge + ",GETDATE());";
 
                     using (var cmd = new SqlCommand(mergeSql, conn, tx))
                         count = cmd.ExecuteNonQuery();
