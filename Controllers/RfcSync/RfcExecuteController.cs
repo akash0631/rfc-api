@@ -190,7 +190,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                 string value = null;
                 if (req.Params != null && req.Params.ContainsKey(p.Name))
                     value = req.Params[p.Name]?.ToString();
-                if (value == null && !string.IsNullOrEmpty(p.DefaultExpr))
+                // Resolve DATE_FROM/DATE_TO default expressions from request DateFrom/DateTo fields
+                if (value == null && p.DefaultExpr == "DATE_FROM" && req.DateFrom.HasValue)
+                    value = req.DateFrom.Value.ToString("yyyyMMdd");
+                else if (value == null && p.DefaultExpr == "DATE_TO" && req.DateTo.HasValue)
+                    value = req.DateTo.Value.ToString("yyyyMMdd");
+                else if (value == null && !string.IsNullOrEmpty(p.DefaultExpr))
                     value = ResolveDefault(p.DefaultExpr, req);
                 if (value != null)
                 {
