@@ -12,7 +12,8 @@ namespace Vendor_Application_MVC.Controllers.NSO
     /// <summary>
     /// Variant Article Creation RFC.
     /// Creates variant articles in SAP MM. Accepts a list of article records via IM_DATA table.
-    /// Returns EX_RETURN (ZMM_VAR_ART_MSG) with creation status and messages.
+    /// Returns EX_RETURN (ZMM_VAR_ART_MSG TABLE) with per-item creation status and messages.
+    /// Note: ZMM_VAR_ART_MSG is a TABLE type (not structure) — each row is a message entry.
     /// RFC: ZMM_VAR_ART_CREATION_RFC | SAP function group: 2004_ART_CREATION_FG
     /// </summary>
     [RoutePrefix("api")]
@@ -37,43 +38,66 @@ namespace Vendor_Application_MVC.Controllers.NSO
                     foreach (var item in request.IM_DATA)
                     {
                         imData.Append();
-                        imData.SetValue("GENERIC_ARTICLE",  item.GENERIC_ARTICLE  ?? "");
-                        imData.SetValue("VARIANT_ARTICLE",  item.VARIANT_ARTICLE  ?? "");
-                        imData.SetValue("VAR1CHAR1",        item.VAR1CHAR1        ?? "");
-                        imData.SetValue("VAR1VAL1",         item.VAR1VAL1         ?? "");
-                        imData.SetValue("VAR1CHAR2",        item.VAR1CHAR2        ?? "");
-                        imData.SetValue("VAR1VAL2",         item.VAR1VAL2         ?? "");
-                        imData.SetValue("VENDOR",           item.VENDOR           ?? "");
-                        imData.SetValue("SITE",             item.SITE             ?? "");
-                        imData.SetValue("PUR_GRP",          item.PUR_GRP          ?? "");
-                        imData.SetValue("NET_PRICE",        item.NET_PRICE        ?? "");
-                        imData.SetValue("SALES_ORG",        item.SALES_ORG        ?? "");
-                        imData.SetValue("SALES_UNIT",       item.SALES_UNIT       ?? "");
-                        imData.SetValue("MRP_TYPE",         item.MRP_TYPE         ?? "");
-                        imData.SetValue("FROM_DATE",        item.FROM_DATE        ?? "");
-                        imData.SetValue("TO_DATE",          item.TO_DATE          ?? "");
-                        imData.SetValue("OLD_MAT_NO",       item.OLD_MAT_NO       ?? "");
-                        imData.SetValue("TAX_CODE",         item.TAX_CODE         ?? "");
+                        imData.SetValue("GENERIC_ARTICLE", item.GENERIC_ARTICLE  ?? "");
+                        imData.SetValue("VARIANT_ARTICLE", item.VARIANT_ARTICLE  ?? "");
+                        imData.SetValue("VAR1CHAR1",       item.VAR1CHAR1        ?? "");
+                        imData.SetValue("VAR1VAL1",        item.VAR1VAL1         ?? "");
+                        imData.SetValue("VAR1CHAR2",       item.VAR1CHAR2        ?? "");
+                        imData.SetValue("VAR1VAL2",        item.VAR1VAL2         ?? "");
+                        imData.SetValue("VENDOR",          item.VENDOR           ?? "");
+                        imData.SetValue("SITE",            item.SITE             ?? "");
+                        imData.SetValue("PUR_GRP",         item.PUR_GRP          ?? "");
+                        imData.SetValue("NET_PRICE",       item.NET_PRICE        ?? "");
+                        imData.SetValue("SALES_ORG",       item.SALES_ORG        ?? "");
+                        imData.SetValue("SALES_UNIT",      item.SALES_UNIT       ?? "");
+                        imData.SetValue("MRP_TYPE",        item.MRP_TYPE         ?? "");
+                        imData.SetValue("FROM_DATE",       item.FROM_DATE        ?? "");
+                        imData.SetValue("TO_DATE",         item.TO_DATE          ?? "");
+                        imData.SetValue("OLD_MAT_NO",      item.OLD_MAT_NO       ?? "");
+                        imData.SetValue("TAX_CODE",        item.TAX_CODE         ?? "");
                     }
                 }
 
                 rfcFunction.Invoke(dest);
 
-                // RULE 1: EX_RETURN is ZMM_VAR_ART_MSG (STRUCTURE export param) → GetStructure
-                IRfcStructure exReturn = rfcFunction.GetStructure("EX_RETURN");
+                // FIX: EX_RETURN is ZMM_VAR_ART_MSG which is a TABLE TYPE (not a structure).
+                // Each row in the table is a message entry with TYPE and MESSAGE fields.
+                IRfcTable exReturnTable = rfcFunction.GetTable("EX_RETURN");
+                var messages = new List<object>();
+                string overallStatus = "S";
+                string overallMessage = "Completed";
+
+                foreach (IRfcStructure row in exReturnTable)
+                {
+                    string rowType = row.GetString("TYPE");
+                    string rowMsg  = row.GetString("MESSAGE");
+                    messages.Add(new
+                    {
+                        TYPE    = rowType,
+                        ID      = row.GetString("ID"),
+                        NUMBER  = row.GetString("NUMBER"),
+                        MESSAGE = rowMsg
+                    });
+                    // If any row is error, overall status is error
+                    if (rowType == "E" || rowType == "A")
+                    {
+                        overallStatus  = "E";
+                        overallMessage = rowMsg;
+                    }
+                }
+
+                // If no messages at all, treat as success
+                if (messages.Count == 0)
+                {
+                    overallStatus  = "S";
+                    overallMessage = "No messages returned — check SAP for result";
+                }
 
                 return Request.CreateResponse(HttpStatusCode.OK, new
                 {
-                    Status  = exReturn.GetString("TYPE"),
-                    Message = exReturn.GetString("MESSAGE"),
-                    Data = new
-                    {
-                        EX_RETURN = new
-                        {
-                            TYPE    = exReturn.GetString("TYPE"),
-                            MESSAGE = exReturn.GetString("MESSAGE")
-                        }
-                    }
+                    Status  = overallStatus,
+                    Message = overallMessage,
+                    Data = new { EX_RETURN = messages }
                 });
             }
             catch (Exception ex)
