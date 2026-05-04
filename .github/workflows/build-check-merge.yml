@@ -11,6 +11,15 @@ name: Build Check then Merge to Master
 # WHY NO ARTIFACT UPLOAD:
 #   deploy-iis.yml now runs build + deploy in one single job on the self-hosted .36 runner.
 #   No cross-runner artifact transfer needed — avoids SSL issues with GitHub API on .36.
+#
+# WHY GITHUB APP TOKEN (not secrets.GITHUB_TOKEN):
+#   Pushes made by secrets.GITHUB_TOKEN (GitHub's auto-token) do NOT trigger downstream
+#   workflow runs. Pushes made by a GitHub App installation token DO trigger them.
+#   v2-mcp-bot (App ID stored in GH_APP_ID secret) is installed on this repo.
+#
+# IMPORTANT: This YAML must be identical on both staging AND master.
+#   GitHub runs the YAML from the branch that triggered the workflow (staging),
+#   not from master. Always sync this file to staging after any changes.
 
 on:
   push:
@@ -68,16 +77,23 @@ jobs:
       contents: write
 
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
       - name: Checkout repo full history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git identity
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          git config user.name "v2-mcp-bot[bot]"
+          git config user.email "v2-mcp-bot[bot]@users.noreply.github.com"
 
       - name: Merge staging into master
         run: |
