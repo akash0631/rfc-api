@@ -16,10 +16,6 @@ name: Build Check then Merge to Master
 #   Pushes made by secrets.GITHUB_TOKEN (GitHub's auto-token) do NOT trigger downstream
 #   workflow runs. Pushes made by a GitHub App installation token DO trigger them.
 #   v2-mcp-bot (App ID stored in GH_APP_ID secret) is installed on this repo.
-#
-# IMPORTANT: This YAML must be identical on both staging AND master.
-#   GitHub runs the YAML from the branch that triggered the workflow (staging),
-#   not from master. Always sync this file to staging after any changes.
 
 on:
   push:
