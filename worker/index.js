@@ -81,7 +81,6 @@ const failed = Object.entries(STARTUP_CHECKS).filter(([,v])=>!v).map(([k])=>k);
 if (failed.length > 0) {
   console.error('[STARTUP VALIDATION FAILED]', failed.join(', '));
 }
- (staging gate: compiles → merges → IIS deploy auto-triggers)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
