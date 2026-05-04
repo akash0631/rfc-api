@@ -25,6 +25,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
     ///                       PLANT (EWERK), STORAGE_LOC (LGORT_D)
     /// EXPORT:  EX_RETURN    (BAPIRET2) - TYPE 'S'/'E', MESSAGE,
     ///                       PARAMETER carries the new PO number on success.
+    ///
+    /// Deployed via v2-mcp-bot GitHub App — cascade fix active.
     /// </summary>
     public class ZMM_PO_CREATION_RFCController : BaseController
     {
