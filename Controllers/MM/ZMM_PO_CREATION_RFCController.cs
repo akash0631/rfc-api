@@ -26,7 +26,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
     /// EXPORT:  EX_RETURN    (BAPIRET2) - TYPE 'S'/'E', MESSAGE,
     ///                       PARAMETER carries the new PO number on success.
     ///
-    /// Deployed via v2-mcp-bot App-token cascade (2026-05-04).
+    /// Deployed via v2-mcp-bot App-token cascade (2026-05-04 10:15Z).
     /// </summary>
     public class ZMM_PO_CREATION_RFCController : BaseController
     {
