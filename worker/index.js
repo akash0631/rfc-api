@@ -73,7 +73,7 @@ const GH_WORKFLOW_ID   = '255255794';  // build-check-merge.yml
 // ── Startup validation ────────────────────────────────────────────────────
 // These constants are checked at worker startup to catch misconfigurations early
 const STARTUP_CHECKS = {
-  GH_WORKFLOW_ID_correct: GH_WORKFLOW_ID === '255255794',  // must be build-check-merge.yml
+  GH_WORKFLOW_ID_correct: GH_WORKFLOW_ID === '255255794',  // must be build-check-merge ID
   IIS_HOST_correct: IIS_HOST.includes('sap-api.v2retail.net'),
   GITHUB_BRANCH_staging: GITHUB_BRANCH === 'staging',
 };
