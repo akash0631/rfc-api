@@ -69,7 +69,19 @@ const GITHUB_REPO      = 'akash0631/rfc-api';
 const GITHUB_BRANCH    = 'staging'; // Portal pushes to staging -> build-check-merge.yml compiles -> only merges to master if build passes
 const DAB_APP_URL      = 'https://my-dab-app.azurewebsites.net';
 const IIS_HOST         = 'https://sap-api.v2retail.net';
-const GH_WORKFLOW_ID   = '255255794';  // build-check-merge.yml (staging gate: compiles → merges → IIS deploy auto-triggers)
+const GH_WORKFLOW_ID   = '255255794';  // build-check-merge.yml
+// ── Startup validation ────────────────────────────────────────────────────
+// These constants are checked at worker startup to catch misconfigurations early
+const STARTUP_CHECKS = {
+  GH_WORKFLOW_ID_correct: GH_WORKFLOW_ID === '255255794',  // must be build-check-merge.yml
+  IIS_HOST_correct: IIS_HOST.includes('sap-api.v2retail.net'),
+  GITHUB_BRANCH_staging: GITHUB_BRANCH === 'staging',
+};
+const failed = Object.entries(STARTUP_CHECKS).filter(([,v])=>!v).map(([k])=>k);
+if (failed.length > 0) {
+  console.error('[STARTUP VALIDATION FAILED]', failed.join(', '));
+}
+ (staging gate: compiles → merges → IIS deploy auto-triggers)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SAP_ENVS = {
   dev:        { fn: 'rfcConfigparameters',           host: '192.168.144.174', client: '210' },
@@ -1574,6 +1586,24 @@ export default {
       } catch(e) {
         return new Response(JSON.stringify({success:false, error:e.message}),
           {status:500, headers:{...CORS,'Content-Type':'application/json'}});
+      }
+    }
+
+        if (url.pathname === '/api/health' && request.method === 'GET') {
+      try {
+        const res = await fetch(IIS_HOST + '/api/health', {signal: AbortSignal.timeout(8000)});
+        const data = await res.json();
+        return new Response(JSON.stringify({...data, cfWorker: 'ok', cfWorkerVersion: '2.0'}),
+          {status: res.status, headers: {...CORS, 'Content-Type': 'application/json'}});
+      } catch(e) {
+        // IIS down -- return degraded status from worker
+        return new Response(JSON.stringify({
+          status: 'degraded',
+          service: 'V2 Retail SAP RFC API',
+          cfWorker: 'ok',
+          iisStatus: 'unreachable: ' + e.message,
+          timestamp: new Date().toISOString()
+        }), {status: 503, headers: {...CORS, 'Content-Type': 'application/json'}});
       }
     }
 
