@@ -26,10 +26,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
     /// EXPORT:  EX_RETURN    (BAPIRET2) - TYPE 'S'/'E', MESSAGE,
     ///                       PARAMETER carries the new PO number on success.
     ///
-    /// v2 — GitHub App cascade fix confirmed active.
+    /// Deployed via v2-mcp-bot App-token cascade (2026-05-04).
     /// </summary>
     public class ZMM_PO_CREATION_RFCController : BaseController
     {
+        // FM relies on global SAP memory IDs (Z_PO_UPLOAD / Z_PO_TAX / Z_IT_FINAL)
+        // via SUBMIT ZMM_POCREATE — concurrent invocations would race.
+        // Serialize at the API boundary.
         private static readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
         private const int GateTimeoutSeconds = 60;
 
@@ -37,28 +40,52 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
         public async Task<HttpResponseMessage> Post([FromBody] ZMM_PO_CREATION_RFCRequest request)
         {
             if (request == null)
-                return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = "Request body is required." });
-
+            {
+                return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                {
+                    Status = false,
+                    Message = "Request body is required."
+                });
+            }
             if (string.IsNullOrWhiteSpace(request.IV_VENDOR))
-                return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = "IV_VENDOR is required." });
-
+            {
+                return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                {
+                    Status = false,
+                    Message = "IV_VENDOR is required."
+                });
+            }
             if (request.IT_ITEMS == null || request.IT_ITEMS.Count == 0)
-                return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = "IT_ITEMS must contain at least one line item." });
+            {
+                return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                {
+                    Status = false,
+                    Message = "IT_ITEMS must contain at least one line item."
+                });
+            }
 
             bool entered = false;
             try
             {
                 entered = await _gate.WaitAsync(TimeSpan.FromSeconds(GateTimeoutSeconds));
                 if (!entered)
-                    return Request.CreateResponse((HttpStatusCode)429, new { Status = false, Message = "PO creation queue is busy; please retry." });
+                {
+                    return Request.CreateResponse((HttpStatusCode)429, new
+                    {
+                        Status = false,
+                        Message = "PO creation queue is busy; please retry."
+                    });
+                }
 
                 return await Task.Run(() =>
                 {
                     try
                     {
-                        RfcConfigParameters rfcPar = BaseController.rfcConfigparameters();
+                        RfcConfigParameters rfcPar = BaseController.rfcConfigparameters(); // DEV (.174 / 210)
                         RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                        IRfcFunction myfun = dest.Repository.CreateFunction("ZMM_PO_CREATION_RFC");
+                        RfcRepository rfcrep = dest.Repository;
+
+                        IRfcFunction myfun = rfcrep.CreateFunction("ZMM_PO_CREATION_RFC");
 
                         myfun.SetValue("IV_VENDOR",   request.IV_VENDOR);
                         myfun.SetValue("IV_DOC_TYPE", string.IsNullOrWhiteSpace(request.IV_DOC_TYPE) ? "NB" : request.IV_DOC_TYPE);
@@ -83,13 +110,29 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                         string poNumber   = exReturn.GetValue("PARAMETER")?.ToString() ?? "";
 
                         if (sapType == "E")
-                            return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = sapMessage, PoNumber = poNumber });
+                        {
+                            return Request.CreateResponse(HttpStatusCode.BadRequest, new
+                            {
+                                Status   = false,
+                                Message  = sapMessage,
+                                PoNumber = poNumber
+                            });
+                        }
 
-                        return Request.CreateResponse(HttpStatusCode.OK, new { Status = true, Message = sapMessage, PoNumber = poNumber });
+                        return Request.CreateResponse(HttpStatusCode.OK, new
+                        {
+                            Status   = true,
+                            Message  = sapMessage,
+                            PoNumber = poNumber
+                        });
                     }
                     catch (Exception ex)
                     {
-                        return Request.CreateResponse(HttpStatusCode.InternalServerError, new { Status = false, Message = ex.Message });
+                        return Request.CreateResponse(HttpStatusCode.InternalServerError, new
+                        {
+                            Status  = false,
+                            Message = ex.Message
+                        });
                     }
                 });
             }
@@ -102,18 +145,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
 
     public class ZMM_PO_CREATION_RFCRequest
     {
-        public string IV_VENDOR   { get; set; }
-        public string IV_DOC_TYPE { get; set; }
-        public List<ZMM_PO_CREATION_ItemRow> IT_ITEMS { get; set; }
+        public string IV_VENDOR   { get; set; }                     // LIFNR  - vendor account
+        public string IV_DOC_TYPE { get; set; }                     // BSART  - doc type (default NB)
+        public List<ZMM_PO_CREATION_ItemRow> IT_ITEMS { get; set; } // ZPO_ITEM_STRUCTURE_TT
     }
 
     public class ZMM_PO_CREATION_ItemRow
     {
-        public string MATERIAL    { get; set; }
-        public string QTY         { get; set; }
-        public string NET_PRICE   { get; set; }
-        public string DEL_DATE    { get; set; }
-        public string PLANT       { get; set; }
-        public string STORAGE_LOC { get; set; }
+        public string MATERIAL    { get; set; }   // MATNR    - article
+        public string QTY         { get; set; }   // BSTMG    - order qty
+        public string NET_PRICE   { get; set; }   // BPREI    - net price
+        public string DEL_DATE    { get; set; }   // EINDT    - delivery date YYYYMMDD
+        public string PLANT       { get; set; }   // EWERK    - plant
+        public string STORAGE_LOC { get; set; }   // LGORT_D  - storage location
     }
 }
