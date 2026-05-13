@@ -118,15 +118,17 @@ namespace Vendor_SRM_Routing_Application.Services
         }
 
         /// <summary>
-        /// Bulk insert rows into a Snowflake GOLD table.
+        /// Bulk insert rows into a Snowflake target-schema table (default GOLD).
         /// If dateColumn + fromDate/toDate provided: deletes existing rows for that range first.
         /// Inserts in chunks of 500 to stay within Snowflake limits.
         /// </summary>
         public int BulkInsert(string tableName, List<Dictionary<string, object>> rows,
-            string dateColumn = null, DateTime? fromDate = null, DateTime? toDate = null)
+            string dateColumn = null, DateTime? fromDate = null, DateTime? toDate = null,
+            string targetSchema = "GOLD")
         {
             if (rows == null || rows.Count == 0) return 0;
             var safeTable = SanitizeIdentifier(tableName);
+            var safeSchema = SanitizeIdentifier(targetSchema ?? "GOLD");
             var cols = new List<string>(rows[0].Keys);
 
             // Delete existing range before upsert
@@ -134,7 +136,7 @@ namespace Vendor_SRM_Routing_Application.Services
             {
                 string safeCol = SanitizeIdentifier(dateColumn);
                 ExecuteNonQuery(
-                    "DELETE FROM GOLD." + safeTable +
+                    "DELETE FROM " + safeSchema + "." + safeTable +
                     " WHERE " + safeCol + " >= '" + fromDate.Value.ToString("yyyy-MM-dd") + "'" +
                     " AND "   + safeCol + " <= '" + toDate.Value.ToString("yyyy-MM-dd")   + "'");
             }
@@ -165,7 +167,7 @@ namespace Vendor_SRM_Routing_Application.Services
                         valRows.Add("(" + string.Join(", ", pNames) + ")");
                     }
 
-                    string insertSql = "INSERT INTO GOLD." + safeTable + " (" + colList + ") VALUES " + string.Join(", ", valRows);
+                    string insertSql = "INSERT INTO " + safeSchema + "." + safeTable + " (" + colList + ") VALUES " + string.Join(", ", valRows);
                     using (var cmd = conn.CreateCommand())
                     {
                         cmd.CommandText = insertSql;
