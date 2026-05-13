@@ -47,8 +47,8 @@ namespace Vendor_Application_MVC.Controllers
             // rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID
             rfcPar.Add(RfcConfigParameters.Client, "600");
             // system -> status
-            rfcPar.Add(RfcConfigParameters.User, "sap_abap");//User Name
-            rfcPar.Add(RfcConfigParameters.Password, "Abap@123456"); //User Password
+            rfcPar.Add(RfcConfigParameters.User, "POWERBI");//User Name
+            rfcPar.Add(RfcConfigParameters.Password, "India@123456"); //User Password
             rfcPar.Add(RfcConfigParameters.SystemID, "PRD");
             rfcPar.Add(RfcConfigParameters.SystemNumber, "02");
             
