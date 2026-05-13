@@ -23,6 +23,7 @@ on:
       - staging
     paths:
       - 'Controllers/**'
+      - 'Services/**'
       - 'Models/**'
       - 'App_Start/**'
       - 'Views/**'

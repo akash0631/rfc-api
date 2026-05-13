@@ -119,7 +119,8 @@ namespace Vendor_SRM_Routing_Application.Services
                 {
                     var dateParam = ep.Parameters.FirstOrDefault(p =>
                         p.Type == "Scalar" && (p.DataType == "Date" || p.DataType == "DATS"));
-                    res.WrittenRows = _sf.BulkInsert(ep.TargetTable, rows, dateParam?.Name, dateFrom, dateTo);
+                    res.WrittenRows = _sf.BulkInsert(ep.TargetTable, rows, dateParam?.Name, dateFrom, dateTo,
+                        ep.TargetSchema ?? "GOLD");
                 }
 
                 sw.Stop();

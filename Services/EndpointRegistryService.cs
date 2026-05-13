@@ -41,7 +41,8 @@ namespace Vendor_SRM_Routing_Application.Services
                         @"SELECT ID, RFC_CODE, RFC_FUNCTION_NAME, DISPLAY_NAME, DESCRIPTION,
                                  DEPARTMENT, SAP_MODULE, TARGET_TABLE, SAP_RETURN_TABLE,
                                  EXECUTION_PATTERN, WRITE_MODE, BULK_BATCH_SIZE,
-                                 SAP_CONNECTION_ID, STATUS, SCHEDULE_DESC
+                                 SAP_CONNECTION_ID, STATUS, SCHEDULE_DESC,
+                                 COALESCE(TARGET_SCHEMA, 'GOLD') AS TARGET_SCHEMA
                           FROM GOLD.RFC_MASTER
                           WHERE STATUS = 'Active'
                           ORDER BY RFC_CODE");
@@ -70,6 +71,7 @@ namespace Vendor_SRM_Routing_Application.Services
                             Department   = rfc["DEPARTMENT"]?.ToString(),
                             SapModule    = rfc["SAP_MODULE"]?.ToString(),
                             TargetTable  = rfc["TARGET_TABLE"]?.ToString(),
+                            TargetSchema = rfc["TARGET_SCHEMA"]?.ToString() ?? "GOLD",
                             ReturnTable  = rfc["SAP_RETURN_TABLE"]?.ToString() ?? "ET_DATA",
                             ExecPattern  = rfc["EXECUTION_PATTERN"]?.ToString() ?? "Single",
                             WriteMode    = rfc["WRITE_MODE"]?.ToString() ?? "Append",
@@ -127,6 +129,7 @@ namespace Vendor_SRM_Routing_Application.Services
         public string Department   { get; set; }
         public string SapModule    { get; set; }
         public string TargetTable  { get; set; }
+        public string TargetSchema { get; set; }
         public string ReturnTable  { get; set; }
         public string ExecPattern  { get; set; }
         public string WriteMode    { get; set; }
