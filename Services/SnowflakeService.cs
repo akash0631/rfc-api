@@ -12,9 +12,10 @@ namespace Vendor_SRM_Routing_Application.Services
     ///
     /// KEY COMPATIBILITY FIX:
     ///   Snowflake.Data 2.1.5 throws "No corresponding Snowflake type for type AnsiString"
-    ///   when parameter DbType is inferred from a boxed .NET value.
-    ///   Fix: always pass parameter values as string with DbType.String.
-    ///   Snowflake handles implicit type coercion (int, date, boolean all work from string).
+    ///   when parameter DbType is inferred from a boxed .NET value — including NULL values
+    ///   where DbType is never set and defaults to AnsiString.
+    ///   Fix: always set DbType.String before assigning Value, for every parameter.
+    ///   Snowflake handles implicit type coercion (int, date, boolean, null all work from string).
     ///
     /// Connection: V2RETAIL.GOLD via account iafphkw-hh80816 (Azure Central India).
     /// </summary>
@@ -40,21 +41,19 @@ namespace Vendor_SRM_Routing_Application.Services
             {
                 var p = cmd.CreateParameter();
                 p.ParameterName = kv.Key;
+                p.DbType = DbType.String; // Always String — prevents AnsiString default on nulls
 
                 if (kv.Value == null || kv.Value == DBNull.Value)
                 {
                     p.Value = DBNull.Value;
                 }
+                else if (kv.Value is DateTime dt)
+                {
+                    p.Value = dt.ToString("yyyy-MM-dd HH:mm:ss");
+                }
                 else
                 {
-                    // Convert all values to string — Snowflake coerces implicitly.
-                    // Avoids Snowflake.Data 2.x "No corresponding type for AnsiString" error.
-                    if (kv.Value is DateTime dt)
-                        p.Value = dt.ToString("yyyy-MM-dd HH:mm:ss");
-                    else
-                        p.Value = kv.Value.ToString();
-
-                    p.DbType = DbType.String;
+                    p.Value = kv.Value.ToString();
                 }
                 cmd.Parameters.Add(p);
             }
