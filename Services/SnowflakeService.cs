@@ -118,8 +118,22 @@ namespace Vendor_SRM_Routing_Application.Services
         }
 
         /// <summary>
+        /// Ensures the target table exists in Snowflake. Creates it with all VARCHAR columns
+        /// if it does not exist yet. Safe to call on every insert — CREATE TABLE IF NOT EXISTS
+        /// is a no-op when the table already exists.
+        /// </summary>
+        private void EnsureTableExists(string safeSchema, string safeTable, List<string> cols)
+        {
+            var colDefs = string.Join(", ", cols.ConvertAll(c => SanitizeIdentifier(c) + " VARCHAR"));
+            ExecuteNonQuery(
+                "CREATE TABLE IF NOT EXISTS " + safeSchema + "." + safeTable + " (" + colDefs + ")");
+        }
+
+        /// <summary>
         /// Bulk insert rows into a Snowflake target-schema table (default GOLD).
-        /// If dateColumn + fromDate/toDate provided: deletes existing rows for that range first.
+        /// Auto-creates the table if it does not exist (all VARCHAR columns).
+        /// If dateColumn matches an actual output column and fromDate/toDate provided:
+        ///   deletes existing rows for that date range first (upsert pattern).
         /// Inserts in chunks of 500 to stay within Snowflake limits.
         /// </summary>
         public int BulkInsert(string tableName, List<Dictionary<string, object>> rows,
@@ -127,12 +141,22 @@ namespace Vendor_SRM_Routing_Application.Services
             string targetSchema = "GOLD")
         {
             if (rows == null || rows.Count == 0) return 0;
-            var safeTable = SanitizeIdentifier(tableName);
+            var safeTable  = SanitizeIdentifier(tableName);
             var safeSchema = SanitizeIdentifier(targetSchema ?? "GOLD");
             var cols = new List<string>(rows[0].Keys);
 
-            // Delete existing range before upsert
-            if (dateColumn != null && fromDate != null && toDate != null)
+            // Auto-create table from first row's column names (all VARCHAR).
+            EnsureTableExists(safeSchema, safeTable, cols);
+
+            // Only delete the date range when dateColumn is an actual Snowflake output column.
+            // Guards against RFC input parameter names (e.g. IM_DATE_FROM) being passed in,
+            // which caused SQL compilation errors when the column did not exist in the table.
+            bool dateColValid = dateColumn != null
+                && fromDate != null
+                && toDate != null
+                && cols.Exists(c => string.Equals(c, dateColumn, StringComparison.OrdinalIgnoreCase));
+
+            if (dateColValid)
             {
                 string safeCol = SanitizeIdentifier(dateColumn);
                 ExecuteNonQuery(
@@ -149,7 +173,7 @@ namespace Vendor_SRM_Routing_Application.Services
                 const int CHUNK = 500;
                 for (int i = 0; i < rows.Count; i += CHUNK)
                 {
-                    var chunk  = rows.GetRange(i, Math.Min(CHUNK, rows.Count - i));
+                    var chunk   = rows.GetRange(i, Math.Min(CHUNK, rows.Count - i));
                     var colList = string.Join(", ", cols.ConvertAll(c => SanitizeIdentifier(c)));
                     var valRows = new List<string>();
                     var paramMap = new Dictionary<string, object>();
@@ -167,7 +191,8 @@ namespace Vendor_SRM_Routing_Application.Services
                         valRows.Add("(" + string.Join(", ", pNames) + ")");
                     }
 
-                    string insertSql = "INSERT INTO " + safeSchema + "." + safeTable + " (" + colList + ") VALUES " + string.Join(", ", valRows);
+                    string insertSql = "INSERT INTO " + safeSchema + "." + safeTable +
+                                       " (" + colList + ") VALUES " + string.Join(", ", valRows);
                     using (var cmd = conn.CreateCommand())
                     {
                         cmd.CommandText = insertSql;
