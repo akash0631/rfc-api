@@ -21,6 +21,7 @@ on:
       - 'Models/**'
       - 'App_Start/**'
       - 'Views/**'
+      - 'Services/**'
       - '*.cs'
       - '*.csproj'
       - '*.config'

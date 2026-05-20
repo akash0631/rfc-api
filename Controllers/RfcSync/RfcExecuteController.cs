@@ -153,7 +153,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                 string dateCol = dateParam?.Name;
 
                 int written = _sf.BulkInsert(ep.TargetTable, rows,
-                    dateCol, req.DateFrom, req.DateTo);
+                    dateCol, req.DateFrom, req.DateTo, ep.TargetSchema ?? "GOLD");
 
                 sw.Stop();
                 _sf.LogAccess(requestId, rfcCode, "/api/execute/" + rfcCode + "/sync",
@@ -164,7 +164,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                     RequestId       = requestId,
                     RfcCode         = rfcCode,
                     FunctionName    = ep.FunctionName,
-                    TargetTable     = "GOLD." + ep.TargetTable,
+                    TargetTable     = (ep.TargetSchema ?? "GOLD") + "." + ep.TargetTable,
                     FetchedFromSap  = rows.Count,
                     WrittenToLake   = written,
                     DateRange       = req.DateFrom.HasValue
