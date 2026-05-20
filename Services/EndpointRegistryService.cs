@@ -42,7 +42,9 @@ namespace Vendor_SRM_Routing_Application.Services
                                  DEPARTMENT, SAP_MODULE, TARGET_TABLE, SAP_RETURN_TABLE,
                                  EXECUTION_PATTERN, WRITE_MODE, BULK_BATCH_SIZE,
                                  SAP_CONNECTION_ID, STATUS, SCHEDULE_DESC,
-                                 COALESCE(TARGET_SCHEMA, 'GOLD') AS TARGET_SCHEMA
+                                 COALESCE(TARGET_SCHEMA, 'GOLD') AS TARGET_SCHEMA,
+                                 COALESCE(TIMEOUT_SECONDS, 120) AS TIMEOUT_SECONDS,
+                                 COALESCE(MAX_WINDOW_DAYS, 7)   AS MAX_WINDOW_DAYS
                           FROM GOLD.RFC_MASTER
                           WHERE STATUS = 'Active'
                           ORDER BY RFC_CODE");
@@ -78,6 +80,9 @@ namespace Vendor_SRM_Routing_Application.Services
                             BatchSize    = rfc["BULK_BATCH_SIZE"] != null ? Convert.ToInt32(rfc["BULK_BATCH_SIZE"]) : 100000,
                             ConnId       = rfc["SAP_CONNECTION_ID"] != null ? (int?)Convert.ToInt32(rfc["SAP_CONNECTION_ID"]) : 1,
                             ScheduleDesc = rfc["SCHEDULE_DESC"]?.ToString(),
+                            Status         = rfc["STATUS"]?.ToString() ?? "Active",
+                            TimeoutSeconds = rfc["TIMEOUT_SECONDS"] != null ? Convert.ToInt32(rfc["TIMEOUT_SECONDS"]) : 120,
+                            MaxWindowDays  = rfc["MAX_WINDOW_DAYS"]  != null ? Convert.ToInt32(rfc["MAX_WINDOW_DAYS"])  : 7,
                             Parameters   = paramRows.Select(p => new RfcParam
                             {
                                 Name        = p["PARAM_NAME"]?.ToString(),
@@ -136,6 +141,9 @@ namespace Vendor_SRM_Routing_Application.Services
         public int    BatchSize    { get; set; }
         public int?   ConnId       { get; set; }
         public string ScheduleDesc { get; set; }
+        public string Status         { get; set; } = "Active";
+        public int    TimeoutSeconds { get; set; } = 120;
+        public int    MaxWindowDays  { get; set; } = 7;
         public List<RfcParam> Parameters { get; set; } = new List<RfcParam>();
     }
 
