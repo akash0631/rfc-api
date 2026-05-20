@@ -1,0 +1,69 @@
+-- Migration: add MAX_WINDOW_DAYS column to RFC_MASTER for Guard 2 (max date window)
+-- Date: 2026-05-20
+-- Apply via SnowSight as ACCOUNTADMIN before deploying safeguards build.
+-- Safe to re-run (uses ADD COLUMN IF NOT EXISTS semantics via DESCRIBE check).
+
+-- 1. Add column with safe default
+ALTER TABLE V2RETAIL.GOLD.RFC_MASTER
+  ADD COLUMN IF NOT EXISTS MAX_WINDOW_DAYS NUMBER(3,0) DEFAULT 7
+  COMMENT 'Hard cap on (DateTo - DateFrom + 1) for this RFC. Wider syncs return HTTP 400.';
+
+-- 2. Tighter defaults for high-volume / hot-path RFCs (1 day window only)
+UPDATE V2RETAIL.GOLD.RFC_MASTER SET MAX_WINDOW_DAYS = 1
+  WHERE RFC_CODE IN (
+    'RFC_Sales_Data',
+    'RFC_STOCK_DATA',
+    'RFC_ALL_MOVEMENT',
+    'RFC_GRC_DATA_APPLICATION',
+    'ZMM_VND_PUR',
+    'ZMM_STO_PURN_RFC',
+    'ZRFC_ACC_DOC_POST',
+    'RFC_ZPBI_Vendor_Payment',
+    'RFC_ZPBI_PO_DATA_NEW',
+    'ZFI_PI_DATA_RFC',
+    'ZFI_GRC_DETAILS_RFC',
+    'ZFI_FB65_DISCOUNT_RFC',
+    'ZFI_RFC_GSTR1_B2BN',
+    'ZKSB1_RFC',
+    'ZSALES_01_COPY_RFC',
+    'ZSALES_MOP_RFC',
+    'ZSRM_ROUTING_LOG_RFC',
+    'ZPBI_ST_TRL01_DATA',
+    'ZPBI_ZWM_BIN_MOV',
+    'ZPBI_ZWM_BIN_MOV_ART',
+    'ZWM_PICKING_PEN_PRD_RFC',
+    'ZWM_PRD_BCG_REP_RFC',
+    'ZWM_RFC_DELV_PICK_DATA',
+    'Zwm_pick_rfc',
+    'ZFBL1N_PAYMENT_RFC',
+    'YWM_SIT1_BCG_RFC',
+    'ZMOP_POS_GET_RFC',
+    'ZMM_CITY_TRNS_RFC',
+    'ZLX03N_BCG01_RFC',
+    'ZLX03N_V07_RFC',
+    'RFC_BIN_WISE_STOCK'
+  );
+
+-- 3. Wider windows for master-data RFCs (30 days OK, low volume per day)
+UPDATE V2RETAIL.GOLD.RFC_MASTER SET MAX_WINDOW_DAYS = 30
+  WHERE RFC_CODE IN (
+    'RFC_ARTICLE_MASTER',
+    'RFC_PLANT_MASTER',
+    'RFC_VND_MASTER',
+    'RFC_MC_MASTER',
+    'RFC_STATE_MASTER',
+    'RFC_Country_MASTER',
+    'RFC_ARTICLE_COLOUR',
+    'RFC_MAP_MASTER',
+    'ZMC_SIZE_MASTER_RFC',
+    'ZART_BAR_DETAIL_RFC',
+    'ZCT04_CHAR_GET_RFC',
+    'ZRFC_CUST_FIELDS',
+    'SYNC_STORE_PLANT_MASTER'
+  );
+
+-- 4. Verify
+SELECT RFC_CODE, MAX_WINDOW_DAYS, TARGET_SCHEMA, TARGET_TABLE, STATUS
+FROM V2RETAIL.GOLD.RFC_MASTER
+WHERE COALESCE(IS_DELETED, FALSE) = FALSE
+ORDER BY MAX_WINDOW_DAYS, RFC_CODE;

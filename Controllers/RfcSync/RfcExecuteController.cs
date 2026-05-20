@@ -1,10 +1,13 @@
 using SAP.Middleware.Connector;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Description;
 using Vendor_SRM_Routing_Application.Services;
@@ -39,6 +42,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
 
         private const int MAX_DATE_DAYS   = 90;
         private const int MAX_RECORDS_NO_DATE = 100000;
+
+        // Guard 4 — concurrency lock (one in-flight /sync per RFC_CODE)
+        private static readonly ConcurrentDictionary<string, DateTime> _inFlight =
+            new ConcurrentDictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+        // Guard 6 — global sync rate limit (sliding window, max calls per minute)
+        private const int RATE_LIMIT_PER_MIN = 10;
+        private static readonly ConcurrentQueue<DateTime> _rateHits = new ConcurrentQueue<DateTime>();
+        private static readonly object _rateLock = new object();
 
         // ── PIPELINE 1: Direct RFC execution ─────────────────────────────────
 
@@ -127,27 +139,95 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
             var requestId = Guid.NewGuid().ToString("N").Substring(0, 16).ToUpper();
             if (req == null) req = new RfcExecRequest();
 
+            // --- catalog lookup --------------------------------------------------
             var ep = _registry.Get(rfcCode);
             if (ep == null)
-                return Fail(requestId, rfcCode, sw, "RFC '" + rfcCode + "' not found in catalog.");
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.NotFound,
+                    "RFC '" + rfcCode + "' not found in catalog.");
 
             if (string.IsNullOrWhiteSpace(ep.TargetTable))
-                return Fail(requestId, rfcCode, sw, "RFC '" + rfcCode + "' has no TARGET_TABLE configured in RFC_MASTER.");
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.BadRequest,
+                    "RFC '" + rfcCode + "' has no TARGET_TABLE configured in RFC_MASTER.");
 
+            // --- Guard 7: STATUS gate --------------------------------------------
+            if (!"Active".Equals(ep.Status, StringComparison.OrdinalIgnoreCase))
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.Forbidden,
+                    "RFC " + rfcCode + " STATUS=" + ep.Status + " (not Active). Refusing sync.");
+
+            // --- Guard 6: global rate limit --------------------------------------
+            if (!CheckRateLimit())
+                return FailSync(requestId, rfcCode, sw, (HttpStatusCode)429,
+                    "Rate limit: max " + RATE_LIMIT_PER_MIN + " sync calls/min globally.");
+
+            // --- Guard 1: mandatory date params (any IS_REQUIRED Date param) ----
+            var requiredDateParams = ep.Parameters
+                .Where(p => p.IsRequired && p.Type == "Scalar" && p.DataType == "Date")
+                .ToList();
+            bool needsDateFrom = requiredDateParams.Any(p => p.DefaultExpr == "DATE_FROM");
+            bool needsDateTo   = requiredDateParams.Any(p => p.DefaultExpr == "DATE_TO");
+            if (needsDateFrom && !req.DateFrom.HasValue)
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.BadRequest,
+                    "RFC " + rfcCode + " requires DateFrom (maps to " +
+                    requiredDateParams.First(p => p.DefaultExpr == "DATE_FROM").Name + ").");
+            if (needsDateTo && !req.DateTo.HasValue)
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.BadRequest,
+                    "RFC " + rfcCode + " requires DateTo (maps to " +
+                    requiredDateParams.First(p => p.DefaultExpr == "DATE_TO").Name + ").");
+
+            // legacy ValidateDateRange covers shape checks (one-of, ordering)
             var dateError = ValidateDateRange(req, ep);
-            if (dateError != null) return Fail(requestId, rfcCode, sw, dateError);
+            if (dateError != null)
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.BadRequest, dateError);
+
+            // --- Guard 2: max date window per RFC --------------------------------
+            if (req.DateFrom.HasValue && req.DateTo.HasValue)
+            {
+                int days = (req.DateTo.Value - req.DateFrom.Value).Days + 1;
+                int max  = ep.MaxWindowDays > 0 ? ep.MaxWindowDays : 7;
+                if (days > max)
+                    return FailSync(requestId, rfcCode, sw, HttpStatusCode.BadRequest,
+                        "Date window " + days + "d exceeds MAX_WINDOW_DAYS=" + max + " for " + rfcCode + ".");
+            }
+
+            // --- Guard 4: concurrency lock per RFC -------------------------------
+            if (!_inFlight.TryAdd(rfcCode, DateTime.UtcNow))
+            {
+                DateTime startedAt;
+                _inFlight.TryGetValue(rfcCode, out startedAt);
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.Conflict,
+                    "Sync for " + rfcCode + " already in flight since " + startedAt.ToString("o") + ".");
+            }
 
             try
             {
-                // Fetch from SAP
+                // --- Guard 5: pre-flight param fill ------------------------------
+                var unfilled = ep.Parameters
+                    .Where(p => p.IsRequired && p.Type == "Scalar")
+                    .Where(p => string.IsNullOrEmpty(ResolveParamValue(p, req)))
+                    .ToList();
+                if (unfilled.Any())
+                    return FailSync(requestId, rfcCode, sw, HttpStatusCode.BadRequest,
+                        "Missing required params after resolution: " +
+                        string.Join(", ", unfilled.Select(p => p.Name)) + ".");
+
+                // --- SAP connect + bind ------------------------------------------
                 var rfcPar = BaseController.rfcConfigparametersproduction();
                 var dest   = RfcDestinationManager.GetDestination(rfcPar);
                 var func   = dest.Repository.CreateFunction(ep.FunctionName);
                 ApplyParams(func, ep, req);
-                func.Invoke(dest);
+
+                // --- Guard 3: server timeout on SAP call -------------------------
+                int timeoutSec = ep.TimeoutSeconds > 0 ? ep.TimeoutSeconds : 120;
+                var invokeTask = Task.Run(() => func.Invoke(dest));
+                if (!invokeTask.Wait(TimeSpan.FromSeconds(timeoutSec)))
+                    return FailSync(requestId, rfcCode, sw, (HttpStatusCode)504,
+                        "SAP RFC timeout after " + timeoutSec + "s (configured TIMEOUT_SECONDS).");
+                if (invokeTask.IsFaulted && invokeTask.Exception != null)
+                    throw invokeTask.Exception.GetBaseException();
+
                 var rows = ExtractRows(func, ep.ReturnTable);
 
-                // Write to Snowflake
+                // --- write to Snowflake -----------------------------------------
                 var dateParam = ep.Parameters.FirstOrDefault(p =>
                     p.Type == "Scalar" && p.DataType == "Date" && p.IsRequired);
                 string dateCol = dateParam?.Name;
@@ -177,8 +257,61 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
             }
             catch (Exception ex)
             {
-                return Fail(requestId, rfcCode, sw, ex.Message);
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.InternalServerError, ex.Message);
             }
+            finally
+            {
+                DateTime _;
+                _inFlight.TryRemove(rfcCode, out _);
+            }
+        }
+
+        // Guard 6 helper: sliding-window rate limit (>10/min globally rejected)
+        private static bool CheckRateLimit()
+        {
+            lock (_rateLock)
+            {
+                var now = DateTime.UtcNow;
+                var cutoff = now.AddMinutes(-1);
+                DateTime old;
+                while (_rateHits.TryPeek(out old) && old < cutoff)
+                    _rateHits.TryDequeue(out old);
+                if (_rateHits.Count >= RATE_LIMIT_PER_MIN) return false;
+                _rateHits.Enqueue(now);
+                return true;
+            }
+        }
+
+        // Guard 5 helper: same resolution logic as ApplyParams, returns string or null
+        private string ResolveParamValue(RfcParam p, RfcExecRequest req)
+        {
+            if (req.Params != null && req.Params.ContainsKey(p.Name))
+            {
+                var v = req.Params[p.Name]?.ToString();
+                if (!string.IsNullOrEmpty(v)) return v;
+            }
+            if (p.DefaultExpr == "DATE_FROM" && req.DateFrom.HasValue)
+                return req.DateFrom.Value.ToString("yyyyMMdd");
+            if (p.DefaultExpr == "DATE_TO" && req.DateTo.HasValue)
+                return req.DateTo.Value.ToString("yyyyMMdd");
+            if (!string.IsNullOrEmpty(p.DefaultExpr))
+                return ResolveDefault(p.DefaultExpr, req);
+            return null;
+        }
+
+        // Guard 8: rich audit log for /sync rejections (Fail() only logged /execute)
+        private HttpResponseMessage FailSync(string requestId, string rfcCode, Stopwatch sw,
+                                             HttpStatusCode code, string error)
+        {
+            sw.Stop();
+            try
+            {
+                _sf.LogAccess(requestId, rfcCode, "/api/execute/" + rfcCode + "/sync",
+                    (int)code, sw.ElapsedMilliseconds, 0, error);
+            }
+            catch { }
+            return Request.CreateResponse(code,
+                new { Success = false, RequestId = requestId, RfcCode = rfcCode, Error = error });
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

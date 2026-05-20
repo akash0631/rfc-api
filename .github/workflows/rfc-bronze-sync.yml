@@ -1,0 +1,95 @@
+name: SAP -> Snowflake BRONZE daily sync
+
+# Fires once per day at 07:00 IST (01:30 UTC) and can be manually re-run for
+# any historical date window via workflow_dispatch.
+#
+# Safety: all SAP overload guards live in the IIS wrapper at sap-api.v2retail.net.
+# This job is intentionally dumb — it only loops the catalog of "known working"
+# RFCs and POSTs the previous day's date window. If you need a different date
+# window or RFC list, use workflow_dispatch.
+#
+# See docs/SAP-SNOWFLAKE-PIPELINE.md and docs/SAFEGUARDS.md for design.
+
+on:
+  schedule:
+    - cron: '30 1 * * *'   # 07:00 IST daily
+  workflow_dispatch:
+    inputs:
+      date_from:
+        description: 'YYYY-MM-DD (default: yesterday UTC)'
+        required: false
+        type: string
+      date_to:
+        description: 'YYYY-MM-DD (default: yesterday UTC)'
+        required: false
+        type: string
+      rfc_list:
+        description: 'CSV of RFCs (default: 8 known-working)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # only one bronze-sync run at a time globally, even across schedule + dispatch
+  group: rfc-bronze-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2          # don't hammer SAP — at most 2 RFCs concurrently
+      matrix:
+        # 8 RFCs confirmed working as of 2026-05-19 (BRONZE.RFCTEST_* sweep)
+        rfc:
+          - RFC_ARTICLE_MASTER
+          - RFC_GRC_DATA_APPLICATION
+          - RFC_Sales_Data
+          - RFC_ZPBI_Vendor_Payment
+          - ZMM_STO_PURN_RFC
+          - ZMM_VND_PUR
+          - RFC_ALL_MOVEMENT
+          - RFC_PLANT_MASTER
+    steps:
+      - name: Resolve date window
+        id: dates
+        run: |
+          if [ -n "${{ inputs.date_from }}" ] && [ -n "${{ inputs.date_to }}" ]; then
+            FROM="${{ inputs.date_from }}"
+            TO="${{ inputs.date_to }}"
+          else
+            FROM=$(date -u -d "yesterday" +%F)
+            TO=$FROM
+          fi
+          echo "from=$FROM" >> "$GITHUB_OUTPUT"
+          echo "to=$TO"     >> "$GITHUB_OUTPUT"
+          echo "Window: $FROM -> $TO for ${{ matrix.rfc }}"
+
+      - name: POST /api/execute/${{ matrix.rfc }}/sync
+        env:
+          RFC_API_KEY: ${{ secrets.RFC_API_KEY }}
+        run: |
+          set -euo pipefail
+          FROM="${{ steps.dates.outputs.from }}"
+          TO="${{ steps.dates.outputs.to }}"
+          PAYLOAD=$(printf '{"DateFrom":"%s","DateTo":"%s"}' "$FROM" "$TO")
+          echo "Posting to ${{ matrix.rfc }} with $PAYLOAD"
+          HTTP_STATUS=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+            --max-time 180 \
+            -X POST "https://sap-api.v2retail.net/api/execute/${{ matrix.rfc }}/sync" \
+            -H "X-RFC-Key: $RFC_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD") || HTTP_STATUS="curl_failed"
+          echo "HTTP $HTTP_STATUS"
+          cat /tmp/resp.json || true
+          echo
+          # Allow 200 (OK) only. Any 4xx/5xx fails the matrix cell so we see it
+          # in the GHA UI without retrying (rate limit + concurrency guards in
+          # the wrapper already handle transient cases).
+          case "$HTTP_STATUS" in
+            200) exit 0 ;;
+            *)   exit 1 ;;
+          esac
