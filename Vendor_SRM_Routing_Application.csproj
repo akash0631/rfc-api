@@ -258,6 +258,7 @@
     <Compile Include="Services\SnowflakeService.cs" />
     <Compile Include="Services\EndpointRegistryService.cs" />
     <Compile Include="Services\SapConnectionService.cs" />
+    <Compile Include="Services\SapTableDumpService.cs" />
     <Compile Include="Services\RfcSyncExecutionService.cs" />
     <Compile Include="Services\SyncJobService.cs" />
     <Compile Include="Services\DataSyncScheduler.cs" />
