@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Snowflake.Data.Client;
 
@@ -201,6 +202,123 @@ namespace Vendor_SRM_Routing_Application.Services
                 }
             }
             return total;
+        }
+
+        /// <summary>
+        /// Atomic full-refresh load via PUT + INSERT OVERWRITE.
+        /// Far faster than BulkInsert for large/wide rows because COPY-from-stage uses
+        /// Snowflake's bulk path, not row-by-row VALUES.
+        ///
+        /// Behaviour:
+        ///   1. CREATE TABLE IF NOT EXISTS &lt;schema&gt;.&lt;table&gt; with VARCHAR(&lt;sap_len&gt;)
+        ///      for each SAP column + 4 audit columns (_LOADED_AT, _BATCH_ID,
+        ///      _SOURCE_SYSTEM, _BUSINESS_DATE).
+        ///   2. Write rows to a UTF-8 CSV in %TEMP%.
+        ///   3. PUT 'file://...' @&lt;schema&gt;.%&lt;table&gt; AUTO_COMPRESS=TRUE OVERWRITE=TRUE.
+        ///   4. INSERT OVERWRITE INTO &lt;schema&gt;.&lt;table&gt; (cols, audit cols) SELECT $1..$N,
+        ///      CURRENT_TIMESTAMP(), :batchId, :sourceSystem, NULL FROM @stage/&lt;file&gt;.gz.
+        ///   5. REMOVE staged file (best-effort).
+        ///
+        /// Returns rows actually landed (COUNT WHERE _BATCH_ID matches).
+        /// </summary>
+        public long BulkLoadViaStage(
+            string targetSchema,
+            string targetTable,
+            List<SapTableDumpService.FieldMeta> sapCols,
+            List<Dictionary<string, object>> rows,
+            string batchId,
+            string sourceSystem)
+        {
+            if (sapCols == null || sapCols.Count == 0)
+                throw new ArgumentException("sapCols required", "sapCols");
+            if (string.IsNullOrEmpty(batchId)) throw new ArgumentException("batchId required", "batchId");
+
+            string safeSchema = SanitizeIdentifier(targetSchema ?? "RAW_SAP_MASTER");
+            string safeTable  = SanitizeIdentifier(targetTable);
+            string fq         = safeSchema + "." + safeTable;
+            string stageRef   = "@" + safeSchema + ".%" + safeTable;
+
+            // 1. CREATE TABLE IF NOT EXISTS with proper VARCHAR(length) + audit cols
+            EnsureLandingTableExists(safeSchema, safeTable, sapCols);
+
+            // 2. Write CSV
+            string csvPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                safeTable + "_" + batchId.Substring(0, Math.Min(8, batchId.Length)) + ".csv");
+
+            using (var sw = new System.IO.StreamWriter(csvPath, false, new System.Text.UTF8Encoding(false)))
+            {
+                foreach (var row in (rows ?? new List<Dictionary<string, object>>()))
+                {
+                    var sb = new System.Text.StringBuilder();
+                    for (int i = 0; i < sapCols.Count; i++)
+                    {
+                        if (i > 0) sb.Append(',');
+                        string v = "";
+                        if (row != null && row.ContainsKey(sapCols[i].Name) && row[sapCols[i].Name] != null)
+                            v = row[sapCols[i].Name].ToString();
+                        sb.Append('"').Append(v.Replace("\"", "\"\"")).Append('"');
+                    }
+                    sw.WriteLine(sb.ToString());
+                }
+            }
+
+            try
+            {
+                // 3. PUT to table stage
+                string putPath = csvPath.Replace("\\", "/");
+                ExecuteNonQuery("PUT 'file://" + putPath + "' " + stageRef +
+                                " AUTO_COMPRESS=TRUE OVERWRITE=TRUE");
+
+                // 4. INSERT OVERWRITE INTO ... (atomic replace)
+                string sapColList = string.Join(", ", sapCols.ConvertAll(c => SanitizeIdentifier(c.Name)));
+                string sapPositions = string.Join(", ",
+                    Enumerable.Range(1, sapCols.Count).Select(i => "$" + i));
+                string csvFileName = System.IO.Path.GetFileName(csvPath);
+
+                // batchId is a server-issued Guid — safe to inline; sourceSystem is from app config.
+                string sql =
+                    "INSERT OVERWRITE INTO " + fq + " (" + sapColList +
+                    ", _LOADED_AT, _BATCH_ID, _SOURCE_SYSTEM, _BUSINESS_DATE) " +
+                    "SELECT " + sapPositions +
+                    ", CURRENT_TIMESTAMP(), '" + batchId.Replace("'", "''") + "'" +
+                    ", '" + (sourceSystem ?? "").Replace("'", "''") + "'" +
+                    ", NULL " +
+                    "FROM " + stageRef + "/" + csvFileName + ".gz " +
+                    "(FILE_FORMAT => (TYPE='CSV' FIELD_OPTIONALLY_ENCLOSED_BY='\"' " +
+                    "NULL_IF=('') EMPTY_FIELD_AS_NULL=TRUE))";
+                ExecuteNonQuery(sql);
+
+                // 5. Best-effort cleanup of the staged file
+                try { ExecuteNonQuery("REMOVE " + stageRef + "/" + csvFileName + ".gz"); }
+                catch { /* non-fatal */ }
+
+                var landed = ExecuteScalar(
+                    "SELECT COUNT(*) FROM " + fq + " WHERE _BATCH_ID = :bid",
+                    new Dictionary<string, object> { { "bid", batchId } });
+                return landed == null ? 0 : Convert.ToInt64(landed);
+            }
+            finally
+            {
+                try { if (System.IO.File.Exists(csvPath)) System.IO.File.Delete(csvPath); }
+                catch { /* best effort */ }
+            }
+        }
+
+        /// <summary>CREATE TABLE IF NOT EXISTS with SAP-correct VARCHAR(length) + 4 audit cols.</summary>
+        private void EnsureLandingTableExists(string safeSchema, string safeTable,
+            List<SapTableDumpService.FieldMeta> sapCols)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("CREATE TABLE IF NOT EXISTS ").Append(safeSchema).Append('.').Append(safeTable).Append(" (");
+            foreach (var c in sapCols)
+                sb.Append(SanitizeIdentifier(c.Name))
+                  .Append(" VARCHAR(").Append(Math.Max(c.Length, 1)).Append("), ");
+            sb.Append("_LOADED_AT TIMESTAMP_LTZ, ");
+            sb.Append("_BATCH_ID VARCHAR, ");
+            sb.Append("_SOURCE_SYSTEM VARCHAR, ");
+            sb.Append("_BUSINESS_DATE DATE)");
+            ExecuteNonQuery(sb.ToString());
         }
 
         /// <summary>Log RFC API call to GOLD.RFC_API_ACCESS_LOG (non-blocking).</summary>
