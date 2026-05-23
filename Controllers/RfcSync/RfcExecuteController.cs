@@ -159,6 +159,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                 return FailSync(requestId, rfcCode, sw, (HttpStatusCode)429,
                     "Rate limit: max " + RATE_LIMIT_PER_MIN + " sync calls/min globally.");
 
+            // --- TableDump dispatch: bulk SAP-table dump via RFC_READ_TABLE ------
+            // Skips Guards 1, 2, 5 (date params / date window / param fill) - not applicable
+            // to full-refresh master loads. Keeps Guards 3, 4, 6, 7, 8.
+            if (string.Equals(ep.ExecPattern, "TableDump", StringComparison.OrdinalIgnoreCase))
+                return SyncTableDump(rfcCode, ep, req, requestId, sw);
+
             // --- Guard 1: mandatory date params (any IS_REQUIRED Date param) ----
             var requiredDateParams = ep.Parameters
                 .Where(p => p.IsRequired && p.Type == "Scalar" && p.DataType == "Date")
@@ -251,6 +257,113 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                         ? req.DateFrom.Value.ToString("yyyy-MM-dd") + " → " + req.DateTo.Value.ToString("yyyy-MM-dd")
                         : "ALL",
                     QueryApi        = "/api/datalake/" + ep.TargetTable,
+                    ElapsedMs       = sw.ElapsedMilliseconds,
+                    SyncedAt        = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                });
+            }
+            catch (Exception ex)
+            {
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.InternalServerError, ex.Message);
+            }
+            finally
+            {
+                DateTime _;
+                _inFlight.TryRemove(rfcCode, out _);
+            }
+        }
+
+        // ── TableDump dispatch (EXECUTION_PATTERN='TableDump') ────────────────
+        //
+        // Bulk SAP-table dump using RFC_READ_TABLE with chunked + DD03L-based PK
+        // stitching. Lands raw rows into <TargetSchema>.<TargetTable> via PUT +
+        // INSERT OVERWRITE. Promoted to BRONZE by a paired Snowflake TASK.
+        //
+        // Catalog row drives behavior:
+        //   ep.SourceTable  (defaults to ep.TargetTable)
+        //   ep.FieldList    (CSV; empty/NULL = all columns)
+        //   ep.LoadMode     ('full' shipped; 'delta'/'rolling' reserved for v0.2)
+        //   ep.TargetSchema (defaults from registry; 'RAW_SAP_MASTER' recommended)
+        //   ep.TimeoutSeconds (applied to SAP read; Guard 3)
+        //
+        // Uses Guards 3 (timeout), 4 (concurrency lock per RFC), 6 (rate limit),
+        // 7 (status), 8 (audit log). Date guards intentionally skipped.
+        private HttpResponseMessage SyncTableDump(string rfcCode, RfcEndpoint ep, RfcExecRequest req,
+                                                  string requestId, Stopwatch sw)
+        {
+            string sourceTable = !string.IsNullOrWhiteSpace(ep.SourceTable) ? ep.SourceTable : ep.TargetTable;
+            string targetSchema = !string.IsNullOrWhiteSpace(ep.TargetSchema) ? ep.TargetSchema : "RAW_SAP_MASTER";
+            string loadMode = (ep.LoadMode ?? "full").ToLowerInvariant();
+            string sourceSystem = "SAP_PROD_600";
+
+            // Only 'full' is implemented in v0.1. Delta/rolling are reserved.
+            if (loadMode != "full")
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.NotImplemented,
+                    "LoadMode '" + ep.LoadMode + "' not implemented yet; only 'full' is supported.");
+
+            // Guard 4: concurrency lock per RFC
+            if (!_inFlight.TryAdd(rfcCode, DateTime.UtcNow))
+            {
+                DateTime startedAt;
+                _inFlight.TryGetValue(rfcCode, out startedAt);
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.Conflict,
+                    "Sync for " + rfcCode + " already in flight since " + startedAt.ToString("o") + ".");
+            }
+
+            try
+            {
+                // Parse field list (empty = all columns)
+                var fields = new List<string>();
+                if (!string.IsNullOrWhiteSpace(ep.FieldList))
+                {
+                    fields = ep.FieldList.Split(',')
+                        .Select(s => s.Trim())
+                        .Where(s => s.Length > 0)
+                        .ToList();
+                }
+
+                var dumpSvc = new SapTableDumpService();
+                int timeoutSec = ep.TimeoutSeconds > 0 ? ep.TimeoutSeconds : 120;
+
+                // Guard 3: timeout wrapper on the SAP read
+                List<SapTableDumpService.FieldMeta> cols = null;
+                List<Dictionary<string, object>> rows = null;
+                var readTask = Task.Run(() =>
+                {
+                    var result = dumpSvc.ReadFullTable(sourceTable, fields);
+                    cols = result.Columns;
+                    rows = result.Rows;
+                });
+                if (!readTask.Wait(TimeSpan.FromSeconds(timeoutSec)))
+                    return FailSync(requestId, rfcCode, sw, (HttpStatusCode)504,
+                        "SAP RFC_READ_TABLE timeout after " + timeoutSec + "s on " + sourceTable + ".");
+                if (readTask.IsFaulted && readTask.Exception != null)
+                    throw readTask.Exception.GetBaseException();
+
+                if (cols == null || cols.Count == 0)
+                    return FailSync(requestId, rfcCode, sw, HttpStatusCode.InternalServerError,
+                        "RFC_READ_TABLE returned no field metadata for " + sourceTable + ".");
+
+                // Atomic landing via PUT + INSERT OVERWRITE
+                string batchId = requestId;       // reuse for cross-linking with RFC_API_ACCESS_LOG
+                long landed = _sf.BulkLoadViaStage(targetSchema, ep.TargetTable, cols, rows, batchId, sourceSystem);
+
+                sw.Stop();
+                _sf.LogAccess(requestId, rfcCode, "/api/execute/" + rfcCode + "/sync",
+                    200, sw.ElapsedMilliseconds, (int)Math.Min(landed, int.MaxValue));
+
+                return Request.CreateResponse(HttpStatusCode.OK, new
+                {
+                    Success         = true,
+                    RequestId       = requestId,
+                    RfcCode         = rfcCode,
+                    ExecutionPattern = "TableDump",
+                    SourceTable     = sourceTable,
+                    TargetTable     = targetSchema + "." + ep.TargetTable,
+                    Columns         = cols.Count,
+                    FetchedFromSap  = rows != null ? rows.Count : 0,
+                    WrittenToLake   = landed,
+                    LoadMode        = loadMode,
+                    BatchId         = batchId,
                     ElapsedMs       = sw.ElapsedMilliseconds,
                     SyncedAt        = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
                 });
