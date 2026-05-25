@@ -26,7 +26,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
     /// EXPORT:  EX_RETURN    (BAPIRET2) - TYPE 'S'/'E', MESSAGE,
     ///                       PARAMETER carries the new PO number on success.
     ///
-    /// SAP Target: QUALITY (192.168.144.179 / Client 600 / S4Q)
+    /// SAP Target: PRODUCTION (192.168.144.170 / Client 600 / PRD)
     /// </summary>
     public class ZMM_PO_CREATION_RFCController : BaseController
     {
@@ -56,7 +56,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                 {
                     try
                     {
-                        RfcConfigParameters rfcPar = BaseController.rfcConfigparametersquality(); // QUALITY (.179 / Client 600)
+                        RfcConfigParameters rfcPar = BaseController.rfcConfigparametersproduction(); // PRODUCTION (.170 / Client 600 / PRD)
                         RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                         IRfcFunction myfun = dest.Repository.CreateFunction("ZMM_PO_CREATION_RFC");
 
