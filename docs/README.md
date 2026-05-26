@@ -40,3 +40,5 @@ Dated change notes — append a new file each time a controller is rewired, an e
 - Dates: `YYYY-MM-DD`.
 - Cross-link with relative paths (`./PO-CREATOR-API.md`), not absolute URLs.
 - Code blocks fenced with language tag (`abap`, `csharp`, `json`, `bash`).
+
+- [RFC-POOL-WEDGE-RUNBOOK.md](RFC-POOL-WEDGE-RUNBOOK.md) — V2RfcTestPool NCo wedge symptom + recycle fix + watchdog details (2026-05-26)
