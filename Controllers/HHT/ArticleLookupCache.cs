@@ -226,17 +226,28 @@ namespace Vendor_Application_MVC.Controllers.HHT
             throw new Exception("DataV2 (Server 28) connection failed");
         }
 
-        public static object Status() => new {
-            loaded             = IsLoaded,
-            loading            = Loading,
-            loaded_at_utc      = _loadedAtUtc == DateTime.MinValue ? null : (object)_loadedAtUtc.ToString("o"),
-            refresh_started_utc= _refreshStartedUtc == DateTime.MinValue ? null : (object)_refreshStartedUtc.ToString("o"),
-            listing_rows       = _listingRows,
-            size_rows          = _sizeRows,
-            discount_rows      = _discountRows,
-            last_load_ms       = _lastLoadMs,
-            refresh_minutes    = REFRESH_MINUTES,
-            last_error         = _lastError
-        };
+        private static readonly DateTime _processStartUtc = DateTime.UtcNow;
+        private static int _statusHits = 0;
+
+        public static object Status() {
+            Interlocked.Increment(ref _statusHits);
+            return new {
+                loaded              = IsLoaded,
+                loading             = Loading,
+                loaded_at_utc       = _loadedAtUtc == DateTime.MinValue ? null : (object)_loadedAtUtc.ToString("o"),
+                refresh_started_utc = _refreshStartedUtc == DateTime.MinValue ? null : (object)_refreshStartedUtc.ToString("o"),
+                listing_rows        = _listingRows,
+                size_rows           = _sizeRows,
+                discount_rows       = _discountRows,
+                last_load_ms        = _lastLoadMs,
+                refresh_minutes     = REFRESH_MINUTES,
+                last_error          = _lastError,
+                pid                 = Process.GetCurrentProcess().Id,
+                appdomain_id        = AppDomain.CurrentDomain.Id,
+                appdomain_started_utc = _processStartUtc.ToString("o"),
+                appdomain_age_sec   = (int)(DateTime.UtcNow - _processStartUtc).TotalSeconds,
+                status_hits         = _statusHits
+            };
+        }
     }
 }
