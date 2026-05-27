@@ -27,10 +27,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
     /// EXPORT:  EX_DATA  (ZTT_ART_CRT_RET) - table of return rows.
     ///                   Fields: SAP_ART (material number), MSG_TYP (S/E), MESSAGE.
     ///
-    /// SAP Target: DEVELOPMENT (192.168.144.174 / Client 210 / S4D)
-    ///             ZCL_MM_ARTICLE_FINAL class lives on S4D only — swap to
-    ///             rfcConfigparametersquality() / rfcConfigparametersproduction()
-    ///             after Bhavesh STMS-promotes the class + FM.
+    /// SAP Target: SELECTABLE via ?env=dev|qa|prod (default: dev).
+    ///   dev  -> 192.168.144.174 / Client 210 / S4D
+    ///   qa   -> S4Q (rfcConfigparametersquality())
+    ///   prod -> 192.168.144.170 / Client 600 / PRD
+    /// FM + ZCL_MM_ARTICLE_FINAL verified live on DEV and QA (2026-05-27).
+    /// Hold env=prod until STMS promotion confirmed.
     ///
     /// Concurrent calls serialized via process-wide semaphore (FM uses SAP memory IDs
     /// inside ZCL_MM_ARTICLE_FINAL — concurrent invocations could race).
@@ -41,13 +43,38 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
         private const int GateTimeoutSeconds = 120;
 
         [HttpPost]
-        public async Task<HttpResponseMessage> Post([FromBody] ZMM_ART_CREATION_RFCRequest request)
+        public async Task<HttpResponseMessage> Post([FromBody] ZMM_ART_CREATION_RFCRequest request, string env = "dev")
         {
             if (request == null)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = "Request body is required." });
 
             if (request.IM_DATA == null || request.IM_DATA.Count == 0)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = "IM_DATA must contain at least one article row." });
+
+            string envNorm = (env ?? "dev").Trim().ToLowerInvariant();
+            RfcConfigParameters rfcPar;
+            string envLabel;
+            switch (envNorm)
+            {
+                case "qa":
+                case "quality":
+                    rfcPar = BaseController.rfcConfigparametersquality();
+                    envLabel = "qa";
+                    break;
+                case "prod":
+                case "production":
+                    rfcPar = BaseController.rfcConfigparametersproduction();
+                    envLabel = "prod";
+                    break;
+                case "dev":
+                case "development":
+                case "":
+                    rfcPar = BaseController.rfcConfigparameters();
+                    envLabel = "dev";
+                    break;
+                default:
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = $"Invalid env '{env}'. Use dev | qa | prod." });
+            }
 
             bool entered = false;
             try
@@ -60,7 +87,6 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                 {
                     try
                     {
-                        RfcConfigParameters rfcPar = BaseController.rfcConfigparameters(); // DEV (.174 / Client 210 / S4D)
                         RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                         IRfcFunction myfun = dest.Repository.CreateFunction("ZMM_ART_CREATION_RFC");
 
@@ -118,6 +144,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                         return Request.CreateResponse(HttpStatusCode.OK, new
                         {
                             Status = errorCount == 0,
+                            Env = envLabel,
                             Message = $"{successCount} created, {errorCount} failed (of {results.Count} rows).",
                             SuccessCount = successCount,
                             ErrorCount = errorCount,
