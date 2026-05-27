@@ -9,14 +9,64 @@ using System.Security.Principal;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
+using System.Web.Http.Description;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace Vendor_Application_MVC.Controllers.HHT
 {
-    // BRD: V09 -> 0001 Article Putaway HHT screen.
-    // POST /api/article-lookup  body: { "store":"HA11", "article":"1125011967001" }
-    // Returns: { status, article_type: L|RL|NL|C, article_size: BS|S|NORMAL, ... }
+    /// <summary>Request body for POST /api/article-lookup.</summary>
+    public class ArticleLookupRequest
+    {
+        /// <summary>Store code, e.g. "HA11".</summary>
+        [JsonProperty("store")] public string Store { get; set; }
+        /// <summary>13-digit variant article number (numeric).</summary>
+        [JsonProperty("article")] public string Article { get; set; }
+    }
+
+    /// <summary>Response from POST /api/article-lookup. On miss: status=false + null type/size (HHT continues putaway per BRD §5.4).</summary>
+    public class ArticleLookupResponse
+    {
+        [JsonProperty("status")]        public bool   Status       { get; set; }
+        [JsonProperty("store")]         public string Store        { get; set; }
+        [JsonProperty("article")]       public string Article      { get; set; }
+        /// <summary>L | RL | NL | C (null on miss).</summary>
+        [JsonProperty("article_type")]  public string ArticleType  { get; set; }
+        /// <summary>BS | S | NORMAL (null on miss).</summary>
+        [JsonProperty("article_size")]  public string ArticleSize  { get; set; }
+        [JsonProperty("source")]        public string Source       { get; set; }
+        [JsonProperty("cache_load_ms")] public int    CacheLoadMs  { get; set; }
+        [JsonProperty("ms")]            public int    Ms           { get; set; }
+        [JsonProperty("message")]       public string Message      { get; set; }
+    }
+
+    public class ArticleLookupWarmRequest
+    {
+        /// <summary>Store code to pre-load into RAM cache.</summary>
+        [JsonProperty("store")] public string Store { get; set; }
+    }
+
+    public class ArticleLookupWarmResponse
+    {
+        [JsonProperty("warmed")]  public string Warmed { get; set; }
+        [JsonProperty("load_ms")] public int    LoadMs { get; set; }
+        [JsonProperty("error")]   public string Error  { get; set; }
+        [JsonProperty("status")]  public object Status { get; set; }
+    }
+
+    public class ArticleLookupInvalidateRequest
+    {
+        /// <summary>Optional. Omit to invalidate all cached stores.</summary>
+        [JsonProperty("store")] public string Store { get; set; }
+    }
+
+    public class ArticleLookupInvalidateResponse
+    {
+        [JsonProperty("invalidated")] public string Invalidated { get; set; }
+        [JsonProperty("status")]      public object Status      { get; set; }
+    }
+
+    /// <summary>HHT Article Putaway lookup (V09 → 0001). Returns article_type + article_size for a (store, article) pair.</summary>
     public class ArticleLookupController : ApiController
     {
         [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -66,6 +116,7 @@ namespace Vendor_Application_MVC.Controllers.HHT
             return r;
         }
 
+        /// <summary>CORS preflight.</summary>
         [HttpOptions, Route("api/article-lookup")]
         public HttpResponseMessage Options()
         {
@@ -76,14 +127,16 @@ namespace Vendor_Application_MVC.Controllers.HHT
             return r;
         }
 
+        /// <summary>Cache stats: per-store entries, ages, row counts, discount-set size.</summary>
         [HttpGet, Route("api/article-lookup/status")]
         public HttpResponseMessage Status() => Json(HttpStatusCode.OK, ArticleLookupCache.Status());
 
+        /// <summary>Pre-load a store into RAM cache. First scan after warm is &lt;10 ms.</summary>
         [HttpPost, Route("api/article-lookup/warm")]
-        public HttpResponseMessage Warm() {
-            string body = Request.Content.ReadAsStringAsync().Result;
-            JObject req = null; try { req = JObject.Parse(body ?? ""); } catch { }
-            string store = req?["store"]?.ToString()?.Trim();
+        [ResponseType(typeof(ArticleLookupWarmResponse))]
+        public HttpResponseMessage Warm([FromBody] ArticleLookupWarmRequest req)
+        {
+            string store = req?.Store?.Trim();
             if (string.IsNullOrEmpty(store))
                 return Json(HttpStatusCode.BadRequest, new { status = false, message = "store required for warm" });
             try {
@@ -94,17 +147,22 @@ namespace Vendor_Application_MVC.Controllers.HHT
             }
         }
 
+        /// <summary>
+        /// Look up article_type (L|RL|NL|C) and article_size (BS|S|NORMAL) for a (store, article) pair.
+        /// Cold first-call per store: 2-5 s (cache load from DataV2 Server 28).
+        /// Warm: &lt;10 ms (60-min TTL).
+        /// Failure mode: HTTP 200 + status=false + null fields (HHT continues putaway per BRD §5.4).
+        /// </summary>
         [HttpPost, Route("api/article-lookup")]
-        public async Task<HttpResponseMessage> Lookup()
+        [ResponseType(typeof(ArticleLookupResponse))]
+        public HttpResponseMessage Lookup([FromBody] ArticleLookupRequest req)
         {
             var t0 = DateTime.UtcNow;
-            string body = await Request.Content.ReadAsStringAsync();
-            JObject req;
-            try { req = JObject.Parse(body ?? ""); }
-            catch { return Json(HttpStatusCode.BadRequest, new { status = false, message = "Invalid JSON body" }); }
+            if (req == null)
+                return Json(HttpStatusCode.BadRequest, new { status = false, message = "Invalid JSON body" });
 
-            string store   = (req["store"]   ?? req["STORE"]   ?? req["IM_STORE"])?.ToString()?.Trim();
-            string article = (req["article"] ?? req["ARTICLE"] ?? req["ARTICLE_NUMBER"] ?? req["IM_ARTICLE"])?.ToString()?.Trim();
+            string store   = req.Store?.Trim();
+            string article = req.Article?.Trim();
 
             if (string.IsNullOrEmpty(store) || string.IsNullOrEmpty(article))
                 return Json(HttpStatusCode.BadRequest, new { status = false, message = "store and article are required" });
@@ -113,10 +171,6 @@ namespace Vendor_Application_MVC.Controllers.HHT
             if (!long.TryParse(article, out artNum))
                 return Json(HttpStatusCode.BadRequest, new { status = false, message = "article must be numeric (variant article number)" });
 
-            // Per-store in-memory cache. First call into a store triggers a synchronous
-            // load (~5-15 s while Server 28 buffer pool warms its heap pages), every
-            // subsequent call in that store is served from RAM in <10 ms until the
-            // 60-min TTL expires.
             try
             {
                 var (typeVal, sizeRaw, _, loadMs) = ArticleLookupCache.Get(store, artNum);
@@ -134,7 +188,6 @@ namespace Vendor_Application_MVC.Controllers.HHT
             }
             catch (Exception ex)
             {
-                // BRD 5.4: lookup failure must not block the operator.
                 return Json(HttpStatusCode.OK, new {
                     status       = false,
                     store        = store,
@@ -147,11 +200,12 @@ namespace Vendor_Application_MVC.Controllers.HHT
             }
         }
 
+        /// <summary>Flush cache. Pass {store} to flush one store, or empty body to flush all.</summary>
         [HttpPost, Route("api/article-lookup/invalidate")]
-        public HttpResponseMessage Invalidate() {
-            string body = Request.Content.ReadAsStringAsync().Result;
-            JObject req = null; try { req = JObject.Parse(body ?? ""); } catch { }
-            string store = req?["store"]?.ToString();
+        [ResponseType(typeof(ArticleLookupInvalidateResponse))]
+        public HttpResponseMessage Invalidate([FromBody] ArticleLookupInvalidateRequest req)
+        {
+            string store = req?.Store;
             if (string.IsNullOrEmpty(store)) ArticleLookupCache.InvalidateAll();
             else ArticleLookupCache.InvalidateStore(store);
             return Json(HttpStatusCode.OK, new { invalidated = store ?? "(all)", status = ArticleLookupCache.Status() });
