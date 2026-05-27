@@ -142,6 +142,19 @@ f.addEventListener('submit', e => {
   lookup(store, article);
 });
 
+// Auto-warm the store cache once the operator commits a store value, so the
+// first barcode scan is fast. Idempotent on the server.
+let warmedStore = null;
+async function maybeWarm() {
+  const store = $('store').value.trim().toUpperCase();
+  if (!store || store === warmedStore) return;
+  warmedStore = store;
+  try { await fetch('/api/article-lookup/warm', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ store }) }); } catch {}
+}
+$('store').addEventListener('blur', maybeWarm);
+$('store').addEventListener('change', maybeWarm);
+window.addEventListener('load', maybeWarm);
+
 // HHT barcode scanners send the scan + Enter; submit auto-fires.
 // Auto-clear article field after a successful lookup so next scan replaces it.
 out.addEventListener('animationend', () => {});
