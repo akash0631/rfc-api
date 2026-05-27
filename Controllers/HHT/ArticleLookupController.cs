@@ -76,6 +76,15 @@ namespace Vendor_Application_MVC.Controllers.HHT
             return r;
         }
 
+        [HttpGet, Route("api/article-lookup/status")]
+        public HttpResponseMessage Status() => Json(HttpStatusCode.OK, ArticleLookupCache.Status());
+
+        [HttpPost, Route("api/article-lookup/warm")]
+        public HttpResponseMessage Warm() {
+            ArticleLookupCache.EnsureLoadStarted();
+            return Json(HttpStatusCode.OK, new { triggered = true, status = ArticleLookupCache.Status() });
+        }
+
         [HttpPost, Route("api/article-lookup")]
         public async Task<HttpResponseMessage> Lookup()
         {
@@ -95,11 +104,25 @@ namespace Vendor_Application_MVC.Controllers.HHT
             if (!long.TryParse(article, out artNum))
                 return Json(HttpStatusCode.BadRequest, new { status = false, message = "article must be numeric (variant article number)" });
 
-            // BRD rule:
-            //   article_type = 'C'  if active discount row exists in ST_ART_DISCOUNT for (store|All, article, today)
-            //                 else L_VAR_ARTICLE.L_STATUS (L/RL/NL) for (store, article)
-            //                 else 'NL'
-            //   article_size = SZ_GROUP_VAR_ARTICLE.SIZE_GRP (BS/S) for article; 'N' -> 'NORMAL'
+            // Fast path: in-memory snapshot of all 3 tables. Refresh hourly.
+            // Server 28 heaps have no index, so we mirror the columns we need.
+            var cached = ArticleLookupCache.TryGet(store, artNum);
+            if (cached.HasValue)
+            {
+                string ct = cached.Value.typeVal;
+                string cs = cached.Value.sizeRaw == "BS" ? "BS" : cached.Value.sizeRaw == "S" ? "S" : "NORMAL";
+                return Json(HttpStatusCode.OK, new {
+                    status        = true,
+                    store         = store,
+                    article       = article,
+                    article_type  = ct,
+                    article_size  = cs,
+                    source        = "cache",
+                    ms            = (int)(DateTime.UtcNow - t0).TotalMilliseconds
+                });
+            }
+
+            // Cache cold (warming up after pool recycle). Fall through to live SQL.
             const string sql = @"
 DECLARE @today DATE = CAST(GETDATE() AS DATE);
 SELECT
@@ -168,6 +191,7 @@ SELECT
                     article       = article,
                     article_type  = typeVal,
                     article_size  = sizeVal,
+                    source        = "sql",
                     ms            = (int)(DateTime.UtcNow - t0).TotalMilliseconds
                 });
             }
