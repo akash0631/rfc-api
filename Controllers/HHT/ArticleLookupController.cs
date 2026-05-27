@@ -81,8 +81,17 @@ namespace Vendor_Application_MVC.Controllers.HHT
 
         [HttpPost, Route("api/article-lookup/warm")]
         public HttpResponseMessage Warm() {
-            ArticleLookupCache.EnsureLoadStarted();
-            return Json(HttpStatusCode.OK, new { triggered = true, status = ArticleLookupCache.Status() });
+            string body = Request.Content.ReadAsStringAsync().Result;
+            JObject req = null; try { req = JObject.Parse(body ?? ""); } catch { }
+            string store = req?["store"]?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(store))
+                return Json(HttpStatusCode.BadRequest, new { status = false, message = "store required for warm" });
+            try {
+                var (t, s, _, ms) = ArticleLookupCache.Get(store, 0);
+                return Json(HttpStatusCode.OK, new { warmed = store, load_ms = ms, status = ArticleLookupCache.Status() });
+            } catch (Exception ex) {
+                return Json(HttpStatusCode.OK, new { warmed = store, error = ex.Message, status = ArticleLookupCache.Status() });
+            }
         }
 
         [HttpPost, Route("api/article-lookup")]
@@ -104,100 +113,28 @@ namespace Vendor_Application_MVC.Controllers.HHT
             if (!long.TryParse(article, out artNum))
                 return Json(HttpStatusCode.BadRequest, new { status = false, message = "article must be numeric (variant article number)" });
 
-            // Fast path: in-memory snapshot of all 3 tables. Refresh hourly.
-            // Server 28 heaps have no index, so we mirror the columns we need.
-            var cached = ArticleLookupCache.TryGet(store, artNum);
-            if (cached.HasValue)
-            {
-                string ct = cached.Value.typeVal;
-                string cs = cached.Value.sizeRaw == "BS" ? "BS" : cached.Value.sizeRaw == "S" ? "S" : "NORMAL";
-                return Json(HttpStatusCode.OK, new {
-                    status        = true,
-                    store         = store,
-                    article       = article,
-                    article_type  = ct,
-                    article_size  = cs,
-                    source        = "cache",
-                    ms            = (int)(DateTime.UtcNow - t0).TotalMilliseconds
-                });
-            }
-
-            // Cache cold (warming up after pool recycle). Fall through to live SQL.
-            const string sql = @"
-DECLARE @today DATE = CAST(GETDATE() AS DATE);
-SELECT
-  CASE
-    WHEN EXISTS (
-      SELECT 1 FROM dbo.ST_ART_DISCOUNT WITH(NOLOCK)
-       WHERE MATNR = @art
-         AND (ST_CD = @store OR ST_CD = 'All')
-         AND @today BETWEEN VALID_FROM_DT AND VALID_TO_DT
-    ) THEN 'C'
-    ELSE ISNULL(
-      (SELECT TOP 1 L_STATUS FROM dbo.L_VAR_ARTICLE WITH(NOLOCK)
-        WHERE STORE = @store AND ARTICLE_NUMBER = @art),
-      'NL')
-  END                                                AS article_type,
-  ISNULL(
-    (SELECT TOP 1 SIZE_GRP FROM dbo.SZ_GROUP_VAR_ARTICLE WITH(NOLOCK)
-      WHERE ARTICLE_NUMBER = @art),
-    'N')                                             AS size_grp_raw;";
-
-            // Server 28: L_VAR_ARTICLE + SZ_GROUP_VAR_ARTICLE are heap tables with no index on
-            // (STORE, ARTICLE_NUMBER) — cold scans can run 5–15 s. Until DBA adds covering
-            // indexes (IX_LVA_STORE_ART / IX_SGVA_ART), use a 25 s budget + one silent retry.
-            const int CMD_TIMEOUT = 25;
-            string typeVal = "NL";
-            string sizeRaw = "N";
-            Exception lastEx = null;
+            // Per-store in-memory cache. First call into a store triggers a synchronous
+            // load (~5-15 s while Server 28 buffer pool warms its heap pages), every
+            // subsequent call in that store is served from RAM in <10 ms until the
+            // 60-min TTL expires.
             try
             {
-                for (int attempt = 0; attempt < 2; attempt++)
-                {
-                    try
-                    {
-                        using (var conn = GetConnection())
-                        using (var cmd = new SqlCommand(sql, conn) { CommandTimeout = CMD_TIMEOUT })
-                        {
-                            cmd.Parameters.Add(new SqlParameter("@store", SqlDbType.NVarChar, 50) { Value = store });
-                            cmd.Parameters.Add(new SqlParameter("@art",   SqlDbType.BigInt)        { Value = artNum });
-                            using (var rd = await cmd.ExecuteReaderAsync())
-                            {
-                                if (await rd.ReadAsync())
-                                {
-                                    typeVal = rd["article_type"]  is DBNull ? "NL" : rd["article_type"].ToString();
-                                    sizeRaw = rd["size_grp_raw"] is DBNull ? "N"  : rd["size_grp_raw"].ToString();
-                                }
-                            }
-                        }
-                        lastEx = null;
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        lastEx = ex;
-                        if (attempt == 0) await System.Threading.Tasks.Task.Delay(300);
-                    }
-                }
-                if (lastEx != null) throw lastEx;
-
-                string sizeVal = sizeRaw == "BS" ? "BS"
-                              :  sizeRaw == "S"  ? "S"
-                              :                    "NORMAL";
-
+                var (typeVal, sizeRaw, _, loadMs) = ArticleLookupCache.Get(store, artNum);
+                string sizeVal = sizeRaw == "BS" ? "BS" : sizeRaw == "S" ? "S" : "NORMAL";
                 return Json(HttpStatusCode.OK, new {
                     status        = true,
                     store         = store,
                     article       = article,
                     article_type  = typeVal,
                     article_size  = sizeVal,
-                    source        = "sql",
+                    source        = "cache",
+                    cache_load_ms = loadMs,
                     ms            = (int)(DateTime.UtcNow - t0).TotalMilliseconds
                 });
             }
             catch (Exception ex)
             {
-                // Per BRD 5.4: on lookup failure, return placeholder + allow operator to continue.
+                // BRD 5.4: lookup failure must not block the operator.
                 return Json(HttpStatusCode.OK, new {
                     status       = false,
                     store        = store,
@@ -208,6 +145,16 @@ SELECT
                     ms           = (int)(DateTime.UtcNow - t0).TotalMilliseconds
                 });
             }
+        }
+
+        [HttpPost, Route("api/article-lookup/invalidate")]
+        public HttpResponseMessage Invalidate() {
+            string body = Request.Content.ReadAsStringAsync().Result;
+            JObject req = null; try { req = JObject.Parse(body ?? ""); } catch { }
+            string store = req?["store"]?.ToString();
+            if (string.IsNullOrEmpty(store)) ArticleLookupCache.InvalidateAll();
+            else ArticleLookupCache.InvalidateStore(store);
+            return Json(HttpStatusCode.OK, new { invalidated = store ?? "(all)", status = ArticleLookupCache.Status() });
         }
     }
 }
