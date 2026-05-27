@@ -33,18 +33,19 @@ Query: `?env=dev|qa|prod` (default `prod`)
 
 ### `POST /api/grn`
 
-Wraps SAP RFC `ZPBI_GRC_DETAILS` (FMODE='R', verified live).
+Wraps SAP RFC `ZFI_GRC_DETAILS_RFC` (FMODE='R', server-side date filter on CPUDT).
 
-> ⚠ The FM streams the full `ET_GRC_DATA` table — there is no SAP-side date param. We filter client-side. Use `Plant` or `Vendor` to narrow before calling, especially for Lovable UX.
+> ⚙ `DateFrom` is **required** — pushed to SAP as `IM_ENTERED_LOW`/`IM_ENTERED_HIGH` so the filter runs in ABAP, not in our wrapper. Avoids the CF 524 timeout that hit when the earlier ZPBI variant streamed full MSEG history.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `DateFrom` | string | optional | `YYYY-MM-DD`. Filter on `BUDAT` (posting date) |
-| `DateTo` | string | optional | `YYYY-MM-DD` |
-| `Plant` | string | optional | Filter on `WERKS` |
-| `Vendor` | string | optional | Filter on `LIFNR` (leading zeros stripped) |
-| `MovementType` | string | optional | Filter on `BWART` (101 = GR, 102 = GR reverse) |
-| `Limit` | int | optional | Default `100000` |
+| `DateFrom` | string | ✅ | `YYYY-MM-DD`. SAP-side filter on `CPUDT` (entered-on date) |
+| `DateTo` | string | optional | `YYYY-MM-DD`. Defaults to `DateFrom` |
+| `Plant` | string | optional | Client-side filter on `PLANT` (WERKS) |
+| `Vendor` | string | optional | Client-side filter on `SUPPLIER` (LIFNR, leading zeros stripped) |
+| `MovementType` | string | optional | Filter on `MOVEMENT_TYPE` (101 = GR, 102 = GR reverse) |
+| `PurchaseOrder` | string | optional | Client-side filter on `PURCHASE_ORDER` (EBELN, zero-strip) |
+| `Limit` | int | optional | Default `50000` |
 
 Query: `?env=dev|qa|prod` (default `prod`)
 
@@ -101,23 +102,24 @@ curl -X POST 'https://sap-api.v2retail.net/api/grn?env=prod' \
 ```json
 {
   "Success": true,
-  "Source": "ZPBI_GRC_DETAILS",
+  "Source": "ZFI_GRC_DETAILS_RFC",
   "Env": "prod",
-  "DateFrom": "2026-05-27",
-  "DateTo": "2026-05-27",
-  "Plant": "DH24",
+  "DateFrom": "2026-05-26",
+  "DateTo": "2026-05-26",
+  "Plant": "DW01",
   "Vendor": null,
   "MovementType": "101",
-  "TotalRowsFromSap": 41208,
+  "PurchaseOrder": null,
+  "TotalRowsFromSap": 412,
   "RowCount": 86,
   "Rows": [
-    { "MaterialDoc": "5000123456", "Year": "2026", "Line": "0001",
-      "PostingDate": "2026-05-27", "MovementType": "101",
-      "Material": "000000001110000003", "Plant": "DH24", "Batch": "",
-      "StorageLocation": "0032", "Vendor": "0000200001", "DebitCredit": "S",
-      "Currency": "INR", "Amount": "1200.00", "Quantity": "10.000",
-      "Uom": "EA", "MaterialGroup": "110101001", "OldMaterial": "",
-      "ArticleType": "02", "PpkQty": "1.000" }
+    { "MaterialDoc": "5007624703", "Year": "2026", "MovementType": "101",
+      "Plant": "DW01", "Supplier": "0000400931", "DebitCredit": "S",
+      "AmountInLC": "1378280.10", "Quantity": "2958.000", "BaseUnit": "EA",
+      "PurchaseOrder": "6100002263", "ReferenceDoc": "5007624703",
+      "SupplierReceive": "0000400931", "TransEvType": "WE",
+      "PostingDate": "2026-05-26", "EnteredOn": "2026-05-26",
+      "Text": "BIL-GXY/26-27/10 GE-26120", "MovementWM": "101" }
   ]
 }
 ```
@@ -139,32 +141,30 @@ curl -X POST 'https://sap-api.v2retail.net/api/grn?env=prod' \
 
 ### GRN (`/api/grn`)
 
-| SAP (`ET_GRC_DATA`) | API field | Source |
+| SAP (`IT_DATA`) | API field | Source |
 |---|---|---|
-| `MBLNR` | `MaterialDoc` | MKPF-MBLNR |
-| `MJAHR` | `Year` | MKPF-MJAHR |
-| `ZEILE` | `Line` | MSEG-ZEILE |
-| `BUDAT` | `PostingDate` | MKPF-BUDAT |
-| `BWART` | `MovementType` | MSEG-BWART |
-| `MATNR` | `Material` | MSEG-MATNR |
-| `WERKS` | `Plant` | MSEG-WERKS |
-| `CHARG` | `Batch` | MSEG-CHARG |
-| `LGORT` | `StorageLocation` | MSEG-LGORT |
-| `LIFNR` | `Vendor` | MSEG-LIFNR |
-| `SHKZG` | `DebitCredit` | `S`=receipt, `H`=reversal |
-| `WAERS` | `Currency` | MKPF-WAERS |
-| `DMBTR` | `Amount` | MSEG-DMBTR (rupees) |
-| `MENGE` | `Quantity` | MSEG-MENGE |
-| `MEINS` | `Uom` | MSEG-MEINS |
-| `MATKL` | `MaterialGroup` | MARA-MATKL |
-| `BISMT` | `OldMaterial` | MARA-BISMT |
-| `ATTYP` | `ArticleType` | MARA-ATTYP |
-| `PPK_QTY` | `PpkQty` | derived |
+| `MATERIAL_DOC` | `MaterialDoc` | MKPF-MBLNR |
+| `MAT_DOC_YEAR` | `Year` | MKPF-MJAHR |
+| `MOVEMENT_TYPE` | `MovementType` | MSEG-BWART |
+| `PLANT` | `Plant` | MSEG-WERKS |
+| `SUPPLIER` | `Supplier` | MSEG-LIFNR |
+| `DEBIT_CREDIT` | `DebitCredit` | `S`=receipt, `H`=reversal |
+| `AMOUNT_IN_LC` | `AmountInLC` | MSEG-DMBTR (local currency) |
+| `QUANTITY` | `Quantity` | MSEG-MENGE |
+| `BASE_UNIT` | `BaseUnit` | MSEG-MEINS |
+| `PURCHASE_ORDER` | `PurchaseOrder` | MSEG-EBELN |
+| `REFERENCE_DOC` | `ReferenceDoc` | MKPF-XBLNR |
+| `SUPPLIER_RECEIVE` | `SupplierReceive` | MSEG-LIFNR (receiving plant) |
+| `TRANS_EV_TYPE` | `TransEvType` | `WE` = goods receipt |
+| `POSTING_DATE` | `PostingDate` | MKPF-BUDAT |
+| `ENTERED_ON` | `EnteredOn` | MKPF-CPUDT (SAP-side filter param) |
+| `TEXT` | `Text` | MKPF-BKTXT |
+| `MOVEMENT_WM` | `MovementWM` | WM-side movement code |
 
 ## Caveats
 
 1. **PO `SapMessage`**: SAP FM `ZMM_PO_DETAILS` returns `EX_RETURN.MESSAGE='No Data Found'` even when `IT_FINAL` contains rows. We only mark `Success=false` when both `EX_RETURN.TYPE='E'` AND `RowCount==0`. The `SapMessage` field is surfaced for diagnostics but should not be treated as an error if `Rows.length > 0`.
-2. **GRN volume**: `ZPBI_GRC_DETAILS` returns full history, not delta. Always pass `DateFrom`/`DateTo` + `Plant` for production traffic. Without filters, expect 10-30s response times and large payloads.
+2. **GRN volume**: `ZFI_GRC_DETAILS_RFC` filters server-side on `CPUDT`. Typical PROD response 2-5s for a single day across all plants. Same-day windows are safe. For multi-day pulls, expect linear growth; cap with `Limit` if calling from a UI.
 3. **Date format**: API accepts `YYYY-MM-DD` (ISO). Internally converted to SAP `YYYYMMDD`. Either format is accepted.
 4. **All numeric fields are strings**: SAP returns DECIMAL fields as zero-padded strings (`"1440.00"`, `"12.000"`). Caller must `parseFloat()` before arithmetic.
 5. **Leading-zero vendor codes**: SAP stores `LIFNR` as 10-char zero-padded (`0000200001`). The filter strips leading zeros so callers can pass `200001` or the full form interchangeably.
@@ -181,3 +181,4 @@ curl -X POST 'https://sap-api.v2retail.net/api/grn?env=prod' \
 | Date | Change | By |
 |---|---|---|
 | 2026-05-27 | Initial build. `/api/po` (ZMM_PO_DETAILS) + `/api/grn` (ZPBI_GRC_DETAILS) | Akash |
+| 2026-05-27 | `/api/grn` switched to ZFI_GRC_DETAILS_RFC for server-side date filter (PROD CF 524 fix). Output shape changed — finance GR/IR rows with `PurchaseOrder` linkage instead of ZPBI 19-field shape. | Akash |
