@@ -120,24 +120,43 @@ SELECT
       WHERE ARTICLE_NUMBER = @art),
     'N')                                             AS size_grp_raw;";
 
+            // Server 28: L_VAR_ARTICLE + SZ_GROUP_VAR_ARTICLE are heap tables with no index on
+            // (STORE, ARTICLE_NUMBER) — cold scans can run 5–15 s. Until DBA adds covering
+            // indexes (IX_LVA_STORE_ART / IX_SGVA_ART), use a 25 s budget + one silent retry.
+            const int CMD_TIMEOUT = 25;
+            string typeVal = "NL";
+            string sizeRaw = "N";
+            Exception lastEx = null;
             try
             {
-                string typeVal = "NL";
-                string sizeRaw = "N";
-                using (var conn = GetConnection())
-                using (var cmd = new SqlCommand(sql, conn) { CommandTimeout = 5 })
+                for (int attempt = 0; attempt < 2; attempt++)
                 {
-                    cmd.Parameters.Add(new SqlParameter("@store", SqlDbType.NVarChar, 50) { Value = store });
-                    cmd.Parameters.Add(new SqlParameter("@art",   SqlDbType.BigInt)        { Value = artNum });
-                    using (var rd = await cmd.ExecuteReaderAsync())
+                    try
                     {
-                        if (await rd.ReadAsync())
+                        using (var conn = GetConnection())
+                        using (var cmd = new SqlCommand(sql, conn) { CommandTimeout = CMD_TIMEOUT })
                         {
-                            typeVal = rd["article_type"]  is DBNull ? "NL" : rd["article_type"].ToString();
-                            sizeRaw = rd["size_grp_raw"] is DBNull ? "N"  : rd["size_grp_raw"].ToString();
+                            cmd.Parameters.Add(new SqlParameter("@store", SqlDbType.NVarChar, 50) { Value = store });
+                            cmd.Parameters.Add(new SqlParameter("@art",   SqlDbType.BigInt)        { Value = artNum });
+                            using (var rd = await cmd.ExecuteReaderAsync())
+                            {
+                                if (await rd.ReadAsync())
+                                {
+                                    typeVal = rd["article_type"]  is DBNull ? "NL" : rd["article_type"].ToString();
+                                    sizeRaw = rd["size_grp_raw"] is DBNull ? "N"  : rd["size_grp_raw"].ToString();
+                                }
+                            }
                         }
+                        lastEx = null;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        lastEx = ex;
+                        if (attempt == 0) await System.Threading.Tasks.Task.Delay(300);
                     }
                 }
+                if (lastEx != null) throw lastEx;
 
                 string sizeVal = sizeRaw == "BS" ? "BS"
                               :  sizeRaw == "S"  ? "S"
