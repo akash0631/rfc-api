@@ -50,15 +50,24 @@ namespace Vendor_Application_MVC.Controllers.HHT
         private static int _discountRows = 0;
         private static readonly object _discountLock = new object();
 
+        // Global size cache (store-agnostic — SZ_GROUP_VAR_ARTICLE keyed only on ARTICLE_NUMBER).
+        // Needed so NL articles (not present in L_VAR_ARTICLE for the store) still resolve BS/S.
+        private static volatile Dictionary<long, byte> _sizesAll = new Dictionary<long, byte>();
+        private static DateTime _sizesLoadedUtc = DateTime.MinValue;
+        private static int _sizesRows = 0;
+        private static readonly object _sizesLock = new object();
+
         private static readonly DateTime _processStartUtc = DateTime.UtcNow;
         private static int _hits = 0, _misses = 0;
 
         private const int STORE_TTL_MIN = 60;
         private const int DISCOUNT_TTL_MIN = 5;
+        private const int SIZES_TTL_MIN = 60;
 
         public static (string typeVal, string sizeRaw, bool fromCache, long loadMs) Get(string store, long article)
         {
             EnsureDiscountFresh();
+            EnsureSizesFresh();
             var snap = EnsureStoreFresh(store);
 
             bool isDisc = _discountAll.Contains(article)
@@ -74,7 +83,10 @@ namespace Vendor_Application_MVC.Controllers.HHT
             else
             {
                 typeVal = isDisc ? "C" : "NL";
-                sizeRaw = "N";
+                byte sb;
+                sizeRaw = _sizesAll.TryGetValue(article, out sb)
+                    ? (sb == 1 ? "BS" : sb == 2 ? "S" : "N")
+                    : "N";
             }
             Interlocked.Increment(ref _hits);
             return (typeVal, sizeRaw, true, snap.LoadMs);
@@ -197,6 +209,41 @@ SELECT l.ARTICLE_NUMBER,
             }
         }
 
+        private static void EnsureSizesFresh()
+        {
+            if (_sizesLoadedUtc != DateTime.MinValue
+                && (DateTime.UtcNow - _sizesLoadedUtc).TotalMinutes < SIZES_TTL_MIN) return;
+
+            lock (_sizesLock)
+            {
+                if (_sizesLoadedUtc != DateTime.MinValue
+                    && (DateTime.UtcNow - _sizesLoadedUtc).TotalMinutes < SIZES_TTL_MIN) return;
+
+                var newMap = new Dictionary<long, byte>(20_000);
+                int rows = 0;
+
+                using (var conn = GetConnection())
+                using (var cmd = new SqlCommand(
+                    @"SELECT ARTICLE_NUMBER, SIZE_GRP FROM dbo.SZ_GROUP_VAR_ARTICLE WITH(NOLOCK)", conn)
+                    { CommandTimeout = 60 })
+                using (var rd = cmd.ExecuteReader())
+                {
+                    while (rd.Read())
+                    {
+                        if (rd.IsDBNull(0)) continue;
+                        long art = rd.GetInt64(0);
+                        string size = rd.IsDBNull(1) ? "N" : rd.GetString(1);
+                        byte zb = size == "BS" ? (byte)1 : size == "S" ? (byte)2 : (byte)0;
+                        newMap[art] = zb;
+                        rows++;
+                    }
+                }
+                _sizesAll = newMap;
+                _sizesRows = rows;
+                _sizesLoadedUtc = DateTime.UtcNow;
+            }
+        }
+
         public static object Status()
         {
             lock (_globalLock)
@@ -218,8 +265,12 @@ SELECT l.ARTICLE_NUMBER,
                     discount_rows = _discountRows,
                     discount_loaded_utc = _discountLoadedUtc == DateTime.MinValue ? null : (object)_discountLoadedUtc.ToString("o"),
                     discount_age_sec = _discountLoadedUtc == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - _discountLoadedUtc).TotalSeconds,
+                    sizes_rows = _sizesRows,
+                    sizes_loaded_utc = _sizesLoadedUtc == DateTime.MinValue ? null : (object)_sizesLoadedUtc.ToString("o"),
+                    sizes_age_sec = _sizesLoadedUtc == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - _sizesLoadedUtc).TotalSeconds,
                     store_ttl_min = STORE_TTL_MIN,
                     discount_ttl_min = DISCOUNT_TTL_MIN,
+                    sizes_ttl_min = SIZES_TTL_MIN,
                     hits = _hits,
                     misses = _misses,
                     stores
@@ -236,6 +287,7 @@ SELECT l.ARTICLE_NUMBER,
         {
             lock (_globalLock) { _stores.Clear(); }
             _discountLoadedUtc = DateTime.MinValue;
+            _sizesLoadedUtc = DateTime.MinValue;
         }
 
         // Connection helpers (mirror ArticleLookupController.GetConnection so the cache is self-contained).
