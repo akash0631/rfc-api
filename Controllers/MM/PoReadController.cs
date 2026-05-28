@@ -44,7 +44,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
     {
         private const string API_KEY = "v2-rfc-proxy-2026";
         private const int MAX_WINDOW_DAYS = 31;
-        private const int DEFAULT_LIMIT = 1000;
+        private const int DEFAULT_LIMIT = 100;
         private const int MAX_LIMIT = 50000;
         private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
         private static readonly ConcurrentDictionary<string, CacheEntry> Cache = new ConcurrentDictionary<string, CacheEntry>();
