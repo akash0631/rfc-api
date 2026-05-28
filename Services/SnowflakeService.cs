@@ -205,23 +205,29 @@ namespace Vendor_SRM_Routing_Application.Services
         }
 
         /// <summary>
-        /// Atomic full-refresh load via PUT + INSERT OVERWRITE.
-        /// Far faster than BulkInsert for large/wide rows because COPY-from-stage uses
-        /// Snowflake's bulk path, not row-by-row VALUES.
+        /// Atomic full-refresh load via TRUNCATE + chunked parameterized INSERT inside a
+        /// single Snowflake transaction. Same proven path the 8 working RFCs use — no
+        /// PUT-to-stage, no Azure SDK dependency, no Web.config bindingRedirect surface.
         ///
         /// Behaviour:
         ///   1. CREATE TABLE IF NOT EXISTS &lt;schema&gt;.&lt;table&gt; with VARCHAR(&lt;sap_len&gt;)
-        ///      for each SAP column + 4 audit columns (_LOADED_AT, _BATCH_ID,
+        ///      for each SAP column + 4 audit cols (_LOADED_AT, _BATCH_ID,
         ///      _SOURCE_SYSTEM, _BUSINESS_DATE).
-        ///   2. Write rows to a UTF-8 CSV in %TEMP%.
-        ///   3. PUT 'file://...' @&lt;schema&gt;.%&lt;table&gt; AUTO_COMPRESS=TRUE OVERWRITE=TRUE.
-        ///   4. INSERT OVERWRITE INTO &lt;schema&gt;.&lt;table&gt; (cols, audit cols) SELECT $1..$N,
-        ///      CURRENT_TIMESTAMP(), :batchId, :sourceSystem, NULL FROM @stage/&lt;file&gt;.gz.
-        ///   5. REMOVE staged file (best-effort).
+        ///   2. BEGIN transaction.
+        ///   3. TRUNCATE TABLE.
+        ///   4. INSERT INTO ... VALUES (...) in adaptive chunks (target ~10k bind params
+        ///      per statement to stay well under Snowflake's per-statement limits).
+        ///      Audit columns are inlined as SQL expressions: CURRENT_TIMESTAMP(),
+        ///      single-quoted batchId/sourceSystem, NULL business_date.
+        ///   5. COMMIT.
+        ///
+        /// Atomicity: readers see either the prior snapshot or the new snapshot,
+        /// never a partial state. If any chunk INSERT fails the transaction rolls
+        /// back and the prior snapshot is preserved.
         ///
         /// Returns rows actually landed (COUNT WHERE _BATCH_ID matches).
         /// </summary>
-        public long BulkLoadViaStage(
+        public long BulkLoadViaInsert(
             string targetSchema,
             string targetTable,
             List<SapTableDumpService.FieldMeta> sapCols,
@@ -236,73 +242,74 @@ namespace Vendor_SRM_Routing_Application.Services
             string safeSchema = SanitizeIdentifier(targetSchema ?? "RAW_SAP_MASTER");
             string safeTable  = SanitizeIdentifier(targetTable);
             string fq         = safeSchema + "." + safeTable;
-            string stageRef   = "@" + safeSchema + ".%" + safeTable;
 
-            // 1. CREATE TABLE IF NOT EXISTS with proper VARCHAR(length) + audit cols
             EnsureLandingTableExists(safeSchema, safeTable, sapCols);
 
-            // 2. Write CSV
-            string csvPath = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                safeTable + "_" + batchId.Substring(0, Math.Min(8, batchId.Length)) + ".csv");
+            string sapColList = string.Join(", ", sapCols.ConvertAll(c => SanitizeIdentifier(c.Name)));
+            string allColList = sapColList + ", _LOADED_AT, _BATCH_ID, _SOURCE_SYSTEM, _BUSINESS_DATE";
+            string batchLit   = "'" + batchId.Replace("'", "''") + "'";
+            string sourceLit  = "'" + (sourceSystem ?? "").Replace("'", "''") + "'";
 
-            using (var sw = new System.IO.StreamWriter(csvPath, false, new System.Text.UTF8Encoding(false)))
+            // Adaptive chunk size: ~10k bind parameters per INSERT statement.
+            // For T001W (180 cols): 55 rows/chunk. For typical 30-col master: 333 rows/chunk.
+            int chunkSize = Math.Max(1, 10000 / sapCols.Count);
+
+            long totalInserted = 0;
+            using (var conn = new SnowflakeDbConnection())
             {
-                foreach (var row in (rows ?? new List<Dictionary<string, object>>()))
+                conn.ConnectionString = ConnStr;
+                conn.Open();
+                using (var tx = conn.BeginTransaction())
                 {
-                    var sb = new System.Text.StringBuilder();
-                    for (int i = 0; i < sapCols.Count; i++)
+                    using (var truncCmd = conn.CreateCommand())
                     {
-                        if (i > 0) sb.Append(',');
-                        string v = "";
-                        if (row != null && row.ContainsKey(sapCols[i].Name) && row[sapCols[i].Name] != null)
-                            v = row[sapCols[i].Name].ToString();
-                        sb.Append('"').Append(v.Replace("\"", "\"\"")).Append('"');
+                        truncCmd.Transaction = tx;
+                        truncCmd.CommandText = "TRUNCATE TABLE " + fq;
+                        truncCmd.ExecuteNonQuery();
                     }
-                    sw.WriteLine(sb.ToString());
+
+                    var rowList = rows ?? new List<Dictionary<string, object>>();
+                    for (int i = 0; i < rowList.Count; i += chunkSize)
+                    {
+                        var chunk = rowList.GetRange(i, Math.Min(chunkSize, rowList.Count - i));
+                        var valRows = new List<string>();
+                        var paramMap = new Dictionary<string, object>();
+                        int pIdx = 0;
+
+                        foreach (var row in chunk)
+                        {
+                            var tokens = new List<string>();
+                            foreach (var c in sapCols)
+                            {
+                                string pName = "p" + pIdx++;
+                                tokens.Add(":" + pName);
+                                object v = (row != null && row.ContainsKey(c.Name)) ? row[c.Name] : null;
+                                paramMap[pName] = v ?? DBNull.Value;
+                            }
+                            // Audit columns as inline SQL expressions (no extra binds)
+                            tokens.Add("CURRENT_TIMESTAMP()");
+                            tokens.Add(batchLit);
+                            tokens.Add(sourceLit);
+                            tokens.Add("NULL");
+                            valRows.Add("(" + string.Join(", ", tokens) + ")");
+                        }
+
+                        string sql = "INSERT INTO " + fq + " (" + allColList + ") VALUES " +
+                                     string.Join(", ", valRows);
+                        using (var cmd = conn.CreateCommand())
+                        {
+                            cmd.Transaction = tx;
+                            cmd.CommandText = sql;
+                            AddParameters(cmd, paramMap);
+                            totalInserted += cmd.ExecuteNonQuery();
+                        }
+                    }
+
+                    tx.Commit();
                 }
             }
 
-            try
-            {
-                // 3. PUT to table stage
-                string putPath = csvPath.Replace("\\", "/");
-                ExecuteNonQuery("PUT 'file://" + putPath + "' " + stageRef +
-                                " AUTO_COMPRESS=TRUE OVERWRITE=TRUE");
-
-                // 4. INSERT OVERWRITE INTO ... (atomic replace)
-                string sapColList = string.Join(", ", sapCols.ConvertAll(c => SanitizeIdentifier(c.Name)));
-                string sapPositions = string.Join(", ",
-                    Enumerable.Range(1, sapCols.Count).Select(i => "$" + i));
-                string csvFileName = System.IO.Path.GetFileName(csvPath);
-
-                // batchId is a server-issued Guid — safe to inline; sourceSystem is from app config.
-                string sql =
-                    "INSERT OVERWRITE INTO " + fq + " (" + sapColList +
-                    ", _LOADED_AT, _BATCH_ID, _SOURCE_SYSTEM, _BUSINESS_DATE) " +
-                    "SELECT " + sapPositions +
-                    ", CURRENT_TIMESTAMP(), '" + batchId.Replace("'", "''") + "'" +
-                    ", '" + (sourceSystem ?? "").Replace("'", "''") + "'" +
-                    ", NULL " +
-                    "FROM " + stageRef + "/" + csvFileName + ".gz " +
-                    "(FILE_FORMAT => (TYPE='CSV' FIELD_OPTIONALLY_ENCLOSED_BY='\"' " +
-                    "NULL_IF=('') EMPTY_FIELD_AS_NULL=TRUE))";
-                ExecuteNonQuery(sql);
-
-                // 5. Best-effort cleanup of the staged file
-                try { ExecuteNonQuery("REMOVE " + stageRef + "/" + csvFileName + ".gz"); }
-                catch { /* non-fatal */ }
-
-                var landed = ExecuteScalar(
-                    "SELECT COUNT(*) FROM " + fq + " WHERE _BATCH_ID = :bid",
-                    new Dictionary<string, object> { { "bid", batchId } });
-                return landed == null ? 0 : Convert.ToInt64(landed);
-            }
-            finally
-            {
-                try { if (System.IO.File.Exists(csvPath)) System.IO.File.Delete(csvPath); }
-                catch { /* best effort */ }
-            }
+            return totalInserted;
         }
 
         /// <summary>CREATE TABLE IF NOT EXISTS with SAP-correct VARCHAR(length) + 4 audit cols.</summary>
