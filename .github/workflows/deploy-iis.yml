@@ -96,6 +96,16 @@ jobs:
           Write-Host "Total DLLs copied: $copied"
           if ($copied -eq 0) { throw "No DLLs found to deploy!" }
 
+      - name: Deploy Web.config to IIS root
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = 'Web.config'
+          $dest = 'C:\V2RfcTest\Web.config'
+          if (-not (Test-Path $src)) { throw "Web.config not found in repo root!" }
+          Copy-Item $src $dest -Force
+          Write-Host "Web.config copied from repo to $dest ($((Get-Item $dest).Length) bytes)"
+
       - name: Fix Web.config to SAP Dev
         shell: powershell
         run: |
