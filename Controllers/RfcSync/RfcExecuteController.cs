@@ -343,9 +343,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                     return FailSync(requestId, rfcCode, sw, HttpStatusCode.InternalServerError,
                         "RFC_READ_TABLE returned no field metadata for " + sourceTable + ".");
 
-                // Atomic landing via PUT + INSERT OVERWRITE
+                // Atomic landing via TRUNCATE + chunked INSERT (single transaction)
                 string batchId = requestId;       // reuse for cross-linking with RFC_API_ACCESS_LOG
-                long landed = _sf.BulkLoadViaStage(targetSchema, ep.TargetTable, cols, rows, batchId, sourceSystem);
+                long landed = _sf.BulkLoadViaInsert(targetSchema, ep.TargetTable, cols, rows, batchId, sourceSystem);
 
                 sw.Stop();
                 _sf.LogAccess(requestId, rfcCode, "/api/execute/" + rfcCode + "/sync",
