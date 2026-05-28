@@ -88,11 +88,11 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="Azure.Storage.Blobs">
-      <HintPath>packages\Azure.Storage.Blobs.12.13.0\lib\net461\Azure.Storage.Blobs.dll</HintPath>
+      <HintPath>packages\Azure.Storage.Blobs.12.13.0\lib\netstandard2.0\Azure.Storage.Blobs.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Azure.Storage.Common">
-      <HintPath>packages\Azure.Storage.Common.12.12.0\lib\net461\Azure.Storage.Common.dll</HintPath>
+      <HintPath>packages\Azure.Storage.Common.12.12.0\lib\netstandard2.0\Azure.Storage.Common.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.Bcl.AsyncInterfaces">
@@ -100,7 +100,7 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="System.Diagnostics.DiagnosticSource">
-      <HintPath>packages\System.Diagnostics.DiagnosticSource.4.6.0\lib\net461\System.Diagnostics.DiagnosticSource.dll</HintPath>
+      <HintPath>packages\System.Diagnostics.DiagnosticSource.4.6.0\lib\net46\System.Diagnostics.DiagnosticSource.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System.IO.Hashing">
