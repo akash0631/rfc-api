@@ -11,6 +11,7 @@ Team-editable documentation for the `akash0631/rfc-api` repo. Edit any file here
 ## Per-endpoint
 
 - **[PO-CREATOR-API.md](./PO-CREATOR-API.md)** — `POST /api/ZMM_PO_CREATION_RFC` request/response contract, field names, error fingerprints. Upstream: Lovable PO Creator app.
+- **[HHT-ARTICLE-LOOKUP-API.md](./HHT-ARTICLE-LOOKUP-API.md)** — `POST /api/article-lookup` combined Article Type + Article Size lookup for V09 → 0001 Article Putaway HHT screen. Upstream: HHT mobility app.
 
 ## SAP gotchas / lessons
 
@@ -27,6 +28,8 @@ Team-editable documentation for the `akash0631/rfc-api` repo. Edit any file here
 Dated change notes — append a new file each time a controller is rewired, an env binding flips, or a payload contract changes.
 
 - [2026-05-25 — `ZMM_PO_CREATION_RFC` flipped QA → PROD](./changelog/2026-05-25-zmm-po-creation-prod-flip.md)
+- [2026-05-26 — V2RfcTestPool NCo wedge incident + safeguards](./changelog/2026-05-26-v2rfctestpool-nco-wedge.md)
+- [2026-05-27 — HHT Article Lookup API live](./changelog/2026-05-27-hht-article-lookup.md)
 
 ## How to edit
 
