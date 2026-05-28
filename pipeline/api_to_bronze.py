@@ -7,13 +7,13 @@ Runs daily from .github/workflows/api-to-bronze-sync.yml.
 Standalone — does not touch GOLD.RFC_MASTER or any ET_* table.
 
 Endpoints loaded (each respects its own window cap + page size):
-  /api/po              → BRONZE.RFC_API_PO
-  /api/grn             → BRONZE.RFC_API_GRN
-  /api/sales           → BRONZE.RFC_API_SALES
-  /api/articles        → BRONZE.RFC_API_ARTICLES
-  /api/vendors         → BRONZE.RFC_API_VENDORS
-  /api/plants          → BRONZE.RFC_API_PLANTS
-  /api/article-colors  → BRONZE.RFC_API_ARTICLE_COLORS
+  /api/po              -> BRONZE.RFC_API_PO
+  /api/grn             -> BRONZE.RFC_API_GRN
+  /api/sales           -> BRONZE.RFC_API_SALES
+  /api/articles        -> BRONZE.RFC_API_ARTICLES
+  /api/vendors         -> BRONZE.RFC_API_VENDORS
+  /api/plants          -> BRONZE.RFC_API_PLANTS
+  /api/article-colors  -> BRONZE.RFC_API_ARTICLE_COLORS
 
 Env vars required:
   RFC_API_BASE          https://sap-api.v2retail.net
@@ -71,7 +71,7 @@ DATE_TO = os.environ.get("DATE_TO") or DATE_FROM
 
 # ── Endpoint catalog ─────────────────────────────────────────────────────────
 # Each row: (endpoint, target_table, has_date, page_size_override, mapper)
-# mapper(row_dict) → tuple matching INSERT column order
+# mapper(row_dict) -> tuple matching INSERT column order
 
 
 def map_po(r: Dict[str, Any]) -> Tuple:
@@ -203,7 +203,7 @@ def fetch_pages(path: str, has_date: bool) -> Iterable[Dict[str, Any]]:
         if not body.get("HasMore"):
             break
         offset = body["NextOffset"]
-    print(f"   ↳ {path} total={total} pulled={offset + len(rows) if total else '?'}")
+    print(f"   -- {path} total={total} pulled={offset + len(rows) if total else '?'}")
 
 
 def sf_connect() -> snowflake.connector.SnowflakeConnection:
@@ -283,7 +283,7 @@ def load_endpoint(conn, ep: str, cfg: Dict[str, Any]) -> Tuple[int, int]:
 
 
 def main() -> int:
-    print(f"[api_to_bronze] LOAD_ID={LOAD_ID} ENV={API_ENV} {DATE_FROM} → {DATE_TO}")
+    print(f"[api_to_bronze] LOAD_ID={LOAD_ID} ENV={API_ENV} {DATE_FROM} -> {DATE_TO}")
     wanted = os.environ.get("ENDPOINTS")
     selected = [e.strip() for e in wanted.split(",")] if wanted else list(ENDPOINTS.keys())
     bad = [e for e in selected if e not in ENDPOINTS]
@@ -300,10 +300,10 @@ def main() -> int:
         t0 = time.time()
         try:
             api_n, ins_n = load_endpoint(conn, ep, cfg)
-            print(f"   ✓ {ep:18s} api={api_n:>7d} inserted={ins_n:>7d} {time.time()-t0:5.1f}s")
+            print(f"   OK {ep:18s} api={api_n:>7d} inserted={ins_n:>7d} {time.time()-t0:5.1f}s")
         except Exception as e:
             overall_failed = True
-            print(f"   ✗ {ep:18s} FAILED after {time.time()-t0:.1f}s — {e}")
+            print(f"   XX {ep:18s} FAILED after {time.time()-t0:.1f}s — {e}")
 
     conn.close()
     return 1 if overall_failed else 0
