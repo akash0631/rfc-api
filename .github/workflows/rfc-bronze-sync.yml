@@ -67,47 +67,69 @@ jobs:
     steps:
       - name: Resolve date window
         id: dates
-        shell: bash
+        shell: powershell
         run: |
-          if [ -n "${{ inputs.date_from }}" ] && [ -n "${{ inputs.date_to }}" ]; then
-            FROM="${{ inputs.date_from }}"
-            TO="${{ inputs.date_to }}"
-          else
-            FROM=$(date -u -d "yesterday" +%F)
-            TO=$FROM
-          fi
-          echo "from=$FROM" >> "$GITHUB_OUTPUT"
-          echo "to=$TO"     >> "$GITHUB_OUTPUT"
-          echo "Window: $FROM -> $TO for ${{ matrix.rfc }}"
+          $dateFromInput = "${{ inputs.date_from }}"
+          $dateToInput   = "${{ inputs.date_to }}"
+          if ($dateFromInput -and $dateToInput) {
+            $FROM = $dateFromInput
+            $TO   = $dateToInput
+          } else {
+            $FROM = (Get-Date).ToUniversalTime().AddDays(-1).ToString("yyyy-MM-dd")
+            $TO   = $FROM
+          }
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "from=$FROM"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "to=$TO"
+          Write-Host "Window: $FROM -> $TO for ${{ matrix.rfc }}"
 
       - name: POST /api/execute/${{ matrix.rfc }}/sync
-        shell: bash
+        shell: powershell
         env:
           RFC_API_KEY: ${{ secrets.RFC_API_KEY }}
-          RESP_FILE: ${{ runner.temp }}/resp_${{ matrix.rfc }}.json
         run: |
-          set -euo pipefail
-          FROM="${{ steps.dates.outputs.from }}"
-          TO="${{ steps.dates.outputs.to }}"
-          PAYLOAD=$(printf '{"DateFrom":"%s","DateTo":"%s"}' "$FROM" "$TO")
-          echo "Posting to ${{ matrix.rfc }} with $PAYLOAD"
+          $ErrorActionPreference = 'Continue'
+          $rfc     = "${{ matrix.rfc }}"
+          $fromDt  = "${{ steps.dates.outputs.from }}"
+          $toDt    = "${{ steps.dates.outputs.to }}"
+          $payload = '{"DateFrom":"' + $fromDt + '","DateTo":"' + $toDt + '"}'
+          Write-Host "Posting to $rfc with $payload"
+
           # Internal endpoint — no Cloudflare proxy, so no 100s response cap.
-          # 30-min curl timeout covers worst-case ZPBI_GOODS_MVT (~30 min) and
+          # 30-min timeout covers worst-case ZPBI_GOODS_MVT (~30 min) and
           # leaves headroom for ZPBI_ART_SALES (~2 min) and ZMM_STO_PURN (~3 min).
           # SAP-side timeout is enforced separately by ep.TimeoutSeconds (3600s).
-          HTTP_STATUS=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" \
-            --max-time 1800 \
-            -X POST "http://localhost:9292/api/execute/${{ matrix.rfc }}/sync" \
-            -H "X-RFC-Key: $RFC_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD") || HTTP_STATUS="curl_failed"
-          echo "HTTP $HTTP_STATUS"
-          cat "$RESP_FILE" || true
-          echo
-          # Allow 200 (OK) only. Any 4xx/5xx fails the matrix cell so we see it
-          # in the GHA UI without retrying (rate limit + concurrency guards in
+          $uri = "http://localhost:9292/api/execute/$rfc/sync"
+          $statusCode = 0
+          $body = ""
+          try {
+            $resp = Invoke-WebRequest `
+              -Uri $uri `
+              -Method POST `
+              -Headers @{ 'X-RFC-Key' = $env:RFC_API_KEY; 'Content-Type' = 'application/json' } `
+              -Body $payload `
+              -TimeoutSec 1800 `
+              -UseBasicParsing `
+              -ErrorAction Stop
+            $statusCode = [int]$resp.StatusCode
+            $body = $resp.Content
+          } catch [System.Net.WebException] {
+            if ($_.Exception.Response) {
+              $statusCode = [int]$_.Exception.Response.StatusCode
+              try {
+                $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                $body = $reader.ReadToEnd()
+              } catch { $body = "(could not read response body)" }
+            } else {
+              $statusCode = -1
+              $body = "WebException with no Response: " + $_.Exception.Message
+            }
+          } catch {
+            $statusCode = -1
+            $body = "Unexpected error: " + $_.Exception.Message
+          }
+          Write-Host "HTTP $statusCode"
+          Write-Host $body
+          # Allow 200 (OK) only. Any other status fails the matrix cell so we see
+          # it in the GHA UI without retrying (rate limit + concurrency guards in
           # the wrapper already handle transient cases).
-          case "$HTTP_STATUS" in
-            200) exit 0 ;;
-            *)   exit 1 ;;
-          esac
+          if ($statusCode -eq 200) { exit 0 } else { exit 1 }
