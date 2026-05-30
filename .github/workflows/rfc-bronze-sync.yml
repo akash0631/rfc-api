@@ -95,9 +95,10 @@ jobs:
           Write-Host "Posting to $rfc with $payload"
 
           # Internal endpoint — no Cloudflare proxy, so no 100s response cap.
-          # 30-min timeout covers worst-case ZPBI_GOODS_MVT (~30 min) and
-          # leaves headroom for ZPBI_ART_SALES (~2 min) and ZMM_STO_PURN (~3 min).
-          # SAP-side timeout is enforced separately by ep.TimeoutSeconds (3600s).
+          # 60-min timeout covers worst-case ZPBI_GOODS_MVT — its PerStore loop
+          # over 320 stores took 2,680s (~44 min) on 2026-05-30. ZPBI_ART_SALES
+          # (~11 min) and ZMM_STO_PURN_RFC (~19 min) fit comfortably below this.
+          # SAP-side timeout matches: ep.TimeoutSeconds=3600s.
           $uri = "http://localhost:9292/api/execute/$rfc/sync"
           $statusCode = 0
           $body = ""
@@ -107,7 +108,7 @@ jobs:
               -Method POST `
               -Headers @{ 'X-RFC-Key' = $env:RFC_API_KEY; 'Content-Type' = 'application/json' } `
               -Body $payload `
-              -TimeoutSec 1800 `
+              -TimeoutSec 3600 `
               -UseBasicParsing `
               -ErrorAction Stop
             $statusCode = [int]$resp.StatusCode
