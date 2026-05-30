@@ -3,10 +3,16 @@ name: SAP -> Snowflake BRONZE daily sync
 # Fires once per day at 07:00 IST (01:30 UTC) and can be manually re-run for
 # any historical date window via workflow_dispatch.
 #
-# Safety: all SAP overload guards live in the IIS wrapper at sap-api.v2retail.net.
-# This job is intentionally dumb — it only loops the catalog of "known working"
-# RFCs and POSTs the previous day's date window. If you need a different date
-# window or RFC list, use workflow_dispatch.
+# Runs on the self-hosted .36 IIS runner and calls http://localhost:9292 directly,
+# bypassing the public Cloudflare proxy at sap-api.v2retail.net. This removes
+# Cloudflare's hard 100s response timeout that was killing 4 of the larger RFCs
+# (ZPBI_ART_SALES, ZMM_STO_PURN_RFC, ZPBI_GOODS_MVT, ZPBI_ART_MASTER) which
+# legitimately take 100-1800s at SAP. Internal calls are not capped.
+#
+# Safety: all SAP overload guards still live in the IIS wrapper itself
+# (rate-limit, per-RFC concurrency lock, STATUS gate, SAP timeout).
+# This job loops the catalog of registered RFCs and POSTs the previous day's
+# date window. TableDump-pattern RFCs (READ_*) ignore the date params.
 #
 # See docs/SAP-SNOWFLAKE-PIPELINE.md and docs/SAFEGUARDS.md for design.
 
@@ -38,13 +44,13 @@ concurrency:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, iis]
     strategy:
       fail-fast: false
       max-parallel: 2          # don't hammer SAP — at most 2 RFCs concurrently
       matrix:
-        # 8 RFCs confirmed working as of 2026-05-19 (BRONZE.RFCTEST_* sweep)
         rfc:
+          # 8 legacy Z-RFCs (PerDate / PerStore / Single execution patterns)
           - RFC_ARTICLE_MASTER
           - RFC_GRC_DATA_APPLICATION
           - RFC_Sales_Data
@@ -53,9 +59,15 @@ jobs:
           - ZMM_VND_PUR
           - RFC_ALL_MOVEMENT
           - RFC_PLANT_MASTER
+          # 4 TableDump small masters (RFC_READ_TABLE; date params ignored)
+          - READ_T001W
+          - READ_T005T
+          - READ_T023T
+          - READ_T005U
     steps:
       - name: Resolve date window
         id: dates
+        shell: bash
         run: |
           if [ -n "${{ inputs.date_from }}" ] && [ -n "${{ inputs.date_to }}" ]; then
             FROM="${{ inputs.date_from }}"
@@ -69,22 +81,28 @@ jobs:
           echo "Window: $FROM -> $TO for ${{ matrix.rfc }}"
 
       - name: POST /api/execute/${{ matrix.rfc }}/sync
+        shell: bash
         env:
           RFC_API_KEY: ${{ secrets.RFC_API_KEY }}
+          RESP_FILE: ${{ runner.temp }}/resp_${{ matrix.rfc }}.json
         run: |
           set -euo pipefail
           FROM="${{ steps.dates.outputs.from }}"
           TO="${{ steps.dates.outputs.to }}"
           PAYLOAD=$(printf '{"DateFrom":"%s","DateTo":"%s"}' "$FROM" "$TO")
           echo "Posting to ${{ matrix.rfc }} with $PAYLOAD"
-          HTTP_STATUS=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
-            --max-time 180 \
-            -X POST "https://sap-api.v2retail.net/api/execute/${{ matrix.rfc }}/sync" \
+          # Internal endpoint — no Cloudflare proxy, so no 100s response cap.
+          # 30-min curl timeout covers worst-case ZPBI_GOODS_MVT (~30 min) and
+          # leaves headroom for ZPBI_ART_SALES (~2 min) and ZMM_STO_PURN (~3 min).
+          # SAP-side timeout is enforced separately by ep.TimeoutSeconds (3600s).
+          HTTP_STATUS=$(curl -sS -o "$RESP_FILE" -w "%{http_code}" \
+            --max-time 1800 \
+            -X POST "http://localhost:9292/api/execute/${{ matrix.rfc }}/sync" \
             -H "X-RFC-Key: $RFC_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD") || HTTP_STATUS="curl_failed"
           echo "HTTP $HTTP_STATUS"
-          cat /tmp/resp.json || true
+          cat "$RESP_FILE" || true
           echo
           # Allow 200 (OK) only. Any 4xx/5xx fails the matrix cell so we see it
           # in the GHA UI without retrying (rate limit + concurrency guards in
