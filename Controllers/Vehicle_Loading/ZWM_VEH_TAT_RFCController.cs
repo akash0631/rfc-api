@@ -25,7 +25,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Vehicle_Loading
                     RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
                     RfcRepository rfcrep = dest.Repository;
 
-                    IRfcFunction myfun = rfcrep.CreateFunction("ZWM_VEH_TAT_RFC");
+                    IRfcFunction myfun = rfcrep.CreateFunction("ZWM_VEH_TAT_RFC_V2");
 
                     myfun.SetValue("IM_DATE_FROM", request.IM_DATE_FROM ?? "");
                     myfun.SetValue("IM_DATE_TO", request.IM_DATE_TO ?? "");
