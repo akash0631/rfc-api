@@ -139,8 +139,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
 
             try
             {
+                // 2026-06-02: flipped to Z_ART_PATCH_RFC_V2 (FG ZART_PATCH_V21, TR S4DK925576).
+                // V2 adds missing TABLES params ALLOCVALUESNUMNEW + ALLOCVALUESCURRNEW to
+                // BAPI_OBJCL_CHANGE — fixes Blocker B "Missing parameter in CALL FUNCTION."
+                // Old FG ZART_CHAR_PATCH2 + Z_ART_PATCH_RFC remain on DEV but no longer called.
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC");
+                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V2");
                 fn.SetValue("IV_MATNR", PadMatnr(request.Matnr));
                 fn.SetValue("IV_CHANGES", changesStr);
                 fn.SetValue("IV_TEST_MODE", request.TestMode ? "X" : " ");
