@@ -139,12 +139,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
 
             try
             {
-                // 2026-06-02: flipped to Z_ART_PATCH_RFC_V2 (FG ZART_PATCH_V21, TR S4DK925576).
-                // V2 adds missing TABLES params ALLOCVALUESNUMNEW + ALLOCVALUESCURRNEW to
-                // BAPI_OBJCL_CHANGE — fixes Blocker B "Missing parameter in CALL FUNCTION."
-                // Old FG ZART_CHAR_PATCH2 + Z_ART_PATCH_RFC remain on DEV but no longer called.
+                // 2026-06-02: flipped to Z_ART_PATCH_RFC_V3 (FG ZARTPATV3, TR S4DK925580).
+                // V3 adds:
+                //  - class-aware logic: skip BAPI_OBJCL_CHANGE when MATNR has no class assigned
+                //    (KSSK lookup MAFID='O') → only updates ZCT04 mirror. No more "Class
+                //    Z_ART_CHAR does not exist" hard fails on unclassified articles.
+                //  - CABN-validated field acceptance: any characteristic name that exists in
+                //    CABN (not just ZCT04 columns) is patchable. Supports F_* fabric chars,
+                //    M_* apparel chars, future C-* etc. ZCT04 mirror only updated when the
+                //    field is also a ZCT04 column.
+                //  - Response now includes "class":"..." or "(no_class)" so caller can tell
+                //    whether AUSP was touched or just the mirror.
+                // V2 (Bug B TABLES fix from earlier this session) was correct but limited to
+                // M_* fields on classified articles. V3 supersedes.
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V2");
+                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V3");
                 fn.SetValue("IV_MATNR", PadMatnr(request.Matnr));
                 fn.SetValue("IV_CHANGES", changesStr);
                 fn.SetValue("IV_TEST_MODE", request.TestMode ? "X" : " ");
