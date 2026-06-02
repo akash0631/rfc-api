@@ -85,8 +85,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                 {
                     try
                     {
+                        // 2026-06-02: switched FM to ZMM_ART_CRT_V3 (clean FG ZMM_ART_CRT_V31, TR S4DK925567).
+                        // Bug 1 (LT_RETURN[2] crash) + Bug 2 (unconditional YEAR injection) patched headless.
+                        // Old FG ZMM_ART_CREATION_FG left in broken state on DEV pending VBS regen.
                         RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                        IRfcFunction myfun = dest.Repository.CreateFunction("ZMM_ART_CREATION_RFC");
+                        IRfcFunction myfun = dest.Repository.CreateFunction("ZMM_ART_CRT_V3");
 
                         IRfcTable imData = myfun.GetTable("IM_DATA");
                         RfcStructureMetadata lineMeta = imData.Metadata.LineType;
