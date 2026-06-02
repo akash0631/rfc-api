@@ -139,21 +139,20 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
 
             try
             {
-                // 2026-06-02: flipped to Z_ART_PATCH_RFC_V3 (FG ZARTPATV3, TR S4DK925580).
-                // V3 adds:
-                //  - class-aware logic: skip BAPI_OBJCL_CHANGE when MATNR has no class assigned
-                //    (KSSK lookup MAFID='O') → only updates ZCT04 mirror. No more "Class
-                //    Z_ART_CHAR does not exist" hard fails on unclassified articles.
-                //  - CABN-validated field acceptance: any characteristic name that exists in
-                //    CABN (not just ZCT04 columns) is patchable. Supports F_* fabric chars,
-                //    M_* apparel chars, future C-* etc. ZCT04 mirror only updated when the
-                //    field is also a ZCT04 column.
-                //  - Response now includes "class":"..." or "(no_class)" so caller can tell
-                //    whether AUSP was touched or just the mirror.
-                // V2 (Bug B TABLES fix from earlier this session) was correct but limited to
-                // M_* fields on classified articles. V3 supersedes.
+                // 2026-06-02: flipped to Z_ART_PATCH_RFC_V4 (FG ZARTPV4FG, TR S4DK925598).
+                // V4 fixes the V3 routing bug where classified MATNRs could not update
+                // ZCT04-mirror-only fields. V3 routed by has_class(matnr): any attr found
+                // in CABN globally was sent to BAPI_OBJCL_CHANGE, which rejected attrs not
+                // in that class's KSML (e.g. M_FIT on a class-774 MATNR).
+                // V4 routes per attr using all three signals:
+                //   - attr ATINN in this MATNR's class KSML  -> AUSP (BAPI route)
+                //   - else attr is a ZCT04_CHARACTER column   -> ZCT04 mirror (direct MODIFY)
+                //   - else attr in CABN globally but not class -> NOT_IN_CLASS error
+                //   - else                                     -> UNKNOWN error
+                // Response now includes per-attr "results"/"plan" array with route + status
+                // so callers can show field-level success/failure detail (master-data UX).
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V3");
+                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V4");
                 fn.SetValue("IV_MATNR", PadMatnr(request.Matnr));
                 fn.SetValue("IV_CHANGES", changesStr);
                 fn.SetValue("IV_TEST_MODE", request.TestMode ? "X" : " ");
