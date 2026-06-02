@@ -27,15 +27,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
     /// EXPORT:  EX_DATA  (ZTT_ART_CRT_RET) - table of return rows.
     ///                   Fields: SAP_ART (material number), MSG_TYP (S/E), MESSAGE.
     ///
-    /// SAP Target: SELECTABLE via ?env=dev|qa (default: dev).
-    ///   dev -> 192.168.144.174 / Client 210 / S4D
-    ///   qa  -> S4Q (rfcConfigparametersquality())
+    /// SAP Target: SELECTABLE via ?env=dev|qa|prod (default: dev).
+    ///   dev  -> 192.168.144.174 / Client 210 / S4D
+    ///   qa   -> S4Q (rfcConfigparametersquality())
+    ///   prod -> .170 / Client 600 / PRD (rfcConfigparametersproduction())
     /// FM + ZCL_MM_ARTICLE_FINAL verified live on DEV and QA (2026-05-27).
-    /// PROD HARD-BLOCKED until business sign-off. Do not enable env=prod
-    /// without explicit instruction from Akash.
-    ///
-    /// Concurrent calls serialized via process-wide semaphore (FM uses SAP memory IDs
-    /// inside ZCL_MM_ARTICLE_FINAL — concurrent invocations could race).
+    /// PROD unblocked 2026-06-02 per Akash explicit auth for developer access.
     /// </summary>
     public class ZMM_ART_CREATION_RFCController : BaseController
     {
@@ -63,7 +60,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                     break;
                 case "prod":
                 case "production":
-                    return Request.CreateResponse(HttpStatusCode.Forbidden, new { Status = false, Message = "env=prod is hard-blocked on ZMM_ART_CREATION_RFC. Use dev or qa." });
+                    rfcPar = BaseController.rfcConfigparametersproduction();
+                    envLabel = "prod";
+                    break;
                 case "dev":
                 case "development":
                 case "":
@@ -71,7 +70,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                     envLabel = "dev";
                     break;
                 default:
-                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = $"Invalid env '{env}'. Use dev | qa." });
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, new { Status = false, Message = $"Invalid env '{env}'. Use dev | qa | prod." });
             }
 
             bool entered = false;
