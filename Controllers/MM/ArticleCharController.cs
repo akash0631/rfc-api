@@ -73,7 +73,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
         // ============================================================
         [HttpGet]
         [Route("allowed-values")]
-        public HttpResponseMessage GetAllowedValues(string atnam,
+        public HttpResponseMessage GetAllowedValues(string atnam = "",
             string matnr = "", string env = "dev")
         {
             if (string.IsNullOrWhiteSpace(atnam))
