@@ -44,6 +44,9 @@ concurrency:
 
 jobs:
   sync:
+    # If rfc_list is provided on workflow_dispatch, only run cells whose RFC is in the list.
+    # If rfc_list is empty (scheduled run, or dispatch without filter), run the full matrix.
+    if: ${{ inputs.rfc_list == '' || inputs.rfc_list == null || contains(format(',{0},', inputs.rfc_list), format(',{0},', matrix.rfc)) }}
     runs-on: [self-hosted, iis]
     strategy:
       fail-fast: false
