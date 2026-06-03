@@ -1,6 +1,6 @@
 name: SAP -> Snowflake BRONZE daily sync
 
-# Fires once per day at 07:00 IST (01:30 UTC) and can be manually re-run for
+# Fires once per day at 19:00 IST (13:30 UTC) and can be manually re-run for
 # any historical date window via workflow_dispatch.
 #
 # Runs on the self-hosted .36 IIS runner and calls http://localhost:9292 directly,
@@ -18,7 +18,7 @@ name: SAP -> Snowflake BRONZE daily sync
 
 on:
   schedule:
-    - cron: '30 1 * * *'   # 07:00 IST daily
+    - cron: '30 13 * * *'   # 19:00 IST daily
   workflow_dispatch:
     inputs:
       date_from:
@@ -64,6 +64,38 @@ jobs:
           - READ_T005T
           - READ_T023T
           - READ_T005U
+          # 29 SAP_* inventory mirrors (per spec 11_INVENTORY_SOT_SAP_TO_SF_2026-06-03.md)
+          # Pilot scope = HB05 + DH24 via FILTER_CLAUSE in RFC_MASTER. Date params ignored.
+          # Masters first (small), then stock-state, valuation, open positions, movements.
+          - LOAD_SAP_T001W
+          - LOAD_SAP_T001L
+          - LOAD_SAP_T156
+          - LOAD_SAP_T156T
+          - LOAD_SAP_MARA
+          - LOAD_SAP_MAKT
+          - LOAD_SAP_MARD
+          - LOAD_SAP_MARC
+          - LOAD_SAP_MCHB
+          - LOAD_SAP_MSKA
+          - LOAD_SAP_MSLB
+          - LOAD_SAP_MKOL
+          - LOAD_SAP_MSPR
+          - LOAD_SAP_MSKU
+          - LOAD_SAP_LQUA
+          - LOAD_SAP_MBEW
+          - LOAD_SAP_EBEW
+          - LOAD_SAP_OBEW
+          - LOAD_SAP_QBEW
+          - LOAD_SAP_EKPO
+          - LOAD_SAP_EKKO
+          - LOAD_SAP_EKBE
+          - LOAD_SAP_LIPS
+          - LOAD_SAP_LIKP
+          - LOAD_SAP_LTAP
+          - LOAD_SAP_LTAK
+          - LOAD_SAP_VBBE
+          - LOAD_SAP_MSEG
+          - LOAD_SAP_MKPF
     steps:
       - name: Resolve date window
         id: dates
