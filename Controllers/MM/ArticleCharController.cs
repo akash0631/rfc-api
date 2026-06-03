@@ -64,6 +64,52 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
         }
 
         // ============================================================
+        // GET /api/article/allowed-values?atnam=F_WIDTH&matnr=<optional>
+        // Returns CAWN allowed value list for a characteristic.
+        // Backed by Z_ART_ALLOWED_VALS_RFC (FG ZARTALLOWED, TR S4DK925628).
+        // source field on response tells frontend whether values apply to
+        // this MATNR's class (CABN_IN_CLASS / CABN_GLOBAL_NOT_IN_CLASS /
+        // CABN_GLOBAL). Use to render dropdown UI in article editor.
+        // ============================================================
+        [HttpGet]
+        [Route("allowed-values")]
+        public HttpResponseMessage GetAllowedValues(string atnam,
+            string matnr = "", string env = "dev")
+        {
+            if (string.IsNullOrWhiteSpace(atnam))
+                return Request.CreateResponse(HttpStatusCode.BadRequest,
+                    new { Status = false, Message = "atnam query param required." });
+
+            RfcConfigParameters rfcPar;
+            HttpResponseMessage envCheck = ResolveEnv(env, out rfcPar);
+            if (envCheck != null) return envCheck;
+
+            try
+            {
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_ALLOWED_VALS_RFC");
+                fn.SetValue("IV_ATNAM", atnam.ToUpperInvariant());
+                fn.SetValue("IV_MATNR",
+                    string.IsNullOrWhiteSpace(matnr) ? "" : PadMatnr(matnr));
+                fn.Invoke(dest);
+                string json = fn.GetValue("EV_JSON")?.ToString() ?? "{}";
+                return Request.CreateResponse(HttpStatusCode.OK, new ArticleAllowedValuesResponse
+                {
+                    Status = json.Contains("\"ok\":true"),
+                    Env = env,
+                    Matnr = matnr ?? "",
+                    Atnam = atnam,
+                    AllowedJson = json
+                });
+            }
+            catch (Exception ex)
+            {
+                return Request.CreateResponse(HttpStatusCode.InternalServerError,
+                    new { Status = false, Message = ex.Message });
+            }
+        }
+
+        // ============================================================
         // GET /api/article/{matnr}
         // ============================================================
         [HttpGet]
@@ -245,6 +291,16 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
         public string Matnr { get; set; }
         /// <summary>Raw EV_JSON: {"matnr":"X","fields":[{"fn":"M_FIT","value":"SLIM"},...]} or {"found":false} if absent.</summary>
         public string ArticleJson { get; set; }
+    }
+
+    public class ArticleAllowedValuesResponse
+    {
+        public bool Status { get; set; }
+        public string Env { get; set; }
+        public string Matnr { get; set; }
+        public string Atnam { get; set; }
+        /// <summary>Raw EV_JSON: {"ok":true,"atnam":"F_WIDTH","atinn":"0000000979","source":"CABN_IN_CLASS","allowed":["20","30",...]}</summary>
+        public string AllowedJson { get; set; }
     }
 
     public class ArticlePatchResponse
