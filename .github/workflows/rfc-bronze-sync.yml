@@ -44,9 +44,6 @@ concurrency:
 
 jobs:
   sync:
-    # If rfc_list is provided on workflow_dispatch, only run cells whose RFC is in the list.
-    # If rfc_list is empty (scheduled run, or dispatch without filter), run the full matrix.
-    if: ${{ inputs.rfc_list == '' || inputs.rfc_list == null || contains(format(',{0},', inputs.rfc_list), format(',{0},', matrix.rfc)) }}
     runs-on: [self-hosted, iis]
     strategy:
       fail-fast: false
@@ -102,6 +99,8 @@ jobs:
     steps:
       - name: Resolve date window
         id: dates
+        # If rfc_list provided, skip cells not in it. Empty = run full matrix.
+        if: ${{ inputs.rfc_list == '' || inputs.rfc_list == null || contains(format(',{0},', inputs.rfc_list), format(',{0},', matrix.rfc)) }}
         shell: powershell
         run: |
           $dateFromInput = "${{ inputs.date_from }}"
@@ -118,6 +117,7 @@ jobs:
           Write-Host "Window: $FROM -> $TO for ${{ matrix.rfc }}"
 
       - name: POST /api/execute/${{ matrix.rfc }}/sync
+        if: ${{ inputs.rfc_list == '' || inputs.rfc_list == null || contains(format(',{0},', inputs.rfc_list), format(',{0},', matrix.rfc)) }}
         shell: powershell
         env:
           RFC_API_KEY: ${{ secrets.RFC_API_KEY }}
