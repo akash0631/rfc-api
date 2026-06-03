@@ -300,6 +300,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                 return FailSync(requestId, rfcCode, sw, HttpStatusCode.NotImplemented,
                     "LoadMode '" + ep.LoadMode + "' not implemented yet; only 'full' is supported.");
 
+            // SAP safety guard: tables flagged RequiresFilter cannot be dumped without a WHERE.
+            // Prevents accidental full-table scans on huge tables (MARD, MARC, MSEG, EKPO, ...).
+            if (ep.RequiresFilter && string.IsNullOrWhiteSpace(ep.FilterClause))
+                return FailSync(requestId, rfcCode, sw, HttpStatusCode.BadRequest,
+                    "SAP safety: " + sourceTable + " has REQUIRES_FILTER=true but FILTER_CLAUSE is empty. " +
+                    "Set FILTER_CLAUSE in GOLD.RFC_MASTER (e.g. \"WERKS = 'HB05'\") before exec.");
+
             // Guard 4: concurrency lock per RFC
             if (!_inFlight.TryAdd(rfcCode, DateTime.UtcNow))
             {
@@ -324,12 +331,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                 var dumpSvc = new SapTableDumpService();
                 int timeoutSec = ep.TimeoutSeconds > 0 ? ep.TimeoutSeconds : 120;
 
+                // Convert FILTER_CLAUSE to RFC_READ_TABLE.OPTIONS rows.
+                // OPTIONS table has 72-char per-row limit — split at spaces to avoid breaking tokens.
+                List<string> optionsList = null;
+                if (!string.IsNullOrWhiteSpace(ep.FilterClause))
+                    optionsList = ChunkWhereClause(ep.FilterClause.Trim(), 72);
+
                 // Guard 3: timeout wrapper on the SAP read
                 List<SapTableDumpService.FieldMeta> cols = null;
                 List<Dictionary<string, object>> rows = null;
                 var readTask = Task.Run(() =>
                 {
-                    var result = dumpSvc.ReadFullTable(sourceTable, fields);
+                    var result = dumpSvc.ReadFullTable(sourceTable, fields, options: optionsList);
                     cols = result.Columns;
                     rows = result.Rows;
                 });
@@ -516,6 +529,28 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
             try { _sf.LogAccess(requestId, rfcCode, "/api/execute/" + rfcCode, 500, sw.ElapsedMilliseconds, 0, error); } catch { }
             return Request.CreateResponse(HttpStatusCode.BadRequest,
                 new { Success = false, RequestId = requestId, Error = error });
+        }
+
+        // Split a WHERE clause into RFC_READ_TABLE.OPTIONS-compatible 72-char rows.
+        // Breaks at spaces where possible so SAP tokens (e.g. "WERKS") are not split mid-word.
+        private static List<string> ChunkWhereClause(string clause, int chunkSize)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrEmpty(clause)) return result;
+            int pos = 0;
+            while (pos < clause.Length)
+            {
+                int take = Math.Min(chunkSize, clause.Length - pos);
+                if (pos + take < clause.Length)
+                {
+                    int lastSpace = clause.LastIndexOf(' ', pos + take - 1, take);
+                    if (lastSpace > pos) take = lastSpace - pos;
+                }
+                result.Add(clause.Substring(pos, take));
+                pos += take;
+                while (pos < clause.Length && clause[pos] == ' ') pos++;
+            }
+            return result;
         }
     }
 
