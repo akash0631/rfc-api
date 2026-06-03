@@ -46,7 +46,9 @@ namespace Vendor_SRM_Routing_Application.Services
                                  COALESCE(TIMEOUT_SECONDS, 120) AS TIMEOUT_SECONDS,
                                  COALESCE(MAX_WINDOW_DAYS, 7)   AS MAX_WINDOW_DAYS,
                                  SOURCE_TABLE, FIELD_LIST,
-                                 COALESCE(LOAD_MODE, 'full') AS LOAD_MODE
+                                 COALESCE(LOAD_MODE, 'full') AS LOAD_MODE,
+                                 FILTER_CLAUSE,
+                                 COALESCE(REQUIRES_FILTER, FALSE) AS REQUIRES_FILTER
                           FROM GOLD.RFC_MASTER
                           WHERE STATUS = 'Active'
                           ORDER BY RFC_CODE");
