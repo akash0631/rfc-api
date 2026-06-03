@@ -41,7 +41,8 @@ namespace Vendor_SRM_Routing_Application.Services
             List<string> requestedFields,
             string delimiter = "|",
             int maxRowBytes = DEFAULT_MAX_ROW_BYTES,
-            int timeoutSeconds = 120)
+            int timeoutSeconds = 120,
+            IEnumerable<string> options = null)
         {
             var rfcPar = BaseController.rfcConfigparametersproduction();
             var dest = RfcDestinationManager.GetDestination(rfcPar);
@@ -67,7 +68,7 @@ namespace Vendor_SRM_Routing_Application.Services
 
             for (int ci = 0; ci < chunks.Count; ci++)
             {
-                var rows = ReadChunk(repo, dest, sapTable, chunks[ci], delimiter, 0, 0, null);
+                var rows = ReadChunk(repo, dest, sapTable, chunks[ci], delimiter, 0, 0, options);
 
                 if (stitchByPk)
                 {
