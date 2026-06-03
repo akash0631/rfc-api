@@ -85,9 +85,12 @@ namespace Vendor_SRM_Routing_Application.Services
                             Status         = rfc["STATUS"]?.ToString() ?? "Active",
                             TimeoutSeconds = rfc["TIMEOUT_SECONDS"] != null ? Convert.ToInt32(rfc["TIMEOUT_SECONDS"]) : 120,
                             MaxWindowDays  = rfc["MAX_WINDOW_DAYS"]  != null ? Convert.ToInt32(rfc["MAX_WINDOW_DAYS"])  : 7,
-                            SourceTable    = rfc.ContainsKey("SOURCE_TABLE") ? rfc["SOURCE_TABLE"]?.ToString() : null,
-                            FieldList      = rfc.ContainsKey("FIELD_LIST")   ? rfc["FIELD_LIST"]?.ToString()   : null,
-                            LoadMode       = rfc.ContainsKey("LOAD_MODE")    ? (rfc["LOAD_MODE"]?.ToString() ?? "full") : "full",
+                            SourceTable    = rfc.ContainsKey("SOURCE_TABLE")    ? rfc["SOURCE_TABLE"]?.ToString()    : null,
+                            FieldList      = rfc.ContainsKey("FIELD_LIST")      ? rfc["FIELD_LIST"]?.ToString()      : null,
+                            LoadMode       = rfc.ContainsKey("LOAD_MODE")       ? (rfc["LOAD_MODE"]?.ToString() ?? "full") : "full",
+                            FilterClause   = rfc.ContainsKey("FILTER_CLAUSE")   ? rfc["FILTER_CLAUSE"]?.ToString()   : null,
+                            RequiresFilter = rfc.ContainsKey("REQUIRES_FILTER") && rfc["REQUIRES_FILTER"] != null
+                                                 && Convert.ToBoolean(rfc["REQUIRES_FILTER"]),
                             Parameters   = paramRows.Select(p => new RfcParam
                             {
                                 Name        = p["PARAM_NAME"]?.ToString(),
@@ -152,9 +155,11 @@ namespace Vendor_SRM_Routing_Application.Services
         public List<RfcParam> Parameters { get; set; } = new List<RfcParam>();
 
         // TableDump-mode fields (EXECUTION_PATTERN='TableDump'). Optional for other patterns.
-        public string SourceTable  { get; set; }        // SAP table name (defaults to TargetTable if NULL)
-        public string FieldList    { get; set; }        // comma-separated SAP columns (empty/NULL = all)
-        public string LoadMode     { get; set; } = "full";   // 'full' | 'delta' | 'rolling' (only 'full' shipped v0.1)
+        public string SourceTable    { get; set; }        // SAP table name (defaults to TargetTable if NULL)
+        public string FieldList      { get; set; }        // comma-separated SAP columns (empty/NULL = all)
+        public string LoadMode       { get; set; } = "full";   // 'full' | 'delta' | 'rolling' (only 'full' shipped v0.1)
+        public string FilterClause   { get; set; }        // WHERE-clause text passed to RFC_READ_TABLE.OPTIONS (SAP safety)
+        public bool   RequiresFilter { get; set; } = false; // If true, server rejects exec when FilterClause is empty
     }
 
     public class RfcParam
