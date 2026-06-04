@@ -47,7 +47,7 @@ jobs:
     runs-on: [self-hosted, iis]
     strategy:
       fail-fast: false
-      max-parallel: 2          # don't hammer SAP — at most 2 RFCs concurrently
+      max-parallel: 4          # 4 concurrent RFCs (bumped from 2 for the tracker batch)
       matrix:
         rfc:
           # 8 legacy Z-RFCs (PerDate / PerStore / Single execution patterns)
@@ -98,6 +98,18 @@ jobs:
           - LOAD_SAP_MKPF
           # FI vendor master (tracker rows 1-78 wave) — full small-master dump
           - LOAD_SAP_LFA1
+          # SD/FI tracker tables — Excel cols, daily delta on native date (S/4 denormalized)
+          - LOAD_SAP_VBAK
+          - LOAD_SAP_VBAP
+          - LOAD_SAP_VBFA
+          - LOAD_SAP_VBRK
+          - LOAD_SAP_BKPF
+          - LOAD_SAP_BSEG
+          - LOAD_SAP_FAGLFLEXA
+          - LOAD_SAP_KNA1
+          - LOAD_SAP_SKA1
+          - LOAD_SAP_SKB1
+          - LOAD_SAP_TCURR
     steps:
       - name: Resolve date window
         id: dates
