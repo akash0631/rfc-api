@@ -332,10 +332,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                 int timeoutSec = ep.TimeoutSeconds > 0 ? ep.TimeoutSeconds : 120;
 
                 // Convert FILTER_CLAUSE to RFC_READ_TABLE.OPTIONS rows.
+                // {DATE_FROM}/{DATE_TO} placeholders are substituted from the request date
+                // window (yyyyMMdd, SAP internal date format) so daily delta syncs roll
+                // automatically — the GHA workflow posts yesterday's window each night.
                 // OPTIONS table has 72-char per-row limit — split at spaces to avoid breaking tokens.
                 List<string> optionsList = null;
                 if (!string.IsNullOrWhiteSpace(ep.FilterClause))
-                    optionsList = ChunkWhereClause(ep.FilterClause.Trim(), 72);
+                {
+                    string fc = ep.FilterClause.Trim();
+                    if (req.DateFrom.HasValue) fc = fc.Replace("{DATE_FROM}", req.DateFrom.Value.ToString("yyyyMMdd"));
+                    if (req.DateTo.HasValue)   fc = fc.Replace("{DATE_TO}",   req.DateTo.Value.ToString("yyyyMMdd"));
+                    optionsList = ChunkWhereClause(fc, 72);
+                }
 
                 // Guard 3: timeout wrapper on the SAP read
                 List<SapTableDumpService.FieldMeta> cols = null;
