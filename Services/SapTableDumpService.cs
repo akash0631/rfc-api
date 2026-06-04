@@ -109,34 +109,44 @@ namespace Vendor_SRM_Routing_Application.Services
 
         // ── Lower-level helpers (public for testability) ────────────────────────────
 
-        /// <summary>Metadata only: NO_DATA='X' returns FIELDS info without populating DATA.</summary>
+        /// <summary>
+        /// Metadata only: resolves each field's WA LENGTH via INDIVIDUAL NO_DATA
+        /// RFC_READ_TABLE calls (one FIELDNAME per call), preserving request order.
+        ///
+        /// Why per-field: requesting all fields in a single call trips SAP's 512-byte
+        /// WA buffer (DATA_BUFFER_EXCEEDED) on wide tables such as MARA — even with
+        /// NO_DATA='X', the V2 kernel still validates the cumulative WA layout. A
+        /// single field can never exceed the limit, so this is always safe. OFFSET is
+        /// not meaningful here (each chunk re-derives its own offsets in ReadChunk);
+        /// only Name + Length are consumed downstream (ChunkFields + CREATE TABLE).
+        /// </summary>
         public List<FieldMeta> GetFieldMetadata(
             RfcRepository repo, RfcDestination dest, string tableName, List<string> requestedFields)
         {
-            IRfcFunction f = repo.CreateFunction("RFC_READ_TABLE");
-            f.SetValue("QUERY_TABLE", tableName);
-            f.SetValue("NO_DATA", "X");
-
-            IRfcTable fields = f.GetTable("FIELDS");
+            var meta = new List<FieldMeta>();
             foreach (var name in requestedFields ?? new List<string>())
             {
+                IRfcFunction f = repo.CreateFunction("RFC_READ_TABLE");
+                f.SetValue("QUERY_TABLE", tableName);
+                f.SetValue("NO_DATA", "X");
+
+                IRfcTable fields = f.GetTable("FIELDS");
                 fields.Append();
                 fields.SetValue("FIELDNAME", name);
-            }
 
-            f.Invoke(dest);
+                f.Invoke(dest);
 
-            IRfcTable ret = f.GetTable("FIELDS");
-            var meta = new List<FieldMeta>();
-            for (int i = 0; i < ret.RowCount; i++)
-            {
-                ret.CurrentIndex = i;
-                meta.Add(new FieldMeta
+                IRfcTable ret = f.GetTable("FIELDS");
+                if (ret.RowCount > 0)
                 {
-                    Name = ret.GetString("FIELDNAME").Trim(),
-                    Offset = ret.GetInt("OFFSET"),
-                    Length = ret.GetInt("LENGTH")
-                });
+                    ret.CurrentIndex = 0;
+                    meta.Add(new FieldMeta
+                    {
+                        Name = ret.GetString("FIELDNAME").Trim(),
+                        Offset = ret.GetInt("OFFSET"),
+                        Length = ret.GetInt("LENGTH")
+                    });
+                }
             }
             return meta;
         }
