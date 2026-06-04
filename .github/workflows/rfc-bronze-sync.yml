@@ -96,6 +96,8 @@ jobs:
           - LOAD_SAP_VBBE
           - LOAD_SAP_MSEG
           - LOAD_SAP_MKPF
+          # FI vendor master (tracker rows 1-78 wave) — full small-master dump
+          - LOAD_SAP_LFA1
     steps:
       - name: Resolve date window
         id: dates
