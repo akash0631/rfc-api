@@ -185,20 +185,25 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
 
             try
             {
-                // 2026-06-02: flipped to Z_ART_PATCH_RFC_V4 (FG ZARTPV4FG, TR S4DK925598).
-                // V4 fixes the V3 routing bug where classified MATNRs could not update
-                // ZCT04-mirror-only fields. V3 routed by has_class(matnr): any attr found
-                // in CABN globally was sent to BAPI_OBJCL_CHANGE, which rejected attrs not
-                // in that class's KSML (e.g. M_FIT on a class-774 MATNR).
-                // V4 routes per attr using all three signals:
-                //   - attr ATINN in this MATNR's class KSML  -> AUSP (BAPI route)
-                //   - else attr is a ZCT04_CHARACTER column   -> ZCT04 mirror (direct MODIFY)
-                //   - else attr in CABN globally but not class -> NOT_IN_CLASS error
-                //   - else                                     -> UNKNOWN error
-                // Response now includes per-attr "results"/"plan" array with route + status
-                // so callers can show field-level success/failure detail (master-data UX).
+                // 2026-06-04: flipped to Z_ART_PATCH_RFC_V61 (FG ZARTPV61FG1, TR S4DK925666).
+                // V61 fixes V4 NOT_IN_CLASS bug on 18 new KLART 026 fields
+                // (M_FAB_MAIN_MVGR_1 etc) used at article creation. V4 only scanned
+                // KSSK(OBJEK=MATNR, KLART='001'); variant-config classes (KLART 026) are
+                // reached only via INOB(MATNR, OBTAB=MARA) -> CUOBJ -> KSSK(CUOBJ, KLART).
+                // V61 enumerates ALL candidate classes (KLART 001 direct + INOB->CUOBJ
+                // chain for any KLART), scans every KSML per attr, groups BAPI calls by
+                // (CLASSTYPE, CLASS). CRITICAL: BAPI_OBJCL_CHANGE is always invoked with
+                // OBJECTKEY = MATNR even for KLART 026 - BAPI resolves CUOBJ internally
+                // via INOB. Passing CUOBJ directly returns CL/763 "Object does not exist".
+                // Routes per attr:
+                //   - attr ATINN in any candidate class KSML  -> AUSP (BAPI route, grouped)
+                //   - else attr is a ZCT04_CHARACTER column    -> ZCT04 mirror (direct MODIFY)
+                //   - else attr in CABN globally but no class  -> NOT_IN_CLASS error
+                //   - else                                      -> UNKNOWN error
+                // Response includes "candidates" (all classes found) + per-attr "results"
+                // (route + class + klart + status) for field-level UX.
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V4");
+                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V61");
                 fn.SetValue("IV_MATNR", PadMatnr(request.Matnr));
                 fn.SetValue("IV_CHANGES", changesStr);
                 fn.SetValue("IV_TEST_MODE", request.TestMode ? "X" : " ");
