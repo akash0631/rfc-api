@@ -1,6 +1,6 @@
 name: SAP -> Snowflake BRONZE daily sync
 
-# Fires once per day at 19:00 IST (13:30 UTC) and can be manually re-run for
+# Fires once per day at 02:00 IST (20:30 UTC) and can be manually re-run for
 # any historical date window via workflow_dispatch.
 #
 # Runs on the self-hosted .36 IIS runner and calls http://localhost:9292 directly,
@@ -18,7 +18,7 @@ name: SAP -> Snowflake BRONZE daily sync
 
 on:
   schedule:
-    - cron: '30 13 * * *'   # 19:00 IST daily
+    - cron: '30 20 * * *'   # 02:00 IST daily (20:30 UTC) — late-night, captures full prior day
   workflow_dispatch:
     inputs:
       date_from:
