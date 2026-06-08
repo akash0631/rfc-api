@@ -147,7 +147,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
         }
 
         // ============================================================
-        // POST /api/article/patch
+        // POST /api/article/patch  (single MATNR)
         // ============================================================
         [HttpPost]
         [Route("patch")]
@@ -169,55 +169,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
             HttpResponseMessage envCheck = ResolveEnv(env, out rfcPar);
             if (envCheck != null) return envCheck;
 
-            // Build pipe-delimited string M_FIT=SLIM|M_PATTERN=SOLID
-            var sb = new StringBuilder();
-            bool first = true;
-            foreach (var kv in request.Changes)
-            {
-                if (string.IsNullOrEmpty(kv.Key)) continue;
-                // Defensive: strip pipe/equals from values to avoid parser injection
-                string safeVal = (kv.Value ?? string.Empty).Replace("|", " ").Replace("=", " ");
-                if (!first) sb.Append('|');
-                sb.Append(kv.Key.ToUpperInvariant()).Append('=').Append(safeVal);
-                first = false;
-            }
-            string changesStr = sb.ToString();
-
             try
             {
-                // 2026-06-04: flipped to Z_ART_PATCH_RFC_V61 (FG ZARTPV61FG1, TR S4DK925666).
-                // V61 fixes V4 NOT_IN_CLASS bug on 18 new KLART 026 fields
-                // (M_FAB_MAIN_MVGR_1 etc) used at article creation. V4 only scanned
-                // KSSK(OBJEK=MATNR, KLART='001'); variant-config classes (KLART 026) are
-                // reached only via INOB(MATNR, OBTAB=MARA) -> CUOBJ -> KSSK(CUOBJ, KLART).
-                // V61 enumerates ALL candidate classes (KLART 001 direct + INOB->CUOBJ
-                // chain for any KLART), scans every KSML per attr, groups BAPI calls by
-                // (CLASSTYPE, CLASS). CRITICAL: BAPI_OBJCL_CHANGE is always invoked with
-                // OBJECTKEY = MATNR even for KLART 026 - BAPI resolves CUOBJ internally
-                // via INOB. Passing CUOBJ directly returns CL/763 "Object does not exist".
-                // Routes per attr:
-                //   - attr ATINN in any candidate class KSML  -> AUSP (BAPI route, grouped)
-                //   - else attr is a ZCT04_CHARACTER column    -> ZCT04 mirror (direct MODIFY)
-                //   - else attr in CABN globally but no class  -> NOT_IN_CLASS error
-                //   - else                                      -> UNKNOWN error
-                // Response includes "candidates" (all classes found) + per-attr "results"
-                // (route + class + klart + status) for field-level UX.
                 RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
-                IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V61");
-                fn.SetValue("IV_MATNR", PadMatnr(request.Matnr));
-                fn.SetValue("IV_CHANGES", changesStr);
-                fn.SetValue("IV_TEST_MODE", request.TestMode ? "X" : " ");
-                fn.SetValue("IV_USER", (request.User ?? "RFC_USER").ToUpperInvariant());
-                fn.Invoke(dest);
-                string json = fn.GetValue("EV_JSON")?.ToString() ?? "{}";
-                bool ok = json.Contains("\"ok\":true");
+                ArticlePatchItemResult item = InvokePatchRfc(
+                    dest, request.Matnr, request.Changes, request.TestMode, request.User);
                 return Request.CreateResponse(HttpStatusCode.OK, new ArticlePatchResponse
                 {
-                    Status = ok,
+                    Status = item.Ok,
                     Env = env,
                     Matnr = request.Matnr,
                     TestMode = request.TestMode,
-                    ResultJson = json
+                    ResultJson = item.ResultJson
                 });
             }
             catch (Exception ex)
@@ -225,6 +188,144 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                 return Request.CreateResponse(HttpStatusCode.InternalServerError,
                     new { Status = false, Message = ex.Message });
             }
+        }
+
+        // ============================================================
+        // POST /api/article/patch-bulk  (1..500 MATNRs in one call)
+        //   body = { items:[{matnr, changes:{fn:val,...}},...],
+        //            test_mode, user, stop_on_error }
+        // Sequential per-MATNR RFC invoke against pooled RfcDestination.
+        // Each MATNR is atomic (RFC commits per call).  No global rollback.
+        // ============================================================
+        [HttpPost]
+        [Route("patch-bulk")]
+        public HttpResponseMessage PatchBulk([FromBody] ArticleBulkPatchRequest request, string env = "dev")
+        {
+            if (request == null)
+                return Request.CreateResponse(HttpStatusCode.BadRequest,
+                    new { Status = false, Message = "Request body required." });
+
+            if (request.Items == null || request.Items.Count == 0)
+                return Request.CreateResponse(HttpStatusCode.BadRequest,
+                    new { Status = false, Message = "items must contain at least one element." });
+
+            const int MAX_ITEMS = 500;
+            if (request.Items.Count > MAX_ITEMS)
+                return Request.CreateResponse((HttpStatusCode)413,
+                    new { Status = false, Message = $"items limit is {MAX_ITEMS} per call. Got {request.Items.Count}. Split into smaller batches." });
+
+            RfcConfigParameters rfcPar;
+            HttpResponseMessage envCheck = ResolveEnv(env, out rfcPar);
+            if (envCheck != null) return envCheck;
+
+            var results = new List<ArticlePatchItemResult>(request.Items.Count);
+            int applied = 0, failed = 0;
+
+            try
+            {
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                for (int i = 0; i < request.Items.Count; i++)
+                {
+                    ArticleBulkPatchItem item = request.Items[i];
+                    ArticlePatchItemResult res;
+                    try
+                    {
+                        if (item == null || string.IsNullOrWhiteSpace(item.Matnr))
+                        {
+                            res = new ArticlePatchItemResult
+                            {
+                                Index = i,
+                                Matnr = item?.Matnr ?? string.Empty,
+                                Ok = false,
+                                ResultJson = "{\"ok\":false,\"error\":\"matnr_required\"}"
+                            };
+                        }
+                        else if (item.Changes == null || item.Changes.Count == 0)
+                        {
+                            res = new ArticlePatchItemResult
+                            {
+                                Index = i,
+                                Matnr = item.Matnr,
+                                Ok = false,
+                                ResultJson = "{\"ok\":false,\"error\":\"changes_empty\"}"
+                            };
+                        }
+                        else
+                        {
+                            res = InvokePatchRfc(dest, item.Matnr, item.Changes, request.TestMode, request.User);
+                            res.Index = i;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        res = new ArticlePatchItemResult
+                        {
+                            Index = i,
+                            Matnr = item?.Matnr ?? string.Empty,
+                            Ok = false,
+                            ResultJson = "{\"ok\":false,\"error\":\"rfc_exception\",\"msg\":\"" +
+                                         (ex.Message ?? "").Replace("\"", "'") + "\"}"
+                        };
+                    }
+
+                    results.Add(res);
+                    if (res.Ok) applied++; else failed++;
+
+                    if (!res.Ok && request.StopOnError) break;
+                }
+
+                return Request.CreateResponse(HttpStatusCode.OK, new ArticleBulkPatchResponse
+                {
+                    Status = failed == 0,
+                    Env = env,
+                    TestMode = request.TestMode,
+                    Total = request.Items.Count,
+                    Applied = applied,
+                    Failed = failed,
+                    Results = results
+                });
+            }
+            catch (Exception ex)
+            {
+                return Request.CreateResponse(HttpStatusCode.InternalServerError,
+                    new { Status = false, Message = ex.Message });
+            }
+        }
+
+        // ----- shared single-MATNR RFC invoke -----
+        // 2026-06-04: Z_ART_PATCH_RFC_V61 (FG ZARTPV61FG1, TR S4DK925666).
+        // V61 enumerates all candidate classes via KSSK + INOB->CUOBJ chain
+        // (covers KLART 001 + 026), per-attr routing KSML->AUSP / mirror->ZCT04.
+        // BAPI_OBJCL_CHANGE always invoked with OBJECTKEY=MATNR (resolves CUOBJ
+        // internally via INOB). RFC commits per call — each MATNR atomic, no bulk rollback.
+        private ArticlePatchItemResult InvokePatchRfc(
+            RfcDestination dest, string matnr,
+            Dictionary<string, string> changes, bool testMode, string user)
+        {
+            var sb = new StringBuilder();
+            bool first = true;
+            foreach (var kv in changes)
+            {
+                if (string.IsNullOrEmpty(kv.Key)) continue;
+                string safeVal = (kv.Value ?? string.Empty).Replace("|", " ").Replace("=", " ");
+                if (!first) sb.Append('|');
+                sb.Append(kv.Key.ToUpperInvariant()).Append('=').Append(safeVal);
+                first = false;
+            }
+
+            IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V61");
+            fn.SetValue("IV_MATNR", PadMatnr(matnr));
+            fn.SetValue("IV_CHANGES", sb.ToString());
+            fn.SetValue("IV_TEST_MODE", testMode ? "X" : " ");
+            fn.SetValue("IV_USER", (user ?? "RFC_USER").ToUpperInvariant());
+            fn.Invoke(dest);
+            string json = fn.GetValue("EV_JSON")?.ToString() ?? "{}";
+            return new ArticlePatchItemResult
+            {
+                Matnr = matnr,
+                Ok = json.Contains("\"ok\":true"),
+                ResultJson = json
+            };
         }
 
         // ============================================================
@@ -316,5 +417,41 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
         public bool TestMode { get; set; }
         /// <summary>Raw EV_JSON: {"matnr":"X","ok":true,"applied":N} or {"ok":false,"errors":[{"fn":"X","msg":"LOCKED"}]}.</summary>
         public string ResultJson { get; set; }
+    }
+
+    public class ArticleBulkPatchItem
+    {
+        public string Matnr { get; set; }
+        public Dictionary<string, string> Changes { get; set; }
+    }
+
+    public class ArticleBulkPatchRequest
+    {
+        /// <summary>Up to 500 MATNRs per call. Each item processed sequentially, atomic per MATNR.</summary>
+        public List<ArticleBulkPatchItem> Items { get; set; }
+        public bool TestMode { get; set; }
+        public string User { get; set; }
+        /// <summary>If true, halt loop on first failed MATNR (remaining items left unprocessed).</summary>
+        public bool StopOnError { get; set; }
+    }
+
+    public class ArticlePatchItemResult
+    {
+        public int Index { get; set; }
+        public string Matnr { get; set; }
+        public bool Ok { get; set; }
+        /// <summary>Raw EV_JSON from Z_ART_PATCH_RFC_V4 for this MATNR.</summary>
+        public string ResultJson { get; set; }
+    }
+
+    public class ArticleBulkPatchResponse
+    {
+        public bool Status { get; set; }
+        public string Env { get; set; }
+        public bool TestMode { get; set; }
+        public int Total { get; set; }
+        public int Applied { get; set; }
+        public int Failed { get; set; }
+        public List<ArticlePatchItemResult> Results { get; set; }
     }
 }
