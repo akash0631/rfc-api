@@ -75,7 +75,7 @@ namespace Vendor_Application_MVC.Controllers
             rfcPar.Add(RfcConfigParameters.Client, "600");
             // system -> status
             rfcPar.Add(RfcConfigParameters.User, "POWERBI");//User Name
-            rfcPar.Add(RfcConfigParameters.Password, "India@123456"); //User Password
+            rfcPar.Add(RfcConfigParameters.Password, "BronzeBot2026"); //User Password (rotated 2026-06-10, productive set via SU01 — old India@123456 was initial-flag, never productive on QA)
             rfcPar.Add(RfcConfigParameters.SystemID, "S4Q");
             rfcPar.Add(RfcConfigParameters.SystemNumber, "00");
 
