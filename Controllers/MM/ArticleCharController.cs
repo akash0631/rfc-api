@@ -22,10 +22,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
     ///
     /// Endpoints:
     ///   GET  /api/article/char-schema?env=dev|qa
-    ///   GET  /api/article/{matnr}?env=dev|qa
-    ///   POST /api/article/patch?env=dev|qa  body={matnr, changes:{fn:value,...}, test_mode:bool, user:"AKASH"}
+    ///   GET  /api/article/{matnr}?env=dev|qa|prod
+    ///   POST /api/article/patch?env=dev|qa|prod  body={matnr, changes:{fn:value,...}, test_mode:bool, user:"AKASH"}
     ///
-    /// PROD = HARD 403 until business sign-off.
+    /// PROD live 2026-06-12 (Z_ART_PATCH_RFC_V61 imported on S4P; business sign-off received).
     /// Lock list enforced server-side in ABAP — client cannot bypass.
     /// </summary>
     [RoutePrefix("api/article")]
@@ -343,8 +343,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                     return null;
                 case "prod":
                 case "production":
-                    return Request.CreateResponse(HttpStatusCode.Forbidden,
-                        new { Status = false, Message = "env=prod is hard-blocked on Article PATCH API. Use dev or qa." });
+                    rfcPar = BaseController.rfcConfigparametersproduction();
+                    return null;
                 case "dev":
                 case "development":
                 case "":
