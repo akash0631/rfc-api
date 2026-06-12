@@ -1,7 +1,9 @@
 name: SAP -> Snowflake BRONZE daily sync
 
-# Fires once per day at 02:00 IST (20:30 UTC) and can be manually re-run for
-# any historical date window via workflow_dispatch.
+# Fires on 6 time-buckets matching the legacy `\192.168.151.28\` task scheduler
+# on `.24` so each RFC pulls SAP at the same time the .NET legacy app does.
+# All buckets can be manually re-run via workflow_dispatch with custom
+# date_from/date_to and rfc_list inputs.
 #
 # Runs on the self-hosted .36 IIS runner and calls http://localhost:9292 directly,
 # bypassing the public Cloudflare proxy at sap-api.v2retail.net. This removes
@@ -11,14 +13,21 @@ name: SAP -> Snowflake BRONZE daily sync
 #
 # Safety: all SAP overload guards still live in the IIS wrapper itself
 # (rate-limit, per-RFC concurrency lock, STATUS gate, SAP timeout).
-# This job loops the catalog of registered RFCs and POSTs the previous day's
-# date window. TableDump-pattern RFCs (READ_*) ignore the date params.
+# TableDump-pattern RFCs (READ_* and LOAD_SAP_*) ignore the date params.
 #
 # See docs/SAP-SNOWFLAKE-PIPELINE.md and docs/SAFEGUARDS.md for design.
 
 on:
   schedule:
-    - cron: '30 20 * * *'   # 02:00 IST daily (20:30 UTC) — late-night, captures full prior day
+    # 6 buckets — same fire times as the legacy `.28` task scheduler on .24.
+    # Each cron triggers the workflow; rfc_list is resolved per cron and the
+    # job matrix filters cells whose rfc isn't in that bucket.
+    - cron: '30 14 * * *'   # 20:00 IST — Evening masters (plants, vendors, customers, GL, mvt types, etc.)
+    - cron: '30 16 * * *'   # 22:00 IST — Article master (MARA/ARTICLE_MASTER)
+    - cron: '40 18 * * *'   # 00:10 IST — PO + open positions (EKKO/EKPO/EKBE)
+    - cron: '0 19 * * *'    # 00:30 IST — Stock state (MARD/MARC/MCHB/MSKA/MSLB/MKOL/MSPR/LQUA/LTAP/LTAK)
+    - cron: '0 20 * * *'    # 01:30 IST — Bulk transactional (GRC, sales, movements, FI docs, deliveries)
+    - cron: '45 20 * * *'   # 02:15 IST — Valuation late (MBEW/EBEW/OBEW/QBEW)
   workflow_dispatch:
     inputs:
       date_from:
@@ -30,7 +39,7 @@ on:
         required: false
         type: string
       rfc_list:
-        description: 'CSV of RFCs (default: 8 known-working)'
+        description: 'CSV of RFCs (overrides bucket; empty = run full matrix on manual dispatch)'
         required: false
         type: string
 
@@ -47,7 +56,7 @@ jobs:
     runs-on: [self-hosted, iis]
     strategy:
       fail-fast: false
-      max-parallel: 4          # 4 concurrent RFCs (bumped from 2 for the tracker batch)
+      max-parallel: 2          # don't hammer SAP — at most 2 RFCs concurrently
       matrix:
         rfc:
           # 8 legacy Z-RFCs (PerDate / PerStore / Single execution patterns)
@@ -66,7 +75,6 @@ jobs:
           - READ_T005U
           # 29 SAP_* inventory mirrors (per spec 11_INVENTORY_SOT_SAP_TO_SF_2026-06-03.md)
           # Pilot scope = HB05 + DH24 via FILTER_CLAUSE in RFC_MASTER. Date params ignored.
-          # Masters first (small), then stock-state, valuation, open positions, movements.
           - LOAD_SAP_T001W
           - LOAD_SAP_T001L
           - LOAD_SAP_T156
@@ -96,9 +104,7 @@ jobs:
           - LOAD_SAP_VBBE
           - LOAD_SAP_MSEG
           - LOAD_SAP_MKPF
-          # FI vendor master (tracker rows 1-78 wave) — full small-master dump
           - LOAD_SAP_LFA1
-          # SD/FI tracker tables — Excel cols, daily delta on native date (S/4 denormalized)
           - LOAD_SAP_VBAK
           - LOAD_SAP_VBAP
           - LOAD_SAP_VBFA
@@ -111,10 +117,35 @@ jobs:
           - LOAD_SAP_SKB1
           - LOAD_SAP_TCURR
     steps:
+      - name: Resolve rfc_list from schedule (bucket routing)
+        id: rfclist
+        shell: powershell
+        run: |
+          $sched = "${{ github.event.schedule }}"
+          $userList = "${{ inputs.rfc_list }}"
+          if ($userList) {
+            $list = $userList
+            Write-Host "Using user-supplied rfc_list: $list"
+          } elseif (-not $sched) {
+            $list = ''
+            Write-Host "Manual dispatch with no rfc_list -> run full matrix"
+          } else {
+            switch ($sched) {
+              '30 14 * * *' { $list = 'LOAD_SAP_T001W,LOAD_SAP_T001L,LOAD_SAP_T156,LOAD_SAP_T156T,LOAD_SAP_MAKT,LOAD_SAP_MSKU,LOAD_SAP_LFA1,LOAD_SAP_KNA1,LOAD_SAP_SKA1,LOAD_SAP_SKB1,LOAD_SAP_TCURR,READ_T001W,READ_T005T,READ_T023T,READ_T005U,RFC_PLANT_MASTER,RFC_ZPBI_Vendor_Payment,ZMM_VND_PUR' }
+              '30 16 * * *' { $list = 'RFC_ARTICLE_MASTER,LOAD_SAP_MARA' }
+              '40 18 * * *' { $list = 'LOAD_SAP_EKKO,LOAD_SAP_EKPO,LOAD_SAP_EKBE' }
+              '0 19 * * *'  { $list = 'LOAD_SAP_MARD,LOAD_SAP_MARC,LOAD_SAP_MCHB,LOAD_SAP_MSKA,LOAD_SAP_MSLB,LOAD_SAP_MKOL,LOAD_SAP_MSPR,LOAD_SAP_LQUA,LOAD_SAP_LTAP,LOAD_SAP_LTAK' }
+              '0 20 * * *'  { $list = 'ZMM_STO_PURN_RFC,RFC_GRC_DATA_APPLICATION,LOAD_SAP_BKPF,LOAD_SAP_BSEG,LOAD_SAP_FAGLFLEXA,RFC_ALL_MOVEMENT,LOAD_SAP_MSEG,LOAD_SAP_MKPF,RFC_Sales_Data,LOAD_SAP_VBAK,LOAD_SAP_VBAP,LOAD_SAP_VBFA,LOAD_SAP_VBRK,LOAD_SAP_VBBE,LOAD_SAP_LIPS,LOAD_SAP_LIKP' }
+              '45 20 * * *' { $list = 'LOAD_SAP_MBEW,LOAD_SAP_EBEW,LOAD_SAP_OBEW,LOAD_SAP_QBEW' }
+              default       { $list = '' }
+            }
+            Write-Host "Scheduled fire '$sched' -> rfc_list: $list"
+          }
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "rfc_list=$list"
+
       - name: Resolve date window
         id: dates
-        # If rfc_list provided, skip cells not in it. Empty = run full matrix.
-        if: ${{ inputs.rfc_list == '' || inputs.rfc_list == null || contains(format(',{0},', inputs.rfc_list), format(',{0},', matrix.rfc)) }}
+        if: ${{ steps.rfclist.outputs.rfc_list == '' || contains(format(',{0},', steps.rfclist.outputs.rfc_list), format(',{0},', matrix.rfc)) }}
         shell: powershell
         run: |
           $dateFromInput = "${{ inputs.date_from }}"
@@ -131,7 +162,7 @@ jobs:
           Write-Host "Window: $FROM -> $TO for ${{ matrix.rfc }}"
 
       - name: POST /api/execute/${{ matrix.rfc }}/sync
-        if: ${{ inputs.rfc_list == '' || inputs.rfc_list == null || contains(format(',{0},', inputs.rfc_list), format(',{0},', matrix.rfc)) }}
+        if: ${{ steps.rfclist.outputs.rfc_list == '' || contains(format(',{0},', steps.rfclist.outputs.rfc_list), format(',{0},', matrix.rfc)) }}
         shell: powershell
         env:
           RFC_API_KEY: ${{ secrets.RFC_API_KEY }}
