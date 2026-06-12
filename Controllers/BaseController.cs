@@ -23,7 +23,7 @@ namespace Vendor_Application_MVC.Controllers
             rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID
             // system -> status
             rfcPar.Add(RfcConfigParameters.User, "sap_abap");//User Name
-            rfcPar.Add(RfcConfigParameters.Password, "Abap@123456"); //User Password
+            rfcPar.Add(RfcConfigParameters.Password, "Hana@123456"); //User Password
             //rfcPar.Add(RfcConfigParameters.User, "SAP_PM1");//User Name
             //rfcPar.Add(RfcConfigParameters.Password, "Master@567"); //User Password
             //rfcPar.Add(RfcConfigParameters.SystemID, "01");
