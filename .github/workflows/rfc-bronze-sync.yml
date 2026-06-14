@@ -59,10 +59,11 @@ jobs:
       max-parallel: 2          # don't hammer SAP — at most 2 RFCs concurrently
       matrix:
         rfc:
-          # 8 legacy Z-RFCs (PerDate / PerStore / Single execution patterns)
+          # 9 legacy Z-RFCs (PerDate / PerStore / Single execution patterns)
           - RFC_ARTICLE_MASTER
           - RFC_GRC_DATA_APPLICATION
           - RFC_Sales_Data
+          - RFC_STOCK_DATA
           - RFC_ZPBI_Vendor_Payment
           - ZMM_STO_PURN_RFC
           - ZMM_VND_PUR
@@ -134,7 +135,7 @@ jobs:
               '30 14 * * *' { $list = 'LOAD_SAP_T001W,LOAD_SAP_T001L,LOAD_SAP_T156,LOAD_SAP_T156T,LOAD_SAP_MAKT,LOAD_SAP_MSKU,LOAD_SAP_LFA1,LOAD_SAP_KNA1,LOAD_SAP_SKA1,LOAD_SAP_SKB1,LOAD_SAP_TCURR,READ_T001W,READ_T005T,READ_T023T,READ_T005U,RFC_PLANT_MASTER,RFC_ZPBI_Vendor_Payment,ZMM_VND_PUR' }
               '30 16 * * *' { $list = 'RFC_ARTICLE_MASTER,LOAD_SAP_MARA' }
               '40 18 * * *' { $list = 'LOAD_SAP_EKKO,LOAD_SAP_EKPO,LOAD_SAP_EKBE' }
-              '0 19 * * *'  { $list = 'LOAD_SAP_MARD,LOAD_SAP_MARC,LOAD_SAP_MCHB,LOAD_SAP_MSKA,LOAD_SAP_MSLB,LOAD_SAP_MKOL,LOAD_SAP_MSPR,LOAD_SAP_LQUA,LOAD_SAP_LTAP,LOAD_SAP_LTAK' }
+              '0 19 * * *'  { $list = 'LOAD_SAP_MARD,LOAD_SAP_MARC,LOAD_SAP_MCHB,LOAD_SAP_MSKA,LOAD_SAP_MSLB,LOAD_SAP_MKOL,LOAD_SAP_MSPR,LOAD_SAP_LQUA,LOAD_SAP_LTAP,LOAD_SAP_LTAK,RFC_STOCK_DATA' }
               '0 20 * * *'  { $list = 'ZMM_STO_PURN_RFC,RFC_GRC_DATA_APPLICATION,LOAD_SAP_BKPF,LOAD_SAP_BSEG,LOAD_SAP_FAGLFLEXA,RFC_ALL_MOVEMENT,LOAD_SAP_MSEG,LOAD_SAP_MKPF,RFC_Sales_Data,LOAD_SAP_VBAK,LOAD_SAP_VBAP,LOAD_SAP_VBFA,LOAD_SAP_VBRK,LOAD_SAP_VBBE,LOAD_SAP_LIPS,LOAD_SAP_LIKP' }
               '45 20 * * *' { $list = 'LOAD_SAP_MBEW,LOAD_SAP_EBEW,LOAD_SAP_OBEW,LOAD_SAP_QBEW' }
               default       { $list = '' }
