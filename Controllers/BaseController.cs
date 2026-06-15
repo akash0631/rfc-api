@@ -22,8 +22,8 @@ namespace Vendor_Application_MVC.Controllers
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.174");//Target IP Address  // TCODE: SM59 -> check RFC connection
             rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID
             // system -> status
-            rfcPar.Add(RfcConfigParameters.User, "sap_abap");//User Name
-            rfcPar.Add(RfcConfigParameters.Password, "Hana@123456"); //User Password
+            rfcPar.Add(RfcConfigParameters.User, "sap_cloudai");//User Name
+            rfcPar.Add(RfcConfigParameters.Password, "Cloud@0905"); //User Password
             //rfcPar.Add(RfcConfigParameters.User, "SAP_PM1");//User Name
             //rfcPar.Add(RfcConfigParameters.Password, "Master@567"); //User Password
             //rfcPar.Add(RfcConfigParameters.SystemID, "01");
