@@ -1,0 +1,55 @@
+name: Probe cloudflared certs + remote config
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Find cert.pem + dump tunnel token + try remote config fetch
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          Write-Host "=== Search cert.pem ==="
+          Get-ChildItem -Path C:\ -Recurse -Filter "cert.pem" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match "cloudflared|cloudflare" } | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
+          Write-Host "=== Decode service tunnel token ==="
+          $svc = Get-WmiObject -Class Win32_Service -Filter "Name='cloudflared'"
+          $cmd = $svc.PathName
+          Write-Host "PathName: $cmd"
+          if ($cmd -match '--token\s+(\S+)') {
+            $token = $matches[1]
+            try {
+              $bytes = [Convert]::FromBase64String($token)
+              $json = [Text.Encoding]::ASCII.GetString($bytes)
+              Write-Host "Decoded: $json"
+              $obj = $json | ConvertFrom-Json
+              $tunnelId = $obj.t
+              Write-Host "Tunnel ID: $tunnelId"
+              Write-Host "Account ID: $($obj.a)"
+              Write-Host "=== Try GET tunnel config (need account API token) ==="
+              # Token is tunnel-scoped, not account-scoped. Try the legacy /configurations endpoint anyway
+              try {
+                $cfgUrl = "https://api.cloudflare.com/client/v4/accounts/$($obj.a)/cfd_tunnel/$tunnelId/configurations"
+                $r = Invoke-WebRequest $cfgUrl -Headers @{"Authorization"="Bearer $token"} -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
+                Write-Host "Config GET: $($r.StatusCode)"
+                Write-Host $r.Content
+              } catch { Write-Host "Config GET err: $($_.Exception.Message)" }
+            } catch { Write-Host "Token decode err: $($_.Exception.Message)" }
+          } else { Write-Host "No --token arg" }
+          Write-Host "=== List cert.pem contents if found ==="
+          $certs = @(
+            "C:\Users\Administrator\.cloudflared\cert.pem",
+            "C:\ProgramData\cloudflared\cert.pem",
+            "C:\Windows\System32\config\systemprofile\.cloudflared\cert.pem"
+          )
+          foreach ($p in $certs) {
+            if (Test-Path $p) {
+              Write-Host "FOUND: $p"
+              $content = Get-Content $p -Raw
+              Write-Host "Size: $($content.Length)"
+              # cert.pem has a token block after the PEM cert
+              if ($content -match '"AccountTag"\s*:\s*"([^"]+)"') { Write-Host "AccountTag: $($matches[1])" }
+              if ($content -match '"TunnelSecret"\s*:\s*"([^"]+)"') { Write-Host "TunnelSecret (truncated): $($matches[1].Substring(0,20))..." }
+              Write-Host "=== Last 600 chars (token area) ==="
+              Write-Host $content.Substring([Math]::Max(0, $content.Length-600))
+            }
+          }
