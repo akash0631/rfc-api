@@ -35,7 +35,7 @@ jobs:
             Write-Host ".179 direct ADT: $($r.StatusCode) $($r.Headers['Content-Type']) bytes=$($r.RawContentLength)"
           } catch { Write-Host ".179 direct ADT err: $_" }
           try {
-            $r = Invoke-WebRequest 'http://192.168.144.179:8000/sap/opu/odata/sap/Z_SB_ARTICLE/ArtMin/$count?sap-client=600' `
+            $r = Invoke-WebRequest 'http://192.168.144.179:8000/sap/opu/odata/sap/Z_SB_ARTICLE/ArtMin/%24count?sap-client=600' `
               -Headers @{Authorization=('Basic '+[Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('sap_cloudai:Cloud@0905')))} `
               -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
             Write-Host ".179 direct OData: $($r.StatusCode) body=$($r.Content.Substring(0,[Math]::Min(100,$r.Content.Length)))"
