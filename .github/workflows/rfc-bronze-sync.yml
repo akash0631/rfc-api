@@ -69,6 +69,12 @@ jobs:
           - ZMM_VND_PUR
           - RFC_ALL_MOVEMENT
           - RFC_PLANT_MASTER
+          # 5 Phase-1 master Z-RFCs (Single/PerDate; ZPBI_* functions) — added 2026-06-16
+          - RFC_Country_MASTER
+          - RFC_STATE_MASTER
+          - RFC_MC_MASTER
+          - RFC_VND_MASTER
+          - RFC_ARTICLE_COLOUR
           # 4 TableDump small masters (RFC_READ_TABLE; date params ignored)
           - READ_T001W
           - READ_T005T
@@ -132,7 +138,7 @@ jobs:
             Write-Host "Manual dispatch with no rfc_list -> run full matrix"
           } else {
             switch ($sched) {
-              '30 14 * * *' { $list = 'LOAD_SAP_T001W,LOAD_SAP_T001L,LOAD_SAP_T156,LOAD_SAP_T156T,LOAD_SAP_MAKT,LOAD_SAP_MSKU,LOAD_SAP_LFA1,LOAD_SAP_KNA1,LOAD_SAP_SKA1,LOAD_SAP_SKB1,LOAD_SAP_TCURR,READ_T001W,READ_T005T,READ_T023T,READ_T005U,RFC_PLANT_MASTER,RFC_ZPBI_Vendor_Payment,ZMM_VND_PUR' }
+              '30 14 * * *' { $list = 'LOAD_SAP_T001W,LOAD_SAP_T001L,LOAD_SAP_T156,LOAD_SAP_T156T,LOAD_SAP_MAKT,LOAD_SAP_MSKU,LOAD_SAP_LFA1,LOAD_SAP_KNA1,LOAD_SAP_SKA1,LOAD_SAP_SKB1,LOAD_SAP_TCURR,READ_T001W,READ_T005T,READ_T023T,READ_T005U,RFC_PLANT_MASTER,RFC_ZPBI_Vendor_Payment,ZMM_VND_PUR,RFC_Country_MASTER,RFC_STATE_MASTER,RFC_MC_MASTER,RFC_VND_MASTER,RFC_ARTICLE_COLOUR' }
               '30 16 * * *' { $list = 'RFC_ARTICLE_MASTER,LOAD_SAP_MARA' }
               '40 18 * * *' { $list = 'LOAD_SAP_EKKO,LOAD_SAP_EKPO,LOAD_SAP_EKBE' }
               '0 19 * * *'  { $list = 'LOAD_SAP_MARD,LOAD_SAP_MARC,LOAD_SAP_MCHB,LOAD_SAP_MSKA,LOAD_SAP_MSLB,LOAD_SAP_MKOL,LOAD_SAP_MSPR,LOAD_SAP_LQUA,LOAD_SAP_LTAP,LOAD_SAP_LTAK,RFC_STOCK_DATA' }
