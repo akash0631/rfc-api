@@ -81,8 +81,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                         break;
                 }
 
-                // ── Connect and invoke ──────────────────────────────────────
-                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                // ── Connect and invoke (with NCo self-heal on shut-down/invalid dest) ───
+                RfcDestination dest = GetDestinationWithSelfHeal(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction(rfcName);
 
@@ -218,6 +218,42 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 {
                     EX_RETURN = new { TYPE = "E", MESSAGE = "Error: " + ex.Message }
                 });
+            }
+        }
+
+        /// <summary>
+        /// GetDestination with self-heal: if the cached RfcDestination is in a
+        /// "shut-down"/"invalid"/"REPLACED" state (a known NCo SDK bug exposed by
+        /// env-switching and cold-start races), unregister it so NCo can create
+        /// a fresh handle, then retry once. Without this, a single transient NCo
+        /// failure wedges the entire IIS worker until the app pool is recycled.
+        /// </summary>
+        private static readonly object _selfHealLock = new object();
+        private static RfcDestination GetDestinationWithSelfHeal(RfcConfigParameters rfcPar)
+        {
+            try
+            {
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                dest.Ping();
+                return dest;
+            }
+            catch (Exception ex)
+            {
+                string msg = ex.Message ?? string.Empty;
+                bool isWedged = msg.IndexOf("shut-down", StringComparison.OrdinalIgnoreCase) >= 0
+                              || msg.IndexOf("invalid destination", StringComparison.OrdinalIgnoreCase) >= 0
+                              || msg.IndexOf("REPLACED", StringComparison.OrdinalIgnoreCase) >= 0
+                              || msg.IndexOf("Cannot obtain system attributes", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!isWedged) throw;
+
+                lock (_selfHealLock)
+                {
+                    try { RfcDestinationManager.UnregisterDestination(rfcPar); } catch { }
+                    System.Threading.Thread.Sleep(200);
+                    RfcDestination dest2 = RfcDestinationManager.GetDestination(rfcPar);
+                    dest2.Ping();
+                    return dest2;
+                }
             }
         }
 
