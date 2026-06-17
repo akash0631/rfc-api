@@ -81,8 +81,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                         break;
                 }
 
-                // ── Connect and invoke ──────────────────────────────────────
-                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                // ── Connect and invoke (with NCo self-heal on shut-down/invalid dest) ───
+                RfcDestination dest = GetDestinationWithSelfHeal(rfcPar);
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction(rfcName);
 
@@ -219,6 +219,77 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                     EX_RETURN = new { TYPE = "E", MESSAGE = "Error: " + ex.Message }
                 });
             }
+        }
+
+        /// <summary>
+        /// GetDestination with self-heal: if the cached RfcDestination is in a
+        /// "shut-down"/"invalid"/"REPLACED" state (a known NCo SDK bug exposed by
+        /// env-switching and cold-start races), unregister it so NCo can create
+        /// a fresh handle, then retry once. Without this, a single transient NCo
+        /// failure wedges the entire IIS worker until the app pool is recycled.
+        /// </summary>
+        private static readonly object _selfHealLock = new object();
+        private static RfcDestination GetDestinationWithSelfHeal(RfcConfigParameters rfcPar)
+        {
+            try
+            {
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                dest.Ping();
+                return dest;
+            }
+            catch (Exception ex)
+            {
+                string msg = ex.Message ?? string.Empty;
+                bool isWedged = msg.IndexOf("shut-down", StringComparison.OrdinalIgnoreCase) >= 0
+                              || msg.IndexOf("invalid destination", StringComparison.OrdinalIgnoreCase) >= 0
+                              || msg.IndexOf("REPLACED", StringComparison.OrdinalIgnoreCase) >= 0
+                              || msg.IndexOf("Cannot obtain system attributes", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!isWedged) throw;
+
+                lock (_selfHealLock)
+                {
+                    // NCo caches destinations by Name. A wedged dest stays cached forever.
+                    // Force a fresh one by cloning params with a new unique Name.
+                    RfcConfigParameters fresh = CloneWithFreshName(rfcPar);
+                    System.Threading.Thread.Sleep(200);
+                    RfcDestination dest2 = RfcDestinationManager.GetDestination(fresh);
+                    dest2.Ping();
+                    return dest2;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Clone RfcConfigParameters with a new unique Name to force NCo to
+        /// build a fresh destination instead of returning the cached (wedged) one.
+        /// </summary>
+        private static RfcConfigParameters CloneWithFreshName(RfcConfigParameters src)
+        {
+            RfcConfigParameters fresh = new RfcConfigParameters();
+            string[] keys = new string[]
+            {
+                RfcConfigParameters.AppServerHost,
+                RfcConfigParameters.Client,
+                RfcConfigParameters.User,
+                RfcConfigParameters.Password,
+                RfcConfigParameters.SystemID,
+                RfcConfigParameters.SystemNumber,
+                RfcConfigParameters.Language,
+            };
+            foreach (string k in keys)
+            {
+                try
+                {
+                    string v = src[k];
+                    if (!string.IsNullOrEmpty(v)) fresh.Add(k, v);
+                }
+                catch { }
+            }
+            string origName = null;
+            try { origName = src[RfcConfigParameters.Name]; } catch { }
+            if (string.IsNullOrEmpty(origName)) origName = "Connection";
+            fresh.Add(RfcConfigParameters.Name, origName + "_heal_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            return fresh;
         }
 
         /// <summary>

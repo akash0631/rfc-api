@@ -18,7 +18,7 @@ namespace Vendor_Application_MVC.Controllers
         public static RfcConfigParameters rfcConfigparameters()
         {
             RfcConfigParameters rfcPar = new RfcConfigParameters();
-            rfcPar.Add(RfcConfigParameters.Name, "Connection Name"); //Connection Name              // TCODE: SM59 -> check RFC connection
+            rfcPar.Add(RfcConfigParameters.Name, "ConnectionDEV"); // env-unique name prevents NCo dest cache collision
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.174");//Target IP Address  // TCODE: SM59 -> check RFC connection
             rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID
             // system -> status
@@ -41,7 +41,7 @@ namespace Vendor_Application_MVC.Controllers
         {
             //production
             RfcConfigParameters rfcPar = new RfcConfigParameters();
-            rfcPar.Add(RfcConfigParameters.Name, "Connection Name"); //Connection Name              // TCODE: SM59 -> check RFC connection
+            rfcPar.Add(RfcConfigParameters.Name, "ConnectionPROD"); // env-unique name prevents NCo dest cache collision
             //rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.194");//Target IP Address  // TCODE: SM59 -> check RFC connection
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.170");
             // rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID
@@ -68,7 +68,7 @@ namespace Vendor_Application_MVC.Controllers
         {
             //production
             RfcConfigParameters rfcPar = new RfcConfigParameters();
-            rfcPar.Add(RfcConfigParameters.Name, "Connection Name"); //Connection Name              // TCODE: SM59 -> check RFC connection
+            rfcPar.Add(RfcConfigParameters.Name, "ConnectionQA"); // env-unique name prevents NCo dest cache collision
             //rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.194");//Target IP Address  // TCODE: SM59 -> check RFC connection
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.179");
             // rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID
