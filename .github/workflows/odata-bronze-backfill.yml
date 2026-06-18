@@ -149,21 +149,30 @@ jobs:
                   skip += page_size
               return all_rows
 
-          def to_snowflake_rows(rows, columns):
-              """Map OData rows to Snowflake column tuples."""
+          def to_snowflake_rows(rows, all_cols):
+              """Map OData rows to Snowflake column tuples in EXACT all_cols order.
+              Lineage cols can appear anywhere in the table (not necessarily at end)."""
               import uuid
               batch_id = str(uuid.uuid4())
               ingested = datetime.utcnow().isoformat()
               source = f"{SERVICE}/{ENTITY}"
+              lineage_map = {
+                  'DL_INGESTED_AT': ingested,
+                  'DL_SOURCE':      source,
+                  'DL_BATCH_ID':    batch_id,
+                  'DL_DELTA_TOKEN': None,
+              }
               out = []
               for r in rows:
                   tup = []
-                  for col in columns:
+                  for col in all_cols:
+                      if col in lineage_map:
+                          tup.append(lineage_map[col])
+                          continue
                       v = r.get(col.lower())
                       if isinstance(v, str) and v.startswith('/Date('):
                           v = date_ms_to_iso(v)
                       tup.append(v)
-                  tup += [ingested, source, batch_id, None]
                   out.append(tuple(tup))
               return out
 
@@ -211,7 +220,7 @@ jobs:
                       print(f"{label}  OK   {time.time()-t0:5.1f}s  0 rows (empty window)", flush=True)
                       total_ok += 1
                       continue
-                  sf_rows = to_snowflake_rows(rows, data_cols)
+                  sf_rows = to_snowflake_rows(rows, all_cols)
                   cur_sf.executemany(insert_sql, sf_rows)
                   sf.commit()
                   dt = time.time() - t0
