@@ -1,0 +1,165 @@
+name: OData -> BRONZE backfill FAST (server-paging + filter)
+
+# Faster sibling of odata-bronze-backfill.yml. Adds: server-driven paging
+# (follow OData d.__next / $skiptoken, with $skip fallback), an optional
+# where_filter input (e.g. WERKS), per-page write_pandas (no whole-window
+# buffering), and a 24h job timeout so 100M-row tables can finish.
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:      { description: 'OData service e.g. Z_SB_EKPO_FULL', required: true, type: string }
+      entity:       { description: 'Entity set e.g. EkpoFull', required: true, type: string }
+      target_table: { description: 'Snowflake target FQ', required: true, type: string }
+      date_field:   { description: 'OData date field for window filter', required: true, type: string }
+      start_date:   { description: 'YYYY-MM-DD', required: true, type: string }
+      end_date:     { description: 'YYYY-MM-DD', required: true, type: string }
+      window_days:  { description: 'window size days', required: true, default: '30', type: string }
+      where_filter: { description: "extra OData filter ANDed e.g. (werks eq 'DH24' or werks eq 'DW01')", required: false, default: '', type: string }
+      page_size:    { description: 'rows per page', required: false, default: '5000', type: string }
+      env:          { description: 'qa or dev', required: true, default: 'qa', type: string }
+      truncate:     { description: 'truncate target first true/false', required: false, default: 'false', type: string }
+
+permissions:
+  contents: read
+
+concurrency:
+  group: odata-fast-${{ inputs.service }}
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: [self-hosted, iis]
+    timeout-minutes: 1440
+    steps:
+      - name: Deps
+        shell: powershell
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet "snowflake-connector-python[pandas]" pandas pyarrow
+
+      - name: Write script
+        shell: powershell
+        run: |
+          $py = @'
+          import os, json, time, base64, socket, uuid, urllib.request, urllib.parse
+          from datetime import datetime, timezone, timedelta
+          import pandas as pd
+          import snowflake.connector
+          from snowflake.connector.pandas_tools import write_pandas
+
+          socket.setdefaulttimeout(900)
+          SERVICE=os.environ['SERVICE']; ENTITY=os.environ['ENTITY']; TARGET_TABLE=os.environ['TARGET_TABLE']
+          DATE_FIELD=os.environ['DATE_FIELD']; START_DATE=os.environ['START_DATE']; END_DATE=os.environ['END_DATE']
+          WINDOW_DAYS=int(os.environ['WINDOW_DAYS']); ENV=os.environ['ODATA_ENV']
+          TRUNCATE=os.environ.get('TRUNCATE','false').lower()=='true'
+          WHERE_FILTER=os.environ.get('WHERE_FILTER','').strip()
+          PAGE_SIZE=int(os.environ.get('PAGE_SIZE','5000'))
+          if ENV=='qa':
+              SAP_HOST='http://192.168.144.179:8000'; SAP_CLIENT='600'; SAP_USER=os.environ['SAP_QA_USER']; SAP_PASS=os.environ['SAP_QA_PASS']
+          else:
+              SAP_HOST='http://192.168.144.174:8000'; SAP_CLIENT='210'; SAP_USER=os.environ['SAP_DEV_USER']; SAP_PASS=os.environ['SAP_DEV_PASS']
+          SF_ACCOUNT=os.environ['SF_ACCOUNT']; SF_USER=os.environ['SF_USER']; SF_PASS=os.environ['SF_PASSWORD']
+          SVC_ROOT=SAP_HOST + '/sap/opu/odata/sap/' + SERVICE
+          BASE=SVC_ROOT + '/' + ENTITY + '?sap-client=' + SAP_CLIENT + '&%24format=json'
+          auth=base64.b64encode((SAP_USER + ':' + SAP_PASS).encode()).decode()
+          HEADERS={'Authorization':'Basic ' + auth, 'Accept':'application/json', 'User-Agent':'V2-OData-Backfill/3.0'}
+
+          def http_get(url, tries=6):
+              last=None
+              for a in range(tries):
+                  try:
+                      req=urllib.request.Request(url, headers=HEADERS)
+                      with urllib.request.urlopen(req, timeout=900) as r:
+                          return json.loads(r.read().decode('utf-8'))
+                  except Exception as e:
+                      last=e; print('   (http retry ' + str(a+1) + ' ' + type(e).__name__ + ')', flush=True); time.sleep(5)
+              raise last
+
+          def ms_iso(s):
+              if not s or not isinstance(s,str) or not s.startswith('/Date('): return None if s=='' else s
+              try:
+                  ms=int(s[6:-2].split('+')[0])
+                  if ms>=253402214400000: return None
+                  return datetime.fromtimestamp(ms/1000, tz=timezone.utc).replace(tzinfo=None).isoformat()
+              except Exception:
+                  return None
+
+          def to_df(rows, all_cols, bid):
+              ing=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(); src=SERVICE + '/' + ENTITY; norm=[]
+              for r in rows:
+                  rec={}
+                  for k,v in r.items():
+                      if k=='__metadata': continue
+                      if isinstance(v,str) and v.startswith('/Date('): v=ms_iso(v)
+                      rec[k.upper()]=v
+                  rec['DL_INGESTED_AT']=ing; rec['DL_SOURCE']=src; rec['DL_BATCH_ID']=bid; rec['DL_DELTA_TOKEN']=None
+                  norm.append(rec)
+              df=pd.DataFrame(norm)
+              for c in all_cols:
+                  if c not in df.columns: df[c]=None
+              return df[all_cols]
+
+          chunks=[]; d=datetime.strptime(START_DATE,'%Y-%m-%d'); de=datetime.strptime(END_DATE,'%Y-%m-%d')
+          while d<=de:
+              nxt=d+timedelta(days=WINDOW_DAYS)
+              if nxt>de+timedelta(days=1): nxt=de+timedelta(days=1)
+              chunks.append((d.strftime('%Y-%m-%d'), nxt.strftime('%Y-%m-%d'))); d=nxt
+          print('=== ' + SERVICE + '/' + ENTITY + ' FAST backfill ===', flush=True)
+          print('=== ' + str(len(chunks)) + ' windows(' + str(WINDOW_DAYS) + 'd) ' + START_DATE + '->' + END_DATE + " filter='" + WHERE_FILTER + "' page=" + str(PAGE_SIZE) + ' ===', flush=True)
+
+          sf=snowflake.connector.connect(account=SF_ACCOUNT,user=SF_USER,password=SF_PASS,database='V2RETAIL',schema='BRONZE',warehouse='COMPUTE_WH')
+          cur=sf.cursor(); db,sch,tbl=TARGET_TABLE.split('.')
+          cur.execute("SELECT COLUMN_NAME FROM " + db + ".INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" + sch + "' AND TABLE_NAME='" + tbl + "' ORDER BY ORDINAL_POSITION")
+          all_cols=[r[0] for r in cur.fetchall()]
+          print('=== target ' + str(len(all_cols)) + ' cols ===', flush=True)
+          if TRUNCATE: cur.execute('TRUNCATE TABLE ' + TARGET_TABLE); print('  truncated', flush=True)
+
+          grand=0
+          for i,(a,b) in enumerate(chunks):
+              dflt=DATE_FIELD + " ge datetime'" + a + "T00:00:00' and " + DATE_FIELD + " lt datetime'" + b + "T00:00:00'"
+              flt='(' + WHERE_FILTER + ') and (' + dflt + ')' if WHERE_FILTER else dflt
+              url=BASE + '&%24top=' + str(PAGE_SIZE) + '&%24filter=' + urllib.parse.quote(flt)
+              skip=0; wrows=0; pages=0; t0=time.time()
+              while url:
+                  data=http_get(url); dd=data.get('d',{}); rows=dd.get('results',[]); nxt=dd.get('__next')
+                  if rows:
+                      ok,_,_,_=write_pandas(conn=sf, df=to_df(rows, all_cols, str(uuid.uuid4())), table_name=tbl, database=db, schema=sch, chunk_size=20000, parallel=4, quote_identifiers=False)
+                      if not ok: print('  [' + str(i+1) + '] write FAIL', flush=True)
+                      wrows+=len(rows); pages+=1
+                  if nxt:
+                      url = nxt if nxt.startswith('http') else (SAP_HOST + nxt if nxt.startswith('/') else SVC_ROOT + '/' + nxt)
+                  elif len(rows)==PAGE_SIZE:
+                      skip+=PAGE_SIZE
+                      url=BASE + '&%24top=' + str(PAGE_SIZE) + '&%24skip=' + str(skip) + '&%24filter=' + urllib.parse.quote(flt)
+                  else:
+                      url=None
+              grand+=wrows
+              print('  [' + str(i+1) + '/' + str(len(chunks)) + '] ' + a + '..' + b + '  ' + str(wrows) + ' rows ' + str(pages) + ' pages ' + str(round(time.time()-t0,1)) + 's grand=' + str(grand), flush=True)
+          print('=== DONE ' + SERVICE + ' grand_total=' + str(grand) + ' ===', flush=True)
+          cur.close(); sf.close()
+          '@
+          Set-Content -Path fast_backfill.py -Value $py -Encoding utf8
+
+      - name: Run
+        shell: powershell
+        env:
+          SERVICE: ${{ inputs.service }}
+          ENTITY: ${{ inputs.entity }}
+          TARGET_TABLE: ${{ inputs.target_table }}
+          DATE_FIELD: ${{ inputs.date_field }}
+          START_DATE: ${{ inputs.start_date }}
+          END_DATE: ${{ inputs.end_date }}
+          WINDOW_DAYS: ${{ inputs.window_days }}
+          WHERE_FILTER: ${{ inputs.where_filter }}
+          PAGE_SIZE: ${{ inputs.page_size }}
+          ODATA_ENV: ${{ inputs.env }}
+          TRUNCATE: ${{ inputs.truncate }}
+          SAP_DEV_USER: ${{ secrets.SAP_DEV_USER }}
+          SAP_DEV_PASS: ${{ secrets.SAP_DEV_PASS }}
+          SAP_QA_USER:  ${{ secrets.SAP_QA_USER }}
+          SAP_QA_PASS:  ${{ secrets.SAP_QA_PASS }}
+          SF_ACCOUNT:   ${{ secrets.SF_ACCOUNT }}
+          SF_USER:      ${{ secrets.SF_USER }}
+          SF_PASSWORD:  ${{ secrets.SF_PASSWORD }}
+        run: python fast_backfill.py
