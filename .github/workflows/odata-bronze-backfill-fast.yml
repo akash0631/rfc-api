@@ -1,9 +1,10 @@
 name: OData -> BRONZE backfill FAST (server-paging + filter)
 
-# Faster sibling of odata-bronze-backfill.yml. Adds: server-driven paging
-# (follow OData d.__next / $skiptoken, with $skip fallback), an optional
-# where_filter input (e.g. WERKS), per-page write_pandas (no whole-window
-# buffering), and a 24h job timeout so 100M-row tables can finish.
+# Resilient OData backfiller. Server-driven paging (follow d.__next) with
+# $skip fallback, optional where_filter, per-page writes, per-window
+# try/except (one bad window is skipped + logged, not fatal), 12 retries
+# w/ backoff, 24h timeout. Use small window_days (1) for high-density tables
+# so $skip never goes deep.
 
 on:
   workflow_dispatch:
@@ -14,7 +15,7 @@ on:
       date_field:   { description: 'OData date field for window filter', required: true, type: string }
       start_date:   { description: 'YYYY-MM-DD', required: true, type: string }
       end_date:     { description: 'YYYY-MM-DD', required: true, type: string }
-      window_days:  { description: 'window size days', required: true, default: '30', type: string }
+      window_days:  { description: 'window size days (1 for big tables)', required: true, default: '1', type: string }
       where_filter: { description: "extra OData filter ANDed e.g. (werks eq 'DH24' or werks eq 'DW01')", required: false, default: '', type: string }
       page_size:    { description: 'rows per page', required: false, default: '5000', type: string }
       env:          { description: 'qa or dev', required: true, default: 'qa', type: string }
@@ -48,7 +49,7 @@ jobs:
           import snowflake.connector
           from snowflake.connector.pandas_tools import write_pandas
 
-          socket.setdefaulttimeout(900)
+          socket.setdefaulttimeout(300)
           SERVICE=os.environ['SERVICE']; ENTITY=os.environ['ENTITY']; TARGET_TABLE=os.environ['TARGET_TABLE']
           DATE_FIELD=os.environ['DATE_FIELD']; START_DATE=os.environ['START_DATE']; END_DATE=os.environ['END_DATE']
           WINDOW_DAYS=int(os.environ['WINDOW_DAYS']); ENV=os.environ['ODATA_ENV']
@@ -63,17 +64,17 @@ jobs:
           SVC_ROOT=SAP_HOST + '/sap/opu/odata/sap/' + SERVICE
           BASE=SVC_ROOT + '/' + ENTITY + '?sap-client=' + SAP_CLIENT + '&%24format=json'
           auth=base64.b64encode((SAP_USER + ':' + SAP_PASS).encode()).decode()
-          HEADERS={'Authorization':'Basic ' + auth, 'Accept':'application/json', 'User-Agent':'V2-OData-Backfill/3.0'}
+          HEADERS={'Authorization':'Basic ' + auth, 'Accept':'application/json', 'User-Agent':'V2-OData-Backfill/3.1'}
 
-          def http_get(url, tries=6):
+          def http_get(url, tries=12):
               last=None
               for a in range(tries):
                   try:
                       req=urllib.request.Request(url, headers=HEADERS)
-                      with urllib.request.urlopen(req, timeout=900) as r:
+                      with urllib.request.urlopen(req, timeout=300) as r:
                           return json.loads(r.read().decode('utf-8'))
                   except Exception as e:
-                      last=e; print('   (http retry ' + str(a+1) + ' ' + type(e).__name__ + ')', flush=True); time.sleep(5)
+                      last=e; print('   (http retry ' + str(a+1) + ' ' + type(e).__name__ + ')', flush=True); time.sleep(min(60, 8*(a+1)))
               raise last
 
           def ms_iso(s):
@@ -100,23 +101,7 @@ jobs:
                   if c not in df.columns: df[c]=None
               return df[all_cols]
 
-          chunks=[]; d=datetime.strptime(START_DATE,'%Y-%m-%d'); de=datetime.strptime(END_DATE,'%Y-%m-%d')
-          while d<=de:
-              nxt=d+timedelta(days=WINDOW_DAYS)
-              if nxt>de+timedelta(days=1): nxt=de+timedelta(days=1)
-              chunks.append((d.strftime('%Y-%m-%d'), nxt.strftime('%Y-%m-%d'))); d=nxt
-          print('=== ' + SERVICE + '/' + ENTITY + ' FAST backfill ===', flush=True)
-          print('=== ' + str(len(chunks)) + ' windows(' + str(WINDOW_DAYS) + 'd) ' + START_DATE + '->' + END_DATE + " filter='" + WHERE_FILTER + "' page=" + str(PAGE_SIZE) + ' ===', flush=True)
-
-          sf=snowflake.connector.connect(account=SF_ACCOUNT,user=SF_USER,password=SF_PASS,database='V2RETAIL',schema='BRONZE',warehouse='COMPUTE_WH')
-          cur=sf.cursor(); db,sch,tbl=TARGET_TABLE.split('.')
-          cur.execute("SELECT COLUMN_NAME FROM " + db + ".INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" + sch + "' AND TABLE_NAME='" + tbl + "' ORDER BY ORDINAL_POSITION")
-          all_cols=[r[0] for r in cur.fetchall()]
-          print('=== target ' + str(len(all_cols)) + ' cols ===', flush=True)
-          if TRUNCATE: cur.execute('TRUNCATE TABLE ' + TARGET_TABLE); print('  truncated', flush=True)
-
-          grand=0
-          for i,(a,b) in enumerate(chunks):
+          def do_window(sf, db, sch, tbl, all_cols, i, n, a, b):
               dflt=DATE_FIELD + " ge datetime'" + a + "T00:00:00' and " + DATE_FIELD + " lt datetime'" + b + "T00:00:00'"
               flt='(' + WHERE_FILTER + ') and (' + dflt + ')' if WHERE_FILTER else dflt
               url=BASE + '&%24top=' + str(PAGE_SIZE) + '&%24filter=' + urllib.parse.quote(flt)
@@ -127,7 +112,7 @@ jobs:
                       ok,_,_,_=write_pandas(conn=sf, df=to_df(rows, all_cols, str(uuid.uuid4())), table_name=tbl, database=db, schema=sch, chunk_size=20000, parallel=4, quote_identifiers=False)
                       if not ok: print('  [' + str(i+1) + '] write FAIL', flush=True)
                       wrows+=len(rows); pages+=1
-                      if pages % 5 == 0: print('    win ' + str(i+1) + '/' + str(len(chunks)) + ' .. ' + str(pages) + ' pages, ' + str(wrows) + ' rows (' + a + ')', flush=True)
+                      if pages % 5 == 0: print('    win ' + str(i+1) + '/' + str(n) + ' .. ' + str(pages) + ' pages, ' + str(wrows) + ' rows (' + a + ')', flush=True)
                   if nxt:
                       url = nxt if nxt.startswith('http') else (SAP_HOST + nxt if nxt.startswith('/') else SVC_ROOT + '/' + nxt)
                   elif len(rows)==PAGE_SIZE:
@@ -135,9 +120,32 @@ jobs:
                       url=BASE + '&%24top=' + str(PAGE_SIZE) + '&%24skip=' + str(skip) + '&%24filter=' + urllib.parse.quote(flt)
                   else:
                       url=None
-              grand+=wrows
-              print('  [' + str(i+1) + '/' + str(len(chunks)) + '] ' + a + '..' + b + '  ' + str(wrows) + ' rows ' + str(pages) + ' pages ' + str(round(time.time()-t0,1)) + 's grand=' + str(grand), flush=True)
-          print('=== DONE ' + SERVICE + ' grand_total=' + str(grand) + ' ===', flush=True)
+              print('  [' + str(i+1) + '/' + str(n) + '] ' + a + '..' + b + '  ' + str(wrows) + ' rows ' + str(pages) + ' pages ' + str(round(time.time()-t0,1)) + 's', flush=True)
+              return wrows
+
+          chunks=[]; d=datetime.strptime(START_DATE,'%Y-%m-%d'); de=datetime.strptime(END_DATE,'%Y-%m-%d')
+          while d<=de:
+              nxt=d+timedelta(days=WINDOW_DAYS)
+              if nxt>de+timedelta(days=1): nxt=de+timedelta(days=1)
+              chunks.append((d.strftime('%Y-%m-%d'), nxt.strftime('%Y-%m-%d'))); d=nxt
+          print('=== ' + SERVICE + '/' + ENTITY + ' FAST backfill (resilient) ===', flush=True)
+          print('=== ' + str(len(chunks)) + ' windows(' + str(WINDOW_DAYS) + 'd) ' + START_DATE + '->' + END_DATE + " filter='" + WHERE_FILTER + "' page=" + str(PAGE_SIZE) + ' ===', flush=True)
+
+          sf=snowflake.connector.connect(account=SF_ACCOUNT,user=SF_USER,password=SF_PASS,database='V2RETAIL',schema='BRONZE',warehouse='COMPUTE_WH')
+          cur=sf.cursor(); db,sch,tbl=TARGET_TABLE.split('.')
+          cur.execute("SELECT COLUMN_NAME FROM " + db + ".INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" + sch + "' AND TABLE_NAME='" + tbl + "' ORDER BY ORDINAL_POSITION")
+          all_cols=[r[0] for r in cur.fetchall()]
+          print('=== target ' + str(len(all_cols)) + ' cols ===', flush=True)
+          if TRUNCATE: cur.execute('TRUNCATE TABLE ' + TARGET_TABLE); print('  truncated', flush=True)
+
+          grand=0; failed=[]; n=len(chunks)
+          for i,(a,b) in enumerate(chunks):
+              try:
+                  grand += do_window(sf, db, sch, tbl, all_cols, i, n, a, b)
+              except Exception as e:
+                  failed.append(a + '..' + b); print('  !! WINDOW FAILED ' + a + '..' + b + ' : ' + type(e).__name__ + ' ' + str(e)[:160], flush=True)
+              if (i+1) % 10 == 0: print('  --- progress ' + str(i+1) + '/' + str(n) + ' grand=' + str(grand) + ' failed=' + str(len(failed)) + ' ---', flush=True)
+          print('=== DONE ' + SERVICE + ' grand_total=' + str(grand) + ' failed_windows=' + str(failed) + ' ===', flush=True)
           cur.close(); sf.close()
           '@
           Set-Content -Path fast_backfill.py -Value $py -Encoding utf8
