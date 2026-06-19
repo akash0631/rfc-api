@@ -127,6 +127,7 @@ jobs:
                       ok,_,_,_=write_pandas(conn=sf, df=to_df(rows, all_cols, str(uuid.uuid4())), table_name=tbl, database=db, schema=sch, chunk_size=20000, parallel=4, quote_identifiers=False)
                       if not ok: print('  [' + str(i+1) + '] write FAIL', flush=True)
                       wrows+=len(rows); pages+=1
+                      if pages % 5 == 0: print('    win ' + str(i+1) + '/' + str(len(chunks)) + ' .. ' + str(pages) + ' pages, ' + str(wrows) + ' rows (' + a + ')', flush=True)
                   if nxt:
                       url = nxt if nxt.startswith('http') else (SAP_HOST + nxt if nxt.startswith('/') else SVC_ROOT + '/' + nxt)
                   elif len(rows)==PAGE_SIZE:
