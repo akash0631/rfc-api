@@ -128,7 +128,8 @@ jobs:
               nxt=d+timedelta(days=WINDOW_DAYS)
               if nxt>de+timedelta(days=1): nxt=de+timedelta(days=1)
               chunks.append((d.strftime('%Y-%m-%d'), nxt.strftime('%Y-%m-%d'))); d=nxt
-          print('=== ' + SERVICE + '/' + ENTITY + ' FAST backfill (resilient) ===', flush=True)
+          if os.environ.get('DESC','true').lower()=='true': chunks.reverse()
+          print('=== ' + SERVICE + '/' + ENTITY + ' FAST backfill (resilient) DESC=' + os.environ.get('DESC','true') + ' ===', flush=True)
           print('=== ' + str(len(chunks)) + ' windows(' + str(WINDOW_DAYS) + 'd) ' + START_DATE + '->' + END_DATE + " filter='" + WHERE_FILTER + "' page=" + str(PAGE_SIZE) + ' ===', flush=True)
 
           sf=snowflake.connector.connect(account=SF_ACCOUNT,user=SF_USER,password=SF_PASS,database='V2RETAIL',schema='BRONZE',warehouse='COMPUTE_WH')
