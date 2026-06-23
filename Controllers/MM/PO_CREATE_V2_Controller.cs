@@ -68,6 +68,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                         string docType = string.IsNullOrWhiteSpace(request.IV_DOC_TYPE) ? "NB" : request.IV_DOC_TYPE;
                         string vendor = ZeroPad10(request.IV_VENDOR);
                         string headerPlant = (request.IT_ITEMS[0].PLANT ?? "").ToUpper();
+                        string firstMatnr = ZeroPad18(request.IT_ITEMS[0].MATERIAL);
+                        string ekgrp = LookupEkgrp(dest, firstMatnr, headerPlant);
+                        if (string.IsNullOrWhiteSpace(ekgrp)) ekgrp = "110";
 
                         // POHEADER
                         IRfcStructure poHeader = bapi.GetStructure("POHEADER");
@@ -75,7 +78,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                         poHeader.SetValue("DOC_TYPE", docType);
                         poHeader.SetValue("VENDOR", vendor);
                         poHeader.SetValue("PURCH_ORG", "1100");
-                        poHeader.SetValue("PUR_GROUP", "110");
+                        poHeader.SetValue("PUR_GROUP", ekgrp);
                         poHeader.SetValue("CREAT_DATE", DateTime.Today.ToString("yyyyMMdd"));
                         poHeader.SetValue("DOC_DATE", DateTime.Today.ToString("yyyyMMdd"));
                         poHeader.SetValue("CURRENCY", "INR");
@@ -189,6 +192,43 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
             finally
             {
                 if (entered) _gate.Release();
+            }
+        }
+
+        /// <summary>
+        /// Read MARC.EKGRP for the given material/plant via RFC_READ_TABLE.
+        /// Returns empty string if not found.
+        /// </summary>
+        private static string LookupEkgrp(RfcDestination dest, string matnr, string werks)
+        {
+            try
+            {
+                IRfcFunction reader = dest.Repository.CreateFunction("RFC_READ_TABLE");
+                reader.SetValue("QUERY_TABLE", "MARC");
+                reader.SetValue("DELIMITER", "|");
+                reader.SetValue("ROWCOUNT", 1);
+
+                IRfcTable fields = reader.GetTable("FIELDS");
+                IRfcStructure f1 = fields.Metadata.LineType.CreateStructure();
+                f1.SetValue("FIELDNAME", "EKGRP");
+                fields.Append(f1);
+
+                IRfcTable options = reader.GetTable("OPTIONS");
+                IRfcStructure o1 = options.Metadata.LineType.CreateStructure();
+                o1.SetValue("TEXT", "MATNR = '" + matnr + "' AND WERKS = '" + werks + "'");
+                options.Append(o1);
+
+                reader.Invoke(dest);
+
+                IRfcTable data = reader.GetTable("DATA");
+                if (data.RowCount == 0) return "";
+                data.CurrentIndex = 0;
+                string wa = data.GetString("WA");
+                return (wa ?? "").Trim();
+            }
+            catch
+            {
+                return "";
             }
         }
 
