@@ -109,6 +109,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                                 rfcTable.Append(row);
                             }
                         }
+                        // STRUCTURE parameters: JSON object → GetStructure + per-field SetValue
+                        else if (prop.Value is JObject structObj)
+                        {
+                            IRfcStructure structure = myfun.GetStructure(key);
+                            foreach (var field in structObj.Properties())
+                            {
+                                try { structure.SetValue(field.Name, field.Value.ToString()); } catch { }
+                            }
+                        }
                         else
                         {
                             myfun.SetValue(key, prop.Value.ToString());
