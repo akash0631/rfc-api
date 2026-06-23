@@ -1,0 +1,23 @@
+name: Run one RFC (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      rfc:
+        description: 'RFC_CODE to run (e.g. LOAD_SAP_ZART_MC)'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  runone:
+    runs-on: [self-hosted, iis]
+    timeout-minutes: 120
+    steps:
+      - name: refresh catalog + execute one RFC
+        shell: powershell
+        run: |
+          try { Invoke-RestMethod -Method Post -Uri 'http://localhost:9292/api/catalog/refresh' -TimeoutSec 60 | Out-Null; Write-Host 'catalog refreshed' } catch { Write-Host "refresh warn: $($_.Exception.Message)" }
+          $rfc = '${{ inputs.rfc }}'
+          Write-Host "executing $rfc ..."
+          $resp = Invoke-RestMethod -Method Post -Uri "http://localhost:9292/api/execute/$rfc/sync" -TimeoutSec 5400
+          $resp | ConvertTo-Json -Depth 8
