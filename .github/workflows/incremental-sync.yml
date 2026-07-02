@@ -1,0 +1,124 @@
+name: SAP PROD OData -> BRONZE incremental sync
+
+# Watermark-delta incremental (PROD OData -> stage -> MERGE on key) on the .36 self-hosted
+# runner (on-LAN, reaches SAP PROD 192.168.144.170:5202). Source = PROD OData ONLY.
+# Only tables whose _FULL service is LIVE on PROD can run today (MARA, MSEG); the rest are
+# config-ready and start syncing the moment their PROD service is published.
+
+on:
+  workflow_dispatch:
+    inputs:
+      table: { description: 'Table key e.g. MARA', required: true, default: 'MARA', type: string }
+      full:  { description: 'full reload (ignore watermark)', required: false, default: 'false', type: string }
+  schedule:
+    - cron: '30 19 * * *'   # 01:00 IST — MARA daily (only PROD-live master today)
+
+concurrency:
+  group: incr-${{ github.event.inputs.table }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: [self-hosted, iis]
+    timeout-minutes: 240
+    steps:
+      - name: Deps
+        shell: powershell
+        run: python -m pip install --quiet --upgrade "snowflake-connector-python[pandas]" pandas pyarrow
+      - name: Run incremental sync
+        shell: powershell
+        env:
+          TABLE:       ${{ github.event.inputs.table || 'MARA' }}
+          FULL:        ${{ github.event.inputs.full || 'false' }}
+          SAP_PROD_USER: ${{ secrets.SAP_PROD_USER }}
+          SAP_PROD_PASS: ${{ secrets.SAP_PROD_PASS }}
+          SF_ACCOUNT:  ${{ secrets.SF_ACCOUNT }}
+          SF_USER:     ${{ secrets.SF_USER }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+        run: |
+          $py = @'
+          import os, sys, re, json, ssl, base64, time, datetime, urllib.request, urllib.parse
+          import pandas as pd, snowflake.connector
+          from snowflake.connector.pandas_tools import write_pandas
+          CONFIG = {
+            "MARA": dict(service="Z_SB_MARA_FULL", entity="MaraFull", target="SAP_MARA", keys=["MATNR"], date_fields=["laeda","ersda"]),
+            "MSEG": dict(service="Z_SB_MSEG_FULL", entity="MsegFull", target="SAP_MSEG", keys=["MBLNR","MJAHR","ZEILE"], date_fields=["budat_mkpf","cpudt_mkpf"]),
+            "BKPF": dict(service="Z_SB_BKPF_FULL", entity="BkpfFull", target="SAP_BKPF", keys=["BUKRS","BELNR","GJAHR"], date_fields=["cpudt","aedat"]),
+            "EKKO": dict(service="Z_SB_EKKO_FULL", entity="EkkoFull", target="SAP_EKKO", keys=["EBELN"], date_fields=["aedat","bedat"]),
+            "VBAK": dict(service="Z_SB_VBAK_FULL", entity="VbakFull", target="SAP_VBAK", keys=["VBELN"], date_fields=["erdat","aedat"]),
+            "VBAP": dict(service="Z_SB_VBAP_FULL", entity="VbapFull", target="SAP_VBAP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"]),
+            "VBRK": dict(service="Z_SB_VBRK_FULL", entity="VbrkFull", target="SAP_VBRK", keys=["VBELN"], date_fields=["fkdat","aedat"]),
+            "LIKP": dict(service="Z_SB_LIKP_FULL", entity="LikpFull", target="SAP_LIKP", keys=["VBELN"], date_fields=["erdat","aedat"]),
+          }
+          PROD="https://192.168.144.170:5202/sap/opu/odata/sap"; CLIENT="600"; PAGE=5000; OVERLAP=2
+          AUTH=base64.b64encode((os.environ["SAP_PROD_USER"]+":"+os.environ["SAP_PROD_PASS"]).encode()).decode()
+          tbl=os.environ["TABLE"].upper(); full=os.environ.get("FULL","false").lower()=="true"; c=CONFIG[tbl]
+          con=snowflake.connector.connect(account=os.environ["SF_ACCOUNT"],user=os.environ["SF_USER"],password=os.environ["SF_PASSWORD"],
+              warehouse="WH_SAP_LOAD",database="V2RETAIL",schema="BRONZE")
+          cur=con.cursor()
+          try: cur.execute("USE SECONDARY ROLES ALL")
+          except Exception as e: print("secroles:",e)
+          coltype={r[0].upper():r[1] for r in cur.execute("SELECT COLUMN_NAME,DATA_TYPE FROM V2RETAIL.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='BRONZE' AND TABLE_NAME='"+c["target"]+"'").fetchall()}
+          TS={k for k,v in coltype.items() if v.startswith("TIMESTAMP")}; ALL=set(coltype)
+          ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+          dr=re.compile(r"/Date\((-?\d+)\)/")
+          def conv(v,ts):
+              m=dr.search(str(v));
+              if not m: return None
+              s=int(m.group(1))/1000.0
+              if s<0 or s>253402300799: return None
+              d=datetime.datetime(1970,1,1)+datetime.timedelta(seconds=s)
+              return d.strftime("%Y-%m-%d %H:%M:%S") if ts else d.strftime("%Y%m%d")
+          def od(params,retries=6):
+              url=PROD+"/"+c["service"]+"/"+c["entity"]+"?"+params; last=None
+              for a in range(retries):
+                  try:
+                      rq=urllib.request.Request(url,headers={"Authorization":"Basic "+AUTH,"Accept":"application/json"})
+                      with urllib.request.urlopen(rq,context=ctx,timeout=300) as r: return json.load(r)["d"]["results"]
+                  except Exception as e: last=e; print("retry",a+1,str(e)[:60]); time.sleep(min(30,2**a))
+              raise last
+          flt=""
+          if not full and c["date_fields"]:
+              df0=c["date_fields"][0].upper()
+              mx=cur.execute("SELECT MAX("+df0+") FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0]
+              if mx is not None:
+                  if df0 in TS: wm=(mx-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
+                  else: wm=(datetime.datetime.strptime(str(mx),"%Y%m%d")-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
+                  flt=" or ".join(d+" ge datetime'"+wm+"'" for d in c["date_fields"])
+          print("filter:",flt or "(full)")
+          rows=[]; skip=0; t0=time.time()
+          while True:
+              p="$format=json&$top="+str(PAGE)+"&$skip="+str(skip)+"&sap-client="+CLIENT
+              if flt: p+="&$filter="+urllib.parse.quote(flt)
+              pg=od(p)
+              if not pg: break
+              for rec in pg:
+                  row={}
+                  for k,v in rec.items():
+                      K=k.upper()
+                      if K=="__METADATA" or K not in ALL: continue
+                      if v is None: row[K]=None
+                      elif isinstance(v,bool): row[K]="true" if v else "false"
+                      elif K in TS or dr.search(str(v)): row[K]=conv(v, K in TS)
+                      else: row[K]=str(v)
+                  rows.append(row)
+              skip+=PAGE; print("pulled",len(rows))
+              if len(pg)<PAGE: break
+          print("PULL",len(rows),"in",int(time.time()-t0),"s")
+          if not rows: print("nothing new"); sys.exit(0)
+          cols=sorted({k for r in rows for k in r})
+          df=pd.DataFrame(rows).reindex(columns=cols).astype(object).where(lambda x:x.notna(),None)
+          stg=c["target"]+"_INCR_STG"
+          cur.execute("CREATE OR REPLACE TABLE V2RETAIL.BRONZE."+stg+" ("+",".join('"'+x+'" VARCHAR' for x in cols)+")")
+          write_pandas(con,df,stg,database="V2RETAIL",schema="BRONZE",quote_identifiers=True)
+          def src(x): return ('TO_TIMESTAMP_NTZ(s."'+x+'")') if x in TS else ('s."'+x+'"')
+          on=" AND ".join('t."'+k+'"=s."'+k+'"' for k in c["keys"])
+          upd=", ".join('t."'+x+'"='+src(x) for x in cols if x not in c["keys"])
+          ins="("+",".join('"'+x+'"' for x in cols)+") VALUES ("+",".join(src(x) for x in cols)+")"
+          cur.execute("MERGE INTO V2RETAIL.BRONZE."+c["target"]+" t USING V2RETAIL.BRONZE."+stg+" s ON "+on+" WHEN MATCHED THEN UPDATE SET "+upd+" WHEN NOT MATCHED THEN INSERT "+ins)
+          print("MERGE:",cur.fetchall())
+          print("target now:",cur.execute("SELECT COUNT(*) FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0])
+          con.close(); print("DONE")
+          '@
+          Set-Content -Path incr_sync.py -Value $py -Encoding utf8
+          python incr_sync.py
