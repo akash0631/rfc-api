@@ -88,7 +88,7 @@ jobs:
           print("filter:",flt or "(full)")
           rows=[]; skip=0; t0=time.time()
           while True:
-              p="$format=json&$top="+str(PAGE)+"&$skip="+str(skip)+"&sap-client="+CLIENT
+              p="$format=json&$top="+str(PAGE)+"&$skip="+str(skip)+"&$orderby="+",".join(k.lower() for k in c["keys"])+"&sap-client="+CLIENT
               if flt: p+="&$filter="+urllib.parse.quote(flt)
               pg=od(p)
               if not pg: break
@@ -108,6 +108,8 @@ jobs:
           if not rows: print("nothing new"); sys.exit(0)
           cols=sorted({k for r in rows for k in r})
           df=pd.DataFrame(rows).reindex(columns=cols).astype(object).where(lambda x:x.notna(),None)
+          df=df.drop_duplicates(subset=[k for k in c["keys"] if k in df.columns],keep="last")
+          print("after dedup:",len(df))
           stg=c["target"]+"_INCR_STG"
           cur.execute("CREATE OR REPLACE TABLE V2RETAIL.BRONZE."+stg+" ("+",".join('"'+x+'" VARCHAR' for x in cols)+")")
           write_pandas(con,df,stg,database="V2RETAIL",schema="BRONZE",quote_identifiers=True)
