@@ -49,6 +49,9 @@ jobs:
             "VBAP": dict(service="Z_SB_VBAP_FULL", entity="VbapFull", target="SAP_VBAP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"]),
             "VBRK": dict(service="Z_SB_VBRK_FULL", entity="VbrkFull", target="SAP_VBRK", keys=["VBELN"], date_fields=["fkdat","aedat"]),
             "LIKP": dict(service="Z_SB_LIKP_FULL", entity="LikpFull", target="SAP_LIKP", keys=["VBELN"], date_fields=["erdat","aedat"]),
+            "EKPO": dict(service="Z_SB_EKPO_FULL", entity="EkpoFull", target="SAP_EKPO", keys=["EBELN","EBELP"], date_fields=["aedat","bedat"]),
+            "VBRP": dict(service="Z_SB_VBRP_FULL", entity="VbrpFull", target="SAP_VBRP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"]),
+            "LIPS": dict(service="Z_SB_LIPS_FULL", entity="LipsFull", target="SAP_LIPS", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"]),
           }
           PROD="https://192.168.144.170:5202/sap/opu/odata/sap"; CLIENT="600"; PAGE=5000; OVERLAP=2
           AUTH=base64.b64encode((os.environ["SAP_PROD_USER"]+":"+os.environ["SAP_PROD_PASS"]).encode()).decode()
