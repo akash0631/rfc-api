@@ -86,7 +86,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 RfcRepository rfcrep = dest.Repository;
                 IRfcFunction myfun = rfcrep.CreateFunction(rfcName);
 
-                // Set all IM_ parameters from the request body
+                // Set all IM_ parameters from the request body.
+                // Track per-key parse errors so caller can see silent drops instead of
+                // getting a "success" response with zero SAP writes.
+                JArray paramErrors = new JArray();
+                JArray paramApplied = new JArray();
+
                 foreach (var prop in body.Properties())
                 {
                     string key = prop.Name;
@@ -95,38 +100,83 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
 
                     try
                     {
-                        // TABLE parameters: JSON array → GetTable + CreateStructure + Append
+                        // TABLE param: JSON array of row objects → GetTable + Append
                         if (prop.Value is Newtonsoft.Json.Linq.JArray arr)
                         {
                             IRfcTable rfcTable = myfun.GetTable(key);
+                            int rowIdx = 0;
                             foreach (JObject rowObj in arr)
                             {
                                 IRfcStructure row = rfcTable.Metadata.LineType.CreateStructure();
                                 foreach (var field in rowObj.Properties())
                                 {
-                                    try { row.SetValue(field.Name, field.Value.ToString()); } catch { }
+                                    try { row.SetValue(field.Name, field.Value.ToString()); }
+                                    catch (Exception fex)
+                                    {
+                                        paramErrors.Add(new JObject
+                                        {
+                                            ["key"] = key + "[" + rowIdx + "]." + field.Name,
+                                            ["error"] = fex.Message
+                                        });
+                                    }
                                 }
                                 rfcTable.Append(row);
+                                rowIdx++;
                             }
+                            paramApplied.Add(key + " (table," + rowIdx + " rows)");
                         }
-                        // STRUCTURE parameters: JSON object → GetStructure + per-field SetValue
-                        else if (prop.Value is JObject structObj)
+                        // STRUCTURE param: nested JSON object → GetStructure + SetValue per field.
+                        // Per commit 13b60db upstream. Extended here to surface per-field errors
+                        // instead of silent catch — helps diagnose typos in nested field names.
+                        else if (prop.Value is Newtonsoft.Json.Linq.JObject nestedObj)
                         {
-                            IRfcStructure structure = myfun.GetStructure(key);
-                            foreach (var field in structObj.Properties())
+                            IRfcStructure rfcStruct = myfun.GetStructure(key);
+                            foreach (var field in nestedObj.Properties())
                             {
-                                try { structure.SetValue(field.Name, field.Value.ToString()); } catch { }
+                                try { rfcStruct.SetValue(field.Name, field.Value.ToString()); }
+                                catch (Exception fex)
+                                {
+                                    paramErrors.Add(new JObject
+                                    {
+                                        ["key"] = key + "." + field.Name,
+                                        ["error"] = fex.Message
+                                    });
+                                }
                             }
+                            paramApplied.Add(key + " (structure)");
                         }
+                        // Scalar param: string/number/bool → SetValue
                         else
                         {
                             myfun.SetValue(key, prop.Value.ToString());
+                            paramApplied.Add(key);
                         }
                     }
-                    catch
+                    catch (Exception pex)
                     {
-                        // Parameter doesn't exist in RFC — skip
+                        paramErrors.Add(new JObject
+                        {
+                            ["key"] = key,
+                            ["error"] = pex.Message
+                        });
                     }
+                }
+
+                // Hard-fail if nothing at all was applied to the RFC — prevents the
+                // "silent success + zero SAP writes" bug that hid V65 no-ops in QA.
+                if (paramApplied.Count == 0 && paramErrors.Count > 0)
+                {
+                    return Json(new JObject
+                    {
+                        ["EX_RETURN"] = new JObject
+                        {
+                            ["TYPE"] = "E",
+                            ["MESSAGE"] = "All " + paramErrors.Count + " input parameters rejected by RFC " + rfcName + " — check names/types."
+                        },
+                        ["_PARAM_ERRORS"] = paramErrors,
+                        ["_RFC_NAME"] = rfcName,
+                        ["_ENV"] = env
+                    });
                 }
 
                 myfun.Invoke(dest);
@@ -197,6 +247,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                         ["MESSAGE"] = "RFC executed successfully (no EX_RETURN defined)"
                     };
                 }
+
+                // Debug echo — caller can see exactly what the proxy fed to SAP.
+                // Diagnoses silent drops (e.g. Pool B writing to V65 but AUSP empty)
+                // without needing SAP-side trace access.
+                result["_RFC_NAME"] = rfcName;
+                result["_ENV"] = env;
+                result["_PARAMS_APPLIED"] = paramApplied;
+                if (paramErrors.Count > 0) result["_PARAM_ERRORS"] = paramErrors;
 
                 return Json(result);
             }

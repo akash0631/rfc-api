@@ -292,6 +292,245 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
             }
         }
 
+        // ============================================================
+        // POST /api/article/patch-v65-chain
+        //   body = { items:[{matnr, attrs:[{atnam,atwrt},...]},...], user }
+        // Runs the full 3-FM chain PER MATNR against V65:
+        //   1) RFC_READ_TABLE(MARA) → resolve MATKL
+        //   2) Z_LINK_MATNR_CLASS → ensure article linked to class (KLART=026)
+        //   3) Z_ART_PATCH_RFC_V65 → write AUSP + ZCT04 mirror
+        // Prevents the silent NIC no-op that hits Pool B when it calls V65 via
+        // /api/rfc/proxy without the pre-link step.
+        // Sequential per MATNR. Each MATNR atomic (RFC auto-commits).
+        // ============================================================
+        [HttpPost]
+        [Route("patch-v65-chain")]
+        public HttpResponseMessage PatchV65Chain([FromBody] ArticleV65ChainRequest request, string env = "dev")
+        {
+            if (request == null)
+                return Request.CreateResponse(HttpStatusCode.BadRequest,
+                    new { Status = false, Message = "Request body required." });
+            if (request.Items == null || request.Items.Count == 0)
+                return Request.CreateResponse(HttpStatusCode.BadRequest,
+                    new { Status = false, Message = "items must contain at least one element." });
+
+            const int MAX_ITEMS = 500;
+            if (request.Items.Count > MAX_ITEMS)
+                return Request.CreateResponse((HttpStatusCode)413,
+                    new { Status = false, Message = $"items limit is {MAX_ITEMS} per call. Got {request.Items.Count}." });
+
+            RfcConfigParameters rfcPar;
+            HttpResponseMessage envCheck = ResolveEnv(env, out rfcPar);
+            if (envCheck != null) return envCheck;
+
+            var results = new List<ArticleV65ChainItemResult>(request.Items.Count);
+            int applied = 0, failed = 0;
+
+            try
+            {
+                RfcDestination dest = RfcDestinationManager.GetDestination(rfcPar);
+                for (int i = 0; i < request.Items.Count; i++)
+                {
+                    ArticleV65ChainItem item = request.Items[i];
+                    ArticleV65ChainItemResult res = new ArticleV65ChainItemResult { Index = i };
+
+                    try
+                    {
+                        if (item == null || string.IsNullOrWhiteSpace(item.Matnr))
+                        {
+                            res.Matnr = item?.Matnr ?? "";
+                            res.Ok = false;
+                            res.Error = "matnr_required";
+                        }
+                        else if (item.Attrs == null || item.Attrs.Count == 0)
+                        {
+                            res.Matnr = item.Matnr;
+                            res.Ok = false;
+                            res.Error = "attrs_empty";
+                        }
+                        else
+                        {
+                            string padded = PadMatnr(item.Matnr);
+                            res.Matnr = item.Matnr;
+
+                            // Step 1: MARA lookup → MATKL
+                            string matkl = LookupMatkl(dest, padded);
+                            res.Matkl = matkl;
+                            if (string.IsNullOrWhiteSpace(matkl))
+                            {
+                                res.Ok = false;
+                                res.Error = "matkl_not_found";
+                            }
+                            else
+                            {
+                                // Step 2: link MATNR ↔ class (KLART=026, IV_CLASS=MATKL)
+                                string linkJson;
+                                bool linkOk = InvokeLinkMatnrClass(dest, padded, matkl, out linkJson);
+                                res.LinkOk = linkOk;
+                                res.LinkMsg = linkJson;
+                                if (!linkOk)
+                                {
+                                    res.Ok = false;
+                                    res.Error = "link_failed";
+                                }
+                                else
+                                {
+                                    // Step 3: V65 patch
+                                    string patchJson;
+                                    int appliedCount, nicCount;
+                                    bool patchOk = InvokeV65Patch(dest, padded, item.Attrs,
+                                        request.User, out patchJson, out appliedCount, out nicCount);
+                                    res.PatchJson = patchJson;
+                                    res.Applied = appliedCount;
+                                    res.Nic = nicCount;
+                                    res.Ok = patchOk && appliedCount > 0;
+                                    if (!res.Ok && nicCount > 0)
+                                        res.Error = "all_nic";
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        res.Ok = false;
+                        res.Error = "rfc_exception";
+                        res.ErrorMsg = ex.Message;
+                    }
+
+                    results.Add(res);
+                    if (res.Ok) applied++; else failed++;
+                    if (!res.Ok && request.StopOnError) break;
+                }
+
+                return Request.CreateResponse(HttpStatusCode.OK, new ArticleV65ChainResponse
+                {
+                    Status = failed == 0,
+                    Env = env,
+                    Total = request.Items.Count,
+                    Applied = applied,
+                    Failed = failed,
+                    Results = results
+                });
+            }
+            catch (Exception ex)
+            {
+                return Request.CreateResponse(HttpStatusCode.InternalServerError,
+                    new { Status = false, Message = ex.Message });
+            }
+        }
+
+        // Step 1 helper — MARA MATKL lookup via RFC_READ_TABLE.
+        // Uses single OPTIONS row; MATNR EQ '...' fits within the 72-char row limit
+        // per [[reference_rfc_read_table_options_72char]].
+        private string LookupMatkl(RfcDestination dest, string paddedMatnr)
+        {
+            IRfcFunction fn = dest.Repository.CreateFunction("RFC_READ_TABLE");
+            fn.SetValue("QUERY_TABLE", "MARA");
+            fn.SetValue("DELIMITER", "|");
+
+            IRfcTable opts = fn.GetTable("OPTIONS");
+            IRfcStructure optRow = opts.Metadata.LineType.CreateStructure();
+            optRow.SetValue("TEXT", "MATNR EQ '" + paddedMatnr + "'");
+            opts.Append(optRow);
+
+            IRfcTable flds = fn.GetTable("FIELDS");
+            IRfcStructure fldRow = flds.Metadata.LineType.CreateStructure();
+            fldRow.SetValue("FIELDNAME", "MATKL");
+            flds.Append(fldRow);
+
+            fn.Invoke(dest);
+            IRfcTable data = fn.GetTable("DATA");
+            if (data.RowCount == 0) return string.Empty;
+            data.CurrentIndex = 0;
+            return (data.CurrentRow.GetString("WA") ?? "").Trim();
+        }
+
+        // Step 2 helper — link article to its class.
+        // Real signature (verified 2026-07-03 via abap_read_interface):
+        //   IV_MATNR (STRING), IV_CLASS (STRING), IV_KLART (STRING), EV_JSON (STRING)
+        // V2 convention: IV_CLASS = MATKL, IV_KLART = '026' (batch/article class type).
+        private bool InvokeLinkMatnrClass(RfcDestination dest,
+            string paddedMatnr, string matkl, out string linkJson)
+        {
+            linkJson = "";
+            try
+            {
+                IRfcFunction fn = dest.Repository.CreateFunction("Z_LINK_MATNR_CLASS");
+                fn.SetValue("IV_MATNR", paddedMatnr);
+                fn.SetValue("IV_CLASS", matkl);
+                fn.SetValue("IV_KLART", "026");
+                fn.Invoke(dest);
+                try { linkJson = fn.GetValue("EV_JSON")?.ToString() ?? ""; } catch { }
+                // Convention: EV_JSON contains "ok":true on success. Fallback = non-throw.
+                if (!string.IsNullOrEmpty(linkJson) && linkJson.Contains("\"ok\":false"))
+                    return false;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                linkJson = "{\"ok\":false,\"error\":\"" + (ex.Message ?? "").Replace("\"", "'") + "\"}";
+                return false;
+            }
+        }
+
+        // Step 3 helper — V65 patch.
+        // Real signature (verified 2026-07-03 via abap_read_interface):
+        //   IV_MATNR (MATNR), IV_CHANGES (STRING, pipe "K=V|K=V"), IV_TEST_MODE (FLAG), EV_JSON (STRING)
+        // NO IT_ATTRS table, NO IV_USER. Same shape as V61. Parses EV_JSON for
+        // "applied":N + "nic":N (matches Z_ART_PATCH_RFC family convention).
+        private bool InvokeV65Patch(RfcDestination dest, string paddedMatnr,
+            List<ArticleV65Attr> attrs, string user,
+            out string json, out int appliedCount, out int nicCount)
+        {
+            json = "";
+            appliedCount = 0;
+            nicCount = 0;
+
+            // Build pipe-delimited K=V|K=V string. Sanitize | and = from values.
+            var sb = new StringBuilder();
+            bool first = true;
+            foreach (var a in attrs)
+            {
+                if (a == null || string.IsNullOrEmpty(a.Atnam)) continue;
+                string safeVal = (a.Atwrt ?? "").Replace("|", " ").Replace("=", " ");
+                if (!first) sb.Append('|');
+                sb.Append(a.Atnam.ToUpperInvariant()).Append('=').Append(safeVal);
+                first = false;
+            }
+
+            IRfcFunction fn = dest.Repository.CreateFunction("Z_ART_PATCH_RFC_V65");
+            fn.SetValue("IV_MATNR", paddedMatnr);
+            fn.SetValue("IV_CHANGES", sb.ToString());
+            fn.SetValue("IV_TEST_MODE", " ");
+            fn.Invoke(dest);
+
+            try { json = fn.GetValue("EV_JSON")?.ToString() ?? ""; } catch { }
+
+            // Parse counts from EV_JSON. Minimal regex — avoids full JSON dep.
+            appliedCount = ExtractIntFromJson(json, "applied");
+            nicCount = ExtractIntFromJson(json, "nic");
+
+            // Success = ok:true in EV_JSON (matches Z_ART_PATCH_RFC family contract).
+            return json.Contains("\"ok\":true");
+        }
+
+        // Minimal int-from-JSON extractor. Not a full parser — just handles
+        // "key":123 shape. Returns 0 on miss (safer than throwing).
+        private static int ExtractIntFromJson(string json, string key)
+        {
+            if (string.IsNullOrEmpty(json)) return 0;
+            string needle = "\"" + key + "\":";
+            int i = json.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+            if (i < 0) return 0;
+            i += needle.Length;
+            while (i < json.Length && (json[i] == ' ' || json[i] == '\t')) i++;
+            int start = i;
+            while (i < json.Length && (char.IsDigit(json[i]) || json[i] == '-')) i++;
+            if (i == start) return 0;
+            int val;
+            return int.TryParse(json.Substring(start, i - start), out val) ? val : 0;
+        }
+
         // ----- shared single-MATNR RFC invoke -----
         // 2026-06-04: Z_ART_PATCH_RFC_V61 (FG ZARTPV61FG1, TR S4DK925666).
         // V61 enumerates all candidate classes via KSSK + INOB->CUOBJ chain
@@ -453,5 +692,50 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
         public int Applied { get; set; }
         public int Failed { get; set; }
         public List<ArticlePatchItemResult> Results { get; set; }
+    }
+
+    // ─── V65 chain DTOs ──────────────────────────────────────────────
+    public class ArticleV65Attr
+    {
+        public string Atnam { get; set; }
+        public string Atwrt { get; set; }
+    }
+
+    public class ArticleV65ChainItem
+    {
+        public string Matnr { get; set; }
+        public List<ArticleV65Attr> Attrs { get; set; }
+    }
+
+    public class ArticleV65ChainRequest
+    {
+        public List<ArticleV65ChainItem> Items { get; set; }
+        public string User { get; set; }
+        public bool StopOnError { get; set; }
+    }
+
+    public class ArticleV65ChainItemResult
+    {
+        public int Index { get; set; }
+        public string Matnr { get; set; }
+        public string Matkl { get; set; }
+        public bool LinkOk { get; set; }
+        public string LinkMsg { get; set; }
+        public int Applied { get; set; }
+        public int Nic { get; set; }
+        public string PatchJson { get; set; }
+        public bool Ok { get; set; }
+        public string Error { get; set; }
+        public string ErrorMsg { get; set; }
+    }
+
+    public class ArticleV65ChainResponse
+    {
+        public bool Status { get; set; }
+        public string Env { get; set; }
+        public int Total { get; set; }
+        public int Applied { get; set; }
+        public int Failed { get; set; }
+        public List<ArticleV65ChainItemResult> Results { get; set; }
     }
 }
