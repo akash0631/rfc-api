@@ -363,29 +363,30 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
                             }
                             else
                             {
-                                // Step 2: link MATNR ↔ class (KLART=026, IV_CLASS=MATKL)
+                                // Step 2: link MATNR ↔ class (KLART=026, IV_CLASS=MATKL).
+                                // BEST-EFFORT — "Assignment exists and is valid" is a benign
+                                // idempotent duplicate check, NOT a real failure. V65 also
+                                // auto-enumerates classes internally, so even a hard link
+                                // exception rarely blocks the patch. Log outcome but always
+                                // proceed to Step 3.
                                 string linkJson;
                                 bool linkOk = InvokeLinkMatnrClass(dest, padded, matkl, out linkJson);
                                 res.LinkOk = linkOk;
                                 res.LinkMsg = linkJson;
-                                if (!linkOk)
+
+                                // Step 3: V65 patch (runs regardless of link result)
+                                string patchJson;
+                                int appliedCount, nicCount;
+                                bool patchOk = InvokeV65Patch(dest, padded, item.Attrs,
+                                    request.User, out patchJson, out appliedCount, out nicCount);
+                                res.PatchJson = patchJson;
+                                res.Applied = appliedCount;
+                                res.Nic = nicCount;
+                                res.Ok = patchOk && appliedCount > 0;
+                                if (!res.Ok)
                                 {
-                                    res.Ok = false;
-                                    res.Error = "link_failed";
-                                }
-                                else
-                                {
-                                    // Step 3: V65 patch
-                                    string patchJson;
-                                    int appliedCount, nicCount;
-                                    bool patchOk = InvokeV65Patch(dest, padded, item.Attrs,
-                                        request.User, out patchJson, out appliedCount, out nicCount);
-                                    res.PatchJson = patchJson;
-                                    res.Applied = appliedCount;
-                                    res.Nic = nicCount;
-                                    res.Ok = patchOk && appliedCount > 0;
-                                    if (!res.Ok && nicCount > 0)
-                                        res.Error = "all_nic";
+                                    if (nicCount > 0) res.Error = "all_nic";
+                                    else if (appliedCount == 0) res.Error = "no_writes";
                                 }
                             }
                         }
