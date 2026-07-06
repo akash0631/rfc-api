@@ -488,12 +488,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
             nicCount = 0;
 
             // Build pipe-delimited K=V|K=V string. Sanitize | and = from values.
+            // Null-safety: attrs with empty/null Atwrt are OMITTED from pipe → SAP
+            // field retains existing value. Sentinel "BLANK" → passed as empty "",
+            // instructing V65 FM to clear the field.
             var sb = new StringBuilder();
             bool first = true;
             foreach (var a in attrs)
             {
                 if (a == null || string.IsNullOrEmpty(a.Atnam)) continue;
-                string safeVal = (a.Atwrt ?? "").Replace("|", " ").Replace("=", " ");
+                string val = a.Atwrt;
+                if (string.IsNullOrEmpty(val)) continue;
+                if (val.Equals("BLANK", StringComparison.Ordinal)) val = "";
+                string safeVal = val.Replace("|", " ").Replace("=", " ");
                 if (!first) sb.Append('|');
                 sb.Append(a.Atnam.ToUpperInvariant()).Append('=').Append(safeVal);
                 first = false;
@@ -542,12 +548,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.MM
             RfcDestination dest, string matnr,
             Dictionary<string, string> changes, bool testMode, string user)
         {
+            // Null-safety: empty/null values are OMITTED from pipe → SAP field
+            // retains existing value. Sentinel "BLANK" → passed as empty "",
+            // instructing V61 FM to clear the field.
             var sb = new StringBuilder();
             bool first = true;
             foreach (var kv in changes)
             {
                 if (string.IsNullOrEmpty(kv.Key)) continue;
-                string safeVal = (kv.Value ?? string.Empty).Replace("|", " ").Replace("=", " ");
+                string val = kv.Value;
+                if (string.IsNullOrEmpty(val)) continue;
+                if (val.Equals("BLANK", StringComparison.Ordinal)) val = "";
+                string safeVal = val.Replace("|", " ").Replace("=", " ");
                 if (!first) sb.Append('|');
                 sb.Append(kv.Key.ToUpperInvariant()).Append('=').Append(safeVal);
                 first = false;
