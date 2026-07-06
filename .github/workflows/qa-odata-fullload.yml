@@ -11,6 +11,10 @@ on:
       entity:       { description: 'Entity set e.g. SkatFull', required: true, type: string }
       target_table: { description: 'Snowflake target e.g. V2RETAIL.BRONZE.SAP_SKAT', required: true, type: string }
       keys:         { description: 'Comma key cols for $orderby+dedup e.g. spras,ktopl,saknr', required: true, type: string }
+      date_field:   { description: 'Optional date field to window on (avoids deep-skip 500 on big tables) e.g. budat', required: false, default: '', type: string }
+      start_date:   { description: 'YYYY-MM-DD (only if date_field set)', required: false, default: '', type: string }
+      end_date:     { description: 'YYYY-MM-DD (only if date_field set)', required: false, default: '', type: string }
+      window_days:  { description: 'Window size in days (only if date_field set)', required: false, default: '30', type: string }
       env:          { description: 'qa or dev', required: true, default: 'qa', type: string }
 
 concurrency:
@@ -32,6 +36,10 @@ jobs:
           ENTITY:       ${{ inputs.entity }}
           TARGET_TABLE: ${{ inputs.target_table }}
           KEYS:         ${{ inputs.keys }}
+          DATE_FIELD:   ${{ inputs.date_field }}
+          START_DATE:   ${{ inputs.start_date }}
+          END_DATE:     ${{ inputs.end_date }}
+          WINDOW_DAYS:  ${{ inputs.window_days }}
           ODATA_ENV:    ${{ inputs.env }}
           SAP_QA_USER:  ${{ secrets.SAP_QA_USER }}
           SAP_QA_PASS:  ${{ secrets.SAP_QA_PASS }}
@@ -61,37 +69,56 @@ jobs:
               ms=int(m.group(1))
               if ms>=253402214400000: return None
               return datetime.fromtimestamp(ms/1000,tz=timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
-          ob=",".join(KEYS); rows=[]; skip=0; PAGE=2000; t0=time.time()
-          while True:
-              url=f"{BASE}&%24orderby={ob}&%24top={PAGE}&%24skip={skip}"
-              for a in range(6):
-                  try:
-                      req=urllib.request.Request(url,headers=H)
-                      with urllib.request.urlopen(req,timeout=600) as r: data=json.loads(r.read().decode('utf-8')); break
-                  except Exception as e: print("retry",a+1,str(e)[:70],flush=True); time.sleep(min(30,2**a))
-              else: raise SystemExit("pull failed")
-              pg=data.get('d',{}).get('results',[])
-              if not pg: break
-              for rec in pg:
-                  rec.pop('__metadata',None)
-                  rows.append({k.upper():(conv(v) if isinstance(v,str) and v.startswith('/Date(') else (str(v) if v is not None else None)) for k,v in rec.items()})
-              skip+=PAGE; print("pulled",len(rows),flush=True)
-              if len(pg)<PAGE: break
-          print("PULL",len(rows),"in",int(time.time()-t0),"s",flush=True)
-          if not rows: print("no rows"); sys.exit(0)
-          cols=sorted({k for r in rows for k in r})
-          df=pd.DataFrame(rows).reindex(columns=cols).astype(object).where(lambda x:x.notna(),None)
-          kk=[k.upper() for k in KEYS if k.upper() in df.columns]
-          if kk: df=df.drop_duplicates(subset=kk,keep='last')
-          print("rows after dedup",len(df),flush=True)
+          from datetime import datetime as _dt, timedelta
+          DF=os.environ.get('DATE_FIELD','').strip(); SD=os.environ.get('START_DATE','').strip(); ED=os.environ.get('END_DATE','').strip()
+          WD=int(os.environ.get('WINDOW_DAYS','30') or '30')
+          ob=",".join(KEYS); PAGE=2000
+          def pull(flt):
+              out=[]; skip=0
+              while True:
+                  url=f"{BASE}&%24orderby={ob}&%24top={PAGE}&%24skip={skip}"
+                  if flt: url+="&%24filter="+urllib.parse.quote(flt)
+                  for a in range(6):
+                      try:
+                          req=urllib.request.Request(url,headers=H)
+                          with urllib.request.urlopen(req,timeout=600) as r: data=json.loads(r.read().decode('utf-8')); break
+                      except Exception as e: print("retry",a+1,str(e)[:70],flush=True); time.sleep(min(30,2**a))
+                  else: raise SystemExit("pull failed")
+                  pg=data.get('d',{}).get('results',[])
+                  if not pg: break
+                  for rec in pg:
+                      rec.pop('__metadata',None)
+                      out.append({k.upper():(conv(v) if isinstance(v,str) and v.startswith('/Date(') else (str(v) if v is not None else None)) for k,v in rec.items()})
+                  skip+=PAGE
+                  if len(pg)<PAGE: break
+              return out
+          # window list
+          wins=[None]
+          if DF and SD and ED:
+              wins=[]; a=_dt.strptime(SD,'%Y-%m-%d'); e=_dt.strptime(ED,'%Y-%m-%d')
+              while a<=e:
+                  b=min(a+timedelta(days=WD),e+timedelta(days=1))
+                  wins.append((a.strftime('%Y-%m-%d'),b.strftime('%Y-%m-%d'))); a=b
+              print(len(wins),"windows",WD,"d",flush=True)
           con=snowflake.connector.connect(account=os.environ['SF_ACCOUNT'],user=os.environ['SF_USER'],password=os.environ['SF_PASSWORD'],warehouse='WH_SAP_LOAD',database='V2RETAIL',schema='BRONZE')
           cur=con.cursor()
           try: cur.execute("USE SECONDARY ROLES ALL")
           except Exception as e: print("secroles",e)
-          cur.execute("CREATE OR REPLACE TABLE "+TGT+" ("+",".join('"'+c+'" VARCHAR' for c in cols)+")")
-          write_pandas(con,df,TGT.split('.')[-1],database='V2RETAIL',schema='BRONZE',quote_identifiers=True)
+          cols=None; total=0; t0=time.time(); tname=TGT.split('.')[-1]
+          for w in wins:
+              flt=None if w is None else f"{DF} ge datetime'{w[0]}T00:00:00' and {DF} lt datetime'{w[1]}T00:00:00'"
+              rows=pull(flt)
+              lab="(full)" if w is None else f"{w[0]}..{w[1]}"
+              if not rows: print(lab,"0",flush=True); continue
+              if cols is None:
+                  cols=sorted({k for r in rows for k in r})
+                  cur.execute("CREATE OR REPLACE TABLE "+TGT+" ("+",".join('"'+c+'" VARCHAR' for c in cols)+")")
+              df=pd.DataFrame(rows).reindex(columns=cols).astype(object).where(lambda x:x.notna(),None)
+              write_pandas(con,df,tname,database='V2RETAIL',schema='BRONZE',quote_identifiers=True)
+              total+=len(df); print(lab,len(df),"total",total,flush=True)
+          if cols is None: print("no rows"); con.close(); sys.exit(0)
           n=cur.execute("SELECT COUNT(*) FROM "+TGT).fetchone()[0]
-          print("TARGET",TGT,"=",n,flush=True); con.close(); print("DONE")
+          print("PULL done in",int(time.time()-t0),"s. TARGET",TGT,"=",n,flush=True); con.close(); print("DONE")
           '@
           Set-Content -Path qa_fullload.py -Value $py -Encoding utf8
           python qa_fullload.py
