@@ -128,12 +128,16 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                         // STRUCTURE param: nested JSON object → GetStructure + SetValue per field.
                         // Per commit 13b60db upstream. Extended here to surface per-field errors
                         // instead of silent catch — helps diagnose typos in nested field names.
+                        // Same null-safety as scalar: skip empty, "BLANK" → "".
                         else if (prop.Value is Newtonsoft.Json.Linq.JObject nestedObj)
                         {
                             IRfcStructure rfcStruct = myfun.GetStructure(key);
                             foreach (var field in nestedObj.Properties())
                             {
-                                try { rfcStruct.SetValue(field.Name, field.Value.ToString()); }
+                                string fval = field.Value.Type == JTokenType.Null ? null : field.Value.ToString();
+                                if (string.IsNullOrEmpty(fval)) continue;
+                                if (fval.Equals("BLANK", StringComparison.Ordinal)) fval = "";
+                                try { rfcStruct.SetValue(field.Name, fval); }
                                 catch (Exception fex)
                                 {
                                     paramErrors.Add(new JObject
@@ -145,11 +149,22 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                             }
                             paramApplied.Add(key + " (structure)");
                         }
-                        // Scalar param: string/number/bool → SetValue
+                        // Scalar param: string/number/bool → SetValue.
+                        // Null-safety: omitted/empty values are NOT forwarded — leaves
+                        // SAP field untouched. Sentinel "BLANK" → explicit clear ("").
                         else
                         {
-                            myfun.SetValue(key, prop.Value.ToString());
-                            paramApplied.Add(key);
+                            string sval = prop.Value.Type == JTokenType.Null ? null : prop.Value.ToString();
+                            if (string.IsNullOrEmpty(sval))
+                            {
+                                paramApplied.Add(key + " (skipped:empty)");
+                            }
+                            else
+                            {
+                                if (sval.Equals("BLANK", StringComparison.Ordinal)) sval = "";
+                                myfun.SetValue(key, sval);
+                                paramApplied.Add(key);
+                            }
                         }
                     }
                     catch (Exception pex)
