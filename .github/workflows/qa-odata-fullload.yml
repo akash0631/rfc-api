@@ -64,13 +64,16 @@ jobs:
           AUTH=base64.b64encode(f"{U}:{P}".encode()).decode()
           BASE=f"{HOST}/sap/opu/odata/sap/{SERVICE}/{ENTITY}?sap-client={CL}&%24format=json"
           H={'Authorization':f'Basic {AUTH}','Accept':'application/json','User-Agent':'V2-QA-Fullload/1.0'}
+          from datetime import datetime as _d0, timedelta as _td
           dr=re.compile(r"/Date\((-?\d+)\)/")
           def conv(v):
               m=dr.search(v)
               if not m: return v
-              ms=int(m.group(1))
-              if ms>=253402214400000: return None
-              return datetime.fromtimestamp(ms/1000,tz=timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+              try:
+                  ms=int(m.group(1))
+                  if ms<0 or ms>=253402214400000: return None
+                  return (_d0(1970,1,1)+_td(milliseconds=ms)).strftime("%Y-%m-%d %H:%M:%S")
+              except Exception: return None
           from datetime import datetime as _dt, timedelta
           DF=os.environ.get('DATE_FIELD','').strip(); SD=os.environ.get('START_DATE','').strip(); ED=os.environ.get('END_DATE','').strip()
           WD=int(os.environ.get('WINDOW_DAYS','30') or '30')
