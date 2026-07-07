@@ -87,12 +87,20 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     int code = (int)resp.StatusCode;
                     bool ok = resp.IsSuccessStatusCode;
 
-                    return Json(new
+                    // Return Green On's actual HTTP code so upstream SAP callers
+                    // see failures natively (was returning 200 wrapping ok:false,
+                    // which made SAP orchestrators count relay-reached as success).
+                    return ResponseMessage(new HttpResponseMessage((System.Net.HttpStatusCode)code)
                     {
-                        ok = ok,
-                        http_code = code,
-                        body = respBody,
-                        latency_ms = (int)(DateTime.UtcNow - started).TotalMilliseconds
+                        Content = new StringContent(
+                            Newtonsoft.Json.JsonConvert.SerializeObject(new
+                            {
+                                ok = ok,
+                                http_code = code,
+                                body = respBody,
+                                latency_ms = (int)(DateTime.UtcNow - started).TotalMilliseconds
+                            }),
+                            Encoding.UTF8, "application/json")
                     });
                 }
             }
