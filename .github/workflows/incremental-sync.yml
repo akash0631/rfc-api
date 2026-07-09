@@ -100,7 +100,8 @@ jobs:
           RID=os.environ.get("GITHUB_RUN_ID","local")+"-"+tbl; ACTOR=os.environ.get("GITHUB_ACTOR","cron"); T0=datetime.datetime.utcnow()
           def logrow(status,pulled=0,ins=0,upd=0,tgt=0,err=None,flt=None):
               try:
-                  cur.execute("INSERT INTO V2RETAIL.BRONZE.SYNC_LOG(RUN_ID,TABLE_NAME,MODE,TRIGGERED_BY,STARTED_AT,ENDED_AT,DURATION_S,STATUS,FILTER_TEXT,ROWS_PULLED,ROWS_INSERTED,ROWS_UPDATED,TARGET_COUNT,ERROR) SELECT %s,%s,%s,%s,%s,CURRENT_TIMESTAMP()::timestamp_ntz,DATEDIFF('second',%s,CURRENT_TIMESTAMP()),%s,%s,%s,%s,%s,%s,%s",(RID,tbl,mode,ACTOR,T0,T0,status,flt,pulled,ins,upd,tgt,(str(err)[:1500] if err else None)))
+                  t1=datetime.datetime.utcnow(); dur=int((t1-T0).total_seconds())
+                  cur.execute("INSERT INTO V2RETAIL.BRONZE.SYNC_LOG(RUN_ID,TABLE_NAME,MODE,TRIGGERED_BY,STARTED_AT,ENDED_AT,DURATION_S,STATUS,FILTER_TEXT,ROWS_PULLED,ROWS_INSERTED,ROWS_UPDATED,TARGET_COUNT,ERROR) SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s",(RID,tbl,mode,ACTOR,T0,t1,dur,status,flt,pulled,ins,upd,tgt,(str(err)[:1500] if err else None)))
               except Exception as e: print("logrow err",e)
           coltype={r[0].upper():r[1] for r in cur.execute("SELECT COLUMN_NAME,DATA_TYPE FROM V2RETAIL.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='BRONZE' AND TABLE_NAME='"+c["target"]+"'").fetchall()}
           if not coltype: print("target BRONZE."+c["target"]+" not found"); sys.exit(1)
