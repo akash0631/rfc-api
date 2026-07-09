@@ -35,15 +35,17 @@ jobs:
           cur=con.cursor()
           try: cur.execute("USE SECONDARY ROLES ALL")
           except Exception: pass
-          reqs=cur.execute("SELECT REQUEST_ID,TABLE_NAME,MODE FROM V2RETAIL.BRONZE.SYNC_REQUEST WHERE STATUS='PENDING' ORDER BY REQUESTED_AT LIMIT 20").fetchall()
+          reqs=cur.execute("SELECT REQUEST_ID,TABLE_NAME,MODE,START_DATE,END_DATE FROM V2RETAIL.BRONZE.SYNC_REQUEST WHERE STATUS='PENDING' ORDER BY REQUESTED_AT LIMIT 20").fetchall()
           if not reqs: print("no pending requests"); con.close(); raise SystemExit
           pat=os.environ.get("GH_PAT","")
           env=dict(os.environ)
           if pat: env["GH_TOKEN"]=pat
-          for rid,tbl,mode in reqs:
+          for rid,tbl,mode,sd,ed in reqs:
               full="true" if str(mode).lower()=="full" else "false"
+              args=["gh","workflow","run","incremental-sync.yml","-R","akash0631/rfc-api","-f","table="+str(tbl),"-f","full="+full]
+              if str(mode).lower()=="daterange" and sd and ed: args+=["-f","start_date="+str(sd),"-f","end_date="+str(ed)]
               try:
-                  subprocess.run(["gh","workflow","run","incremental-sync.yml","-R","akash0631/rfc-api","-f","table="+str(tbl),"-f","full="+full],check=True,env=env,capture_output=True,text=True)
+                  subprocess.run(args,check=True,env=env,capture_output=True,text=True)
                   cur.execute("UPDATE V2RETAIL.BRONZE.SYNC_REQUEST SET STATUS='DISPATCHED' WHERE REQUEST_ID=%s",(rid,)); print("dispatched",tbl,mode)
               except Exception as e:
                   cur.execute("UPDATE V2RETAIL.BRONZE.SYNC_REQUEST SET STATUS='ERROR',NOTE=%s WHERE REQUEST_ID=%s",(str(e)[:500],rid)); print("dispatch failed",tbl,str(e)[:200])
