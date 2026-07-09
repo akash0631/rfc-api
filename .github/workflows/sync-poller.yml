@@ -1,0 +1,53 @@
+name: SAP sync poller (runs SYNC_REQUEST)
+
+# Every 10 min: read PENDING rows from V2RETAIL.BRONZE.SYNC_REQUEST (written by the Streamlit
+# "Run" tab), dispatch the incremental-sync workflow for each, mark DISPATCHED. Needs a PAT
+# secret GH_PAT (fine-grained, Actions: read/write on akash0631/rfc-api) to trigger the other
+# workflow (the default GITHUB_TOKEN can't). Without GH_PAT, requests are marked ERROR (visible in UI).
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sync-poller
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: [self-hosted, iis]
+    steps:
+      - name: Deps
+        shell: powershell
+        run: python -m pip install --quiet --upgrade snowflake-connector-python
+      - name: Process pending requests
+        shell: powershell
+        env:
+          SF_ACCOUNT:  ${{ secrets.SF_ACCOUNT }}
+          SF_USER:     ${{ secrets.SF_USER }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          GH_PAT:      ${{ secrets.GH_PAT }}
+        run: |
+          $py = @'
+          import os, subprocess, snowflake.connector
+          con=snowflake.connector.connect(account=os.environ["SF_ACCOUNT"],user=os.environ["SF_USER"],password=os.environ["SF_PASSWORD"],warehouse="WH_SAP_LOAD",database="V2RETAIL",schema="BRONZE")
+          cur=con.cursor()
+          try: cur.execute("USE SECONDARY ROLES ALL")
+          except Exception: pass
+          reqs=cur.execute("SELECT REQUEST_ID,TABLE_NAME,MODE FROM V2RETAIL.BRONZE.SYNC_REQUEST WHERE STATUS='PENDING' ORDER BY REQUESTED_AT LIMIT 20").fetchall()
+          if not reqs: print("no pending requests"); con.close(); raise SystemExit
+          pat=os.environ.get("GH_PAT","")
+          env=dict(os.environ)
+          if pat: env["GH_TOKEN"]=pat
+          for rid,tbl,mode in reqs:
+              full="true" if str(mode).lower()=="full" else "false"
+              try:
+                  subprocess.run(["gh","workflow","run","incremental-sync.yml","-R","akash0631/rfc-api","-f","table="+str(tbl),"-f","full="+full],check=True,env=env,capture_output=True,text=True)
+                  cur.execute("UPDATE V2RETAIL.BRONZE.SYNC_REQUEST SET STATUS='DISPATCHED' WHERE REQUEST_ID=%s",(rid,)); print("dispatched",tbl,mode)
+              except Exception as e:
+                  cur.execute("UPDATE V2RETAIL.BRONZE.SYNC_REQUEST SET STATUS='ERROR',NOTE=%s WHERE REQUEST_ID=%s",(str(e)[:500],rid)); print("dispatch failed",tbl,str(e)[:200])
+          con.close(); print("poller done")
+          '@
+          Set-Content -Path poller.py -Value $py -Encoding utf8
+          python poller.py
