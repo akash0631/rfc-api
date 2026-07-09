@@ -1,26 +1,31 @@
 name: SAP PROD OData -> BRONZE incremental sync
 
-# Watermark-delta incremental (PROD OData -> stage -> MERGE on key) on the .36 self-hosted
-# runner (on-LAN, reaches SAP PROD 192.168.144.170:5202). Source = PROD OData ONLY.
-# Only tables whose _FULL service is LIVE on PROD can run today (MARA, MSEG); the rest are
-# config-ready and start syncing the moment their PROD service is published.
+# Watermark-delta / full-refresh incremental (PROD OData -> stage -> MERGE|REPLACE) on the .36
+# self-hosted runner (on-LAN, reaches SAP PROD 192.168.144.170:5202). Source = PROD OData ONLY.
+# Auth = SAP_ODATA service user (secrets SAP_PROD_USER/PASS). Only PROD-authorized services run;
+# the rest are config-ready and sync the moment their S_SERVICE auth is granted.
+#
+# Per-table CONFIG:  mode = "delta" (watermark -> MERGE on key) | "full" (truncate + reload).
+# $select is built from the TARGET's business columns -> limits payload AND auto-excludes any
+# poison column not present in the target (e.g. BSAK.zfbdt). A $top=1 probe disables $select if
+# the service rejects it (so a schema drift can never break the pull).
 
 on:
   workflow_dispatch:
     inputs:
-      table: { description: 'Table key e.g. MARA', required: true, default: 'MARA', type: string }
-      full:  { description: 'full reload (ignore watermark)', required: false, default: 'false', type: string }
+      table: { description: 'Table key e.g. MARA / BSAK / SKAT', required: true, default: 'MARA', type: string }
+      full:  { description: 'delta tables: ignore watermark & pull all', required: false, default: 'false', type: string }
   schedule:
-    - cron: '30 19 * * *'   # 01:00 IST — MARA daily (only PROD-live master today)
+    - cron: '30 19 * * *'   # 01:00 IST — MARA daily (extend to a matrix once all services authorized)
 
 concurrency:
-  group: incr-${{ github.event.inputs.table }}
+  group: incr-${{ github.event.inputs.table || 'MARA' }}
   cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: [self-hosted, iis]
-    timeout-minutes: 240
+    timeout-minutes: 480
     steps:
       - name: Deps
         shell: powershell
@@ -41,32 +46,44 @@ jobs:
           import pandas as pd, snowflake.connector
           from snowflake.connector.pandas_tools import write_pandas
           CONFIG = {
-            "MARA": dict(service="Z_SB_MARA_FULL", entity="MaraFull", target="SAP_MARA", keys=["MATNR"], date_fields=["laeda","ersda"]),
-            "MSEG": dict(service="Z_SB_MSEG_FULL", entity="MsegFull", target="SAP_MSEG", keys=["MBLNR","MJAHR","ZEILE"], date_fields=["budat_mkpf","cpudt_mkpf"]),
-            "BKPF": dict(service="Z_SB_BKPF_FULL", entity="BkpfFull", target="SAP_BKPF", keys=["BUKRS","BELNR","GJAHR"], date_fields=["cpudt","aedat"]),
-            "EKKO": dict(service="Z_SB_EKKO_FULL", entity="EkkoFull", target="SAP_EKKO", keys=["EBELN"], date_fields=["aedat","bedat"]),
-            "VBAK": dict(service="Z_SB_VBAK_FULL", entity="VbakFull", target="SAP_VBAK", keys=["VBELN"], date_fields=["erdat","aedat"]),
-            "VBAP": dict(service="Z_SB_VBAP_FULL", entity="VbapFull", target="SAP_VBAP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"]),
-            "VBRK": dict(service="Z_SB_VBRK_FULL", entity="VbrkFull", target="SAP_VBRK", keys=["VBELN"], date_fields=["fkdat","aedat"]),
-            "LIKP": dict(service="Z_SB_LIKP_FULL", entity="LikpFull", target="SAP_LIKP", keys=["VBELN"], date_fields=["erdat","aedat"]),
-            "EKPO": dict(service="Z_SB_EKPO_FULL", entity="EkpoFull", target="SAP_EKPO", keys=["EBELN","EBELP"], date_fields=["aedat","bedat"]),
-            "VBRP": dict(service="Z_SB_VBRP_FULL", entity="VbrpFull", target="SAP_VBRP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"]),
-            "LIPS": dict(service="Z_SB_LIPS_FULL", entity="LipsFull", target="SAP_LIPS", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"]),
+            # ---- delta (watermark -> MERGE) ----
+            "MARA": dict(service="Z_SB_MARA_FULL", entity="MaraFull", target="SAP_MARA", keys=["MATNR"], date_fields=["laeda","ersda"], mode="delta"),
+            "BSAK": dict(service="Z_SB_BSAK_FULL", entity="BsakFull", target="SAP_BSAK", keys=["BUKRS","LIFNR","GJAHR","BELNR","BUZEI"], date_fields=["budat","augdt"], mode="delta"),
+            "EKKO": dict(service="Z_SB_EKKO_FULL", entity="EkkoFull", target="SAP_EKKO", keys=["EBELN"], date_fields=["aedat","bedat"], mode="delta"),
+            "EKPO": dict(service="Z_SB_EKPO_FULL", entity="EkpoFull", target="SAP_EKPO", keys=["EBELN","EBELP"], date_fields=["aedat","bedat"], mode="delta"),
+            "VBRK": dict(service="Z_SB_VBRK_FULL", entity="VbrkFull", target="SAP_VBRK", keys=["VBELN"], date_fields=["fkdat","erdat"], mode="delta"),
+            "VBRP": dict(service="Z_SB_VBRP_FULL", entity="VbrpFull", target="SAP_VBRP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"], mode="delta"),
+            "LIPS": dict(service="Z_SB_LIPS_FULL", entity="LipsFull", target="SAP_LIPS", keys=["VBELN","POSNR"], date_fields=["erdat"], mode="delta"),
+            "LIKP": dict(service="Z_SB_LIKP_FULL", entity="LikpFull", target="SAP_LIKP", keys=["VBELN"], date_fields=["erdat","aedat"], mode="delta"),
+            "LTAK": dict(service="Z_SB_LTAK", entity="LtakStk", target="SAP_LTAK", keys=["LGNUM","TANUM"], date_fields=["bdatu"], mode="delta"),
+            # ---- full-refresh (truncate + reload) ----
+            "SKAT": dict(service="Z_SB_SKAT_FULL", entity="SkatFull", target="SAP_SKAT", keys=["SPRAS","KTOPL","SAKNR"], date_fields=[], mode="full"),
+            "CSKT": dict(service="Z_SB_CSKT_FULL", entity="CsktFull", target="SAP_CSKT", keys=["SPRAS","KOKRS","KOSTL","DATBI"], date_fields=[], mode="full"),
+            "CSKS": dict(service="Z_SB_CSKS_FULL", entity="CsksFull", target="SAP_CSKS", keys=["KOKRS","KOSTL","DATBI"], date_fields=[], mode="full"),
+            "LQUA": dict(service="Z_SB_LQUA_BIN", entity="LquaBin", target="SAP_LQUA_BIN", keys=["LGNUM","LQNUM"], date_fields=[], mode="full"),
+            "MSKU": dict(service="Z_SB_MSKU", entity="MskuStk", target="SAP_MSKU", keys=["MATNR","WERKS","CHARG","SOBKZ","KUNNR"], date_fields=[], mode="full"),
+            # ---- special: EKET has no own change-date -> driven by parent EKKO.AEDAT (separate driver) ----
+            "EKET": dict(service="Z_SB_EKET_FULL", entity="EketFull", target="SAP_EKET", keys=["EBELN","EBELP","ETENR"], date_fields=[], mode="eket_via_ekko"),
           }
+          LINEAGE={"DL_INGESTED_AT","DL_SOURCE","DL_BATCH_ID","DL_DELTA_TOKEN","EXTRACT_DATE","MANDT"}
           PROD="https://192.168.144.170:5202/sap/opu/odata/sap"; CLIENT="600"; PAGE=5000; OVERLAP=2
           AUTH=base64.b64encode((os.environ["SAP_PROD_USER"]+":"+os.environ["SAP_PROD_PASS"]).encode()).decode()
           tbl=os.environ["TABLE"].upper(); full=os.environ.get("FULL","false").lower()=="true"; c=CONFIG[tbl]
+          mode=c.get("mode","delta")
+          if mode=="eket_via_ekko":
+              print("EKET syncs via parent EKKO.AEDAT (needs EKKO live) - use the dedicated EKET driver, not this workflow. Exiting."); sys.exit(0)
           con=snowflake.connector.connect(account=os.environ["SF_ACCOUNT"],user=os.environ["SF_USER"],password=os.environ["SF_PASSWORD"],
               warehouse="WH_SAP_LOAD",database="V2RETAIL",schema="BRONZE")
           cur=con.cursor()
           try: cur.execute("USE SECONDARY ROLES ALL")
           except Exception as e: print("secroles:",e)
           coltype={r[0].upper():r[1] for r in cur.execute("SELECT COLUMN_NAME,DATA_TYPE FROM V2RETAIL.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='BRONZE' AND TABLE_NAME='"+c["target"]+"'").fetchall()}
+          if not coltype: print("target BRONZE."+c["target"]+" not found"); sys.exit(1)
           TS={k for k,v in coltype.items() if v.startswith("TIMESTAMP")}; ALL=set(coltype)
           ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
           dr=re.compile(r"/Date\((-?\d+)\)/")
           def conv(v,ts):
-              m=dr.search(str(v));
+              m=dr.search(str(v))
               if not m: return None
               s=int(m.group(1))/1000.0
               if s<0 or s>253402300799: return None
@@ -77,21 +94,28 @@ jobs:
               for a in range(retries):
                   try:
                       rq=urllib.request.Request(url,headers={"Authorization":"Basic "+AUTH,"Accept":"application/json"})
-                      with urllib.request.urlopen(rq,context=ctx,timeout=300) as r: return json.load(r)["d"]["results"]
-                  except Exception as e: last=e; print("retry",a+1,str(e)[:60]); time.sleep(min(30,2**a))
+                      with urllib.request.urlopen(rq,context=ctx,timeout=600) as r: return json.load(r)["d"]["results"]
+                  except Exception as e: last=e; print("retry",a+1,str(e)[:70]); time.sleep(min(30,2**a))
               raise last
+          # $select = target business cols (limits payload + auto-excludes poison cols absent from target)
+          selcols=[k.lower() for k in ALL if k not in LINEAGE]
+          selc="&$select="+urllib.parse.quote(",".join(selcols)) if selcols else ""
+          if selc:
+              try: od("$format=json&$top=1&sap-client="+CLIENT+selc)
+              except Exception as e: print("$select probe failed -> full-column pull:",str(e)[:70]); selc=""
+          # watermark (delta only)
           flt=""
-          if not full and c["date_fields"]:
+          if mode=="delta" and not full and c["date_fields"]:
               df0=c["date_fields"][0].upper()
               mx=cur.execute("SELECT MAX("+df0+") FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0]
               if mx is not None:
                   if df0 in TS: wm=(mx-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
-                  else: wm=(datetime.datetime.strptime(str(mx),"%Y%m%d")-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
+                  else: wm=(datetime.datetime.strptime(str(mx)[:8],"%Y%m%d")-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
                   flt=" or ".join(d+" ge datetime'"+wm+"'" for d in c["date_fields"])
-          print("filter:",flt or "(full)")
+          print("table",tbl,"mode",mode,"filter:",flt or "(full pull)","select:",bool(selc))
           rows=[]; skip=0; t0=time.time()
           while True:
-              p="$format=json&$top="+str(PAGE)+"&$skip="+str(skip)+"&$orderby="+",".join(k.lower() for k in c["keys"])+"&sap-client="+CLIENT
+              p="$format=json&$top="+str(PAGE)+"&$skip="+str(skip)+"&$orderby="+",".join(k.lower() for k in c["keys"])+"&sap-client="+CLIENT+selc
               if flt: p+="&$filter="+urllib.parse.quote(flt)
               pg=od(p)
               if not pg: break
@@ -108,7 +132,7 @@ jobs:
               skip+=PAGE; print("pulled",len(rows))
               if len(pg)<PAGE: break
           print("PULL",len(rows),"in",int(time.time()-t0),"s")
-          if not rows: print("nothing new"); sys.exit(0)
+          if not rows: print("nothing new - target unchanged"); con.close(); sys.exit(0)
           cols=sorted({k for r in rows for k in r})
           df=pd.DataFrame(rows).reindex(columns=cols).astype(object).where(lambda x:x.notna(),None)
           df=df.drop_duplicates(subset=[k for k in c["keys"] if k in df.columns],keep="last")
@@ -117,11 +141,18 @@ jobs:
           cur.execute("CREATE OR REPLACE TABLE V2RETAIL.BRONZE."+stg+" ("+",".join('"'+x+'" VARCHAR' for x in cols)+")")
           write_pandas(con,df,stg,database="V2RETAIL",schema="BRONZE",quote_identifiers=True)
           def src(x): return ('TO_TIMESTAMP_NTZ(s."'+x+'")') if x in TS else ('s."'+x+'"')
-          on=" AND ".join('t."'+k+'"=s."'+k+'"' for k in c["keys"])
-          upd=", ".join('t."'+x+'"='+src(x) for x in cols if x not in c["keys"])
-          ins="("+",".join('"'+x+'"' for x in cols)+") VALUES ("+",".join(src(x) for x in cols)+")"
-          cur.execute("MERGE INTO V2RETAIL.BRONZE."+c["target"]+" t USING V2RETAIL.BRONZE."+stg+" s ON "+on+" WHEN MATCHED THEN UPDATE SET "+upd+" WHEN NOT MATCHED THEN INSERT "+ins)
-          print("MERGE:",cur.fetchall())
+          if mode=="full":
+              ins="("+",".join('"'+x+'"' for x in cols)+")"
+              sel=",".join(src(x) for x in cols)
+              cur.execute("TRUNCATE TABLE V2RETAIL.BRONZE."+c["target"])
+              cur.execute("INSERT INTO V2RETAIL.BRONZE."+c["target"]+" "+ins+" SELECT "+sel+" FROM V2RETAIL.BRONZE."+stg+" s")
+              print("FULL-REFRESH inserted:",cur.fetchall())
+          else:
+              on=" AND ".join('t."'+k+'"=s."'+k+'"' for k in c["keys"])
+              upd=", ".join('t."'+x+'"='+src(x) for x in cols if x not in c["keys"])
+              ins="("+",".join('"'+x+'"' for x in cols)+") VALUES ("+",".join(src(x) for x in cols)+")"
+              cur.execute("MERGE INTO V2RETAIL.BRONZE."+c["target"]+" t USING V2RETAIL.BRONZE."+stg+" s ON "+on+" WHEN MATCHED THEN UPDATE SET "+upd+" WHEN NOT MATCHED THEN INSERT "+ins)
+              print("MERGE (ins,upd):",cur.fetchall())
           print("target now:",cur.execute("SELECT COUNT(*) FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0])
           con.close(); print("DONE")
           '@
