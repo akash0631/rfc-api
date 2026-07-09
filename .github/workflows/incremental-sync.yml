@@ -48,14 +48,14 @@ jobs:
           CONFIG = {
             # ---- delta (watermark -> MERGE) ----
             "MARA": dict(service="Z_SB_MARA_FULL", entity="MaraFull", target="SAP_MARA", keys=["MATNR"], date_fields=["laeda","ersda"], mode="delta"),
-            "BSAK": dict(service="Z_SB_BSAK_FULL", entity="BsakFull", target="SAP_BSAK", keys=["BUKRS","LIFNR","GJAHR","BELNR","BUZEI"], date_fields=["budat","augdt"], mode="delta"),
+            "BSAK": dict(service="Z_SB_BSAK_FULL", entity="BsakFull", target="SAP_BSAK", keys=["BUKRS","LIFNR","GJAHR","BELNR","BUZEI"], date_fields=["budat","augdt"], mode="delta", dfmt="iso"),
             "EKKO": dict(service="Z_SB_EKKO_FULL", entity="EkkoFull", target="SAP_EKKO", keys=["EBELN"], date_fields=["aedat","bedat"], mode="delta"),
             "EKPO": dict(service="Z_SB_EKPO_FULL", entity="EkpoFull", target="SAP_EKPO", keys=["EBELN","EBELP"], date_fields=["aedat","bedat"], mode="delta"),
             "VBRK": dict(service="Z_SB_VBRK_FULL", entity="VbrkFull", target="SAP_VBRK", keys=["VBELN"], date_fields=["fkdat","erdat"], mode="delta"),
             "VBRP": dict(service="Z_SB_VBRP_FULL", entity="VbrpFull", target="SAP_VBRP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"], mode="delta"),
             "LIPS": dict(service="Z_SB_LIPS_FULL", entity="LipsFull", target="SAP_LIPS", keys=["VBELN","POSNR"], date_fields=["erdat"], mode="delta"),
             "LIKP": dict(service="Z_SB_LIKP_FULL", entity="LikpFull", target="SAP_LIKP", keys=["VBELN"], date_fields=["erdat","aedat"], mode="delta"),
-            "LTAK": dict(service="Z_SB_LTAK", entity="LtakStk", target="SAP_LTAK", keys=["LGNUM","TANUM"], date_fields=["bdatu"], mode="delta"),
+            "LTAK": dict(service="Z_SB_LTAK", entity="LtakStk", target="SAP_LTAK", keys=["LGNUM","TANUM"], date_fields=["bdatu"], mode="delta", dfmt="iso"),
             # ---- full-refresh (truncate + reload) ----
             "SKAT": dict(service="Z_SB_SKAT_FULL", entity="SkatFull", target="SAP_SKAT", keys=["SPRAS","KTOPL","SAKNR"], date_fields=[], mode="full"),
             "CSKT": dict(service="Z_SB_CSKT_FULL", entity="CsktFull", target="SAP_CSKT", keys=["SPRAS","KOKRS","KOSTL","DATBI"], date_fields=[], mode="full"),
@@ -81,14 +81,14 @@ jobs:
           if not coltype: print("target BRONZE."+c["target"]+" not found"); sys.exit(1)
           TS={k for k,v in coltype.items() if v.startswith("TIMESTAMP")}; ALL=set(coltype)
           ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-          dr=re.compile(r"/Date\((-?\d+)\)/")
+          dr=re.compile(r"/Date\((-?\d+)\)/"); DFMT=c.get("dfmt","ymd")
           def conv(v,ts):
               m=dr.search(str(v))
               if not m: return None
               s=int(m.group(1))/1000.0
               if s<0 or s>253402300799: return None
               d=datetime.datetime(1970,1,1)+datetime.timedelta(seconds=s)
-              return d.strftime("%Y-%m-%d %H:%M:%S") if ts else d.strftime("%Y%m%d")
+              return d.strftime("%Y-%m-%d %H:%M:%S") if (ts or DFMT=="iso") else d.strftime("%Y%m%d")
           def od(params,retries=6):
               url=PROD+"/"+c["service"]+"/"+c["entity"]+"?"+params; last=None
               for a in range(retries):
@@ -109,8 +109,10 @@ jobs:
               df0=c["date_fields"][0].upper()
               mx=cur.execute("SELECT MAX("+df0+") FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0]
               if mx is not None:
-                  if df0 in TS: wm=(mx-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
-                  else: wm=(datetime.datetime.strptime(str(mx)[:8],"%Y%m%d")-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
+                  if df0 in TS: base=mx
+                  elif "-" in str(mx): base=datetime.datetime.strptime(str(mx)[:10],"%Y-%m-%d")
+                  else: base=datetime.datetime.strptime(str(mx)[:8],"%Y%m%d")
+                  wm=(base-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
                   flt=" or ".join(d+" ge datetime'"+wm+"'" for d in c["date_fields"])
           print("table",tbl,"mode",mode,"filter:",flt or "(full pull)","select:",bool(selc))
           rows=[]; skip=0; t0=time.time()
