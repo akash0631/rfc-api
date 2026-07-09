@@ -15,6 +15,8 @@ on:
     inputs:
       table: { description: 'Table key e.g. MARA / BSAK / SKAT', required: true, default: 'MARA', type: string }
       full:  { description: 'delta tables: ignore watermark & pull all', required: false, default: 'false', type: string }
+      start_date: { description: 'date-range re-sync start YYYY-MM-DD (optional; overrides watermark)', required: false, default: '', type: string }
+      end_date:   { description: 'date-range re-sync end YYYY-MM-DD (optional)', required: false, default: '', type: string }
   schedule:
     - cron: '30 19 * * *'   # 01:00 IST — MARA daily (extend to a matrix once all services authorized)
 
@@ -55,6 +57,8 @@ jobs:
         env:
           TABLE:       ${{ matrix.table }}
           FULL:        ${{ github.event.inputs.full || 'false' }}
+          START_DATE:  ${{ github.event.inputs.start_date }}
+          END_DATE:    ${{ github.event.inputs.end_date }}
           SAP_PROD_USER: ${{ secrets.SAP_PROD_USER }}
           SAP_PROD_PASS: ${{ secrets.SAP_PROD_PASS }}
           SF_ACCOUNT:  ${{ secrets.SF_ACCOUNT }}
@@ -131,7 +135,11 @@ jobs:
               except Exception as e: print("$select probe failed -> full-column pull:",str(e)[:70]); selc=""
           # watermark (delta only)
           flt=""
-          if mode=="delta" and not full and c["date_fields"]:
+          SD=os.environ.get("START_DATE","").strip(); ED=os.environ.get("END_DATE","").strip()
+          if SD and ED and c["date_fields"]:
+              flt=" or ".join("("+d+" ge datetime'"+SD+"T00:00:00' and "+d+" lt datetime'"+ED+"T00:00:00')" for d in c["date_fields"])
+              print("DATE-RANGE re-sync",SD,"..",ED)
+          elif mode=="delta" and not full and c["date_fields"]:
               df0=c["date_fields"][0].upper()
               mx=cur.execute("SELECT MAX("+df0+") FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0]
               if mx is not None:
