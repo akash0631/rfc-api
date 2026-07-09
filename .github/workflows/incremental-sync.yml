@@ -97,6 +97,11 @@ jobs:
           cur=con.cursor()
           try: cur.execute("USE SECONDARY ROLES ALL")
           except Exception as e: print("secroles:",e)
+          RID=os.environ.get("GITHUB_RUN_ID","local")+"-"+tbl; ACTOR=os.environ.get("GITHUB_ACTOR","cron"); T0=datetime.datetime.utcnow()
+          def logrow(status,pulled=0,ins=0,upd=0,tgt=0,err=None,flt=None):
+              try:
+                  cur.execute("INSERT INTO V2RETAIL.BRONZE.SYNC_LOG(RUN_ID,TABLE_NAME,MODE,TRIGGERED_BY,STARTED_AT,ENDED_AT,DURATION_S,STATUS,FILTER_TEXT,ROWS_PULLED,ROWS_INSERTED,ROWS_UPDATED,TARGET_COUNT,ERROR) SELECT %s,%s,%s,%s,%s,CURRENT_TIMESTAMP()::timestamp_ntz,DATEDIFF('second',%s,CURRENT_TIMESTAMP()),%s,%s,%s,%s,%s,%s,%s",(RID,tbl,mode,ACTOR,T0,T0,status,flt,pulled,ins,upd,tgt,(str(err)[:1500] if err else None)))
+              except Exception as e: print("logrow err",e)
           coltype={r[0].upper():r[1] for r in cur.execute("SELECT COLUMN_NAME,DATA_TYPE FROM V2RETAIL.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='BRONZE' AND TABLE_NAME='"+c["target"]+"'").fetchall()}
           if not coltype: print("target BRONZE."+c["target"]+" not found"); sys.exit(1)
           TS={k for k,v in coltype.items() if v.startswith("TIMESTAMP")}; ALL=set(coltype)
@@ -154,7 +159,9 @@ jobs:
               skip+=PAGE; print("pulled",len(rows))
               if len(pg)<PAGE: break
           print("PULL",len(rows),"in",int(time.time()-t0),"s")
-          if not rows: print("nothing new - target unchanged"); con.close(); sys.exit(0)
+          if not rows:
+              tgtc=cur.execute("SELECT COUNT(*) FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0]
+              print("nothing new - target unchanged"); logrow("SUCCESS",0,0,0,tgtc,flt=flt); con.close(); sys.exit(0)
           cols=sorted({k for r in rows for k in r})
           df=pd.DataFrame(rows).reindex(columns=cols).astype(object).where(lambda x:x.notna(),None)
           df=df.drop_duplicates(subset=[k for k in c["keys"] if k in df.columns],keep="last")
@@ -163,20 +170,43 @@ jobs:
           cur.execute("CREATE OR REPLACE TABLE V2RETAIL.BRONZE."+stg+" ("+",".join('"'+x+'" VARCHAR' for x in cols)+")")
           write_pandas(con,df,stg,database="V2RETAIL",schema="BRONZE",quote_identifiers=True)
           def src(x): return ('TO_TIMESTAMP_NTZ(s."'+x+'")') if x in TS else ('s."'+x+'"')
+          nins=0; nupd=0
           if mode=="full":
-              ins="("+",".join('"'+x+'"' for x in cols)+")"
+              inscols="("+",".join('"'+x+'"' for x in cols)+")"
               sel=",".join(src(x) for x in cols)
               cur.execute("TRUNCATE TABLE V2RETAIL.BRONZE."+c["target"])
-              cur.execute("INSERT INTO V2RETAIL.BRONZE."+c["target"]+" "+ins+" SELECT "+sel+" FROM V2RETAIL.BRONZE."+stg+" s")
-              print("FULL-REFRESH inserted:",cur.fetchall())
+              cur.execute("INSERT INTO V2RETAIL.BRONZE."+c["target"]+" "+inscols+" SELECT "+sel+" FROM V2RETAIL.BRONZE."+stg+" s")
+              r=cur.fetchall(); nins=(r[0][0] if r and r[0] else len(df)); print("FULL-REFRESH inserted:",r)
           else:
               on=" AND ".join('t."'+k+'"=s."'+k+'"' for k in c["keys"])
               upd=", ".join('t."'+x+'"='+src(x) for x in cols if x not in c["keys"])
-              ins="("+",".join('"'+x+'"' for x in cols)+") VALUES ("+",".join(src(x) for x in cols)+")"
-              cur.execute("MERGE INTO V2RETAIL.BRONZE."+c["target"]+" t USING V2RETAIL.BRONZE."+stg+" s ON "+on+" WHEN MATCHED THEN UPDATE SET "+upd+" WHEN NOT MATCHED THEN INSERT "+ins)
-              print("MERGE (ins,upd):",cur.fetchall())
-          print("target now:",cur.execute("SELECT COUNT(*) FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0])
+              insv="("+",".join('"'+x+'"' for x in cols)+") VALUES ("+",".join(src(x) for x in cols)+")"
+              cur.execute("MERGE INTO V2RETAIL.BRONZE."+c["target"]+" t USING V2RETAIL.BRONZE."+stg+" s ON "+on+" WHEN MATCHED THEN UPDATE SET "+upd+" WHEN NOT MATCHED THEN INSERT "+insv)
+              r=cur.fetchall(); nins=(r[0][0] if r and r[0] else 0); nupd=(r[0][1] if r and r[0] and len(r[0])>1 else 0); print("MERGE (ins,upd):",r)
+          tgt=cur.execute("SELECT COUNT(*) FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0]
+          print("target now:",tgt); logrow("SUCCESS",len(df),nins,nupd,tgt,flt=flt)
           con.close(); print("DONE")
           '@
           Set-Content -Path incr_sync.py -Value $py -Encoding utf8
           python incr_sync.py
+      - name: Log failure to SYNC_LOG
+        if: failure()
+        shell: powershell
+        env:
+          TABLE:       ${{ matrix.table }}
+          SF_ACCOUNT:  ${{ secrets.SF_ACCOUNT }}
+          SF_USER:     ${{ secrets.SF_USER }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+        run: |
+          $py = @'
+          import os, snowflake.connector
+          con=snowflake.connector.connect(account=os.environ["SF_ACCOUNT"],user=os.environ["SF_USER"],password=os.environ["SF_PASSWORD"],warehouse="WH_SAP_LOAD",database="V2RETAIL",schema="BRONZE")
+          cur=con.cursor()
+          try: cur.execute("USE SECONDARY ROLES ALL")
+          except Exception: pass
+          rid=os.environ.get("GITHUB_RUN_ID","")+"-"+os.environ["TABLE"]
+          cur.execute("INSERT INTO V2RETAIL.BRONZE.SYNC_LOG(RUN_ID,TABLE_NAME,MODE,TRIGGERED_BY,STARTED_AT,ENDED_AT,STATUS,ERROR) SELECT %s,%s,%s,%s,CURRENT_TIMESTAMP()::timestamp_ntz,CURRENT_TIMESTAMP()::timestamp_ntz,%s,%s",(rid,os.environ["TABLE"],"?",os.environ.get("GITHUB_ACTOR","cron"),"FAILED","run failed - see GHA run "+os.environ.get("GITHUB_RUN_ID","")))
+          con.close(); print("logged FAILED")
+          '@
+          Set-Content -Path fail_log.py -Value $py -Encoding utf8
+          python fail_log.py
