@@ -2,7 +2,7 @@ name: QA OData -> BRONZE full load (no-date masters)
 
 # Full-table paged pull from QA/DEV OData -> CREATE OR REPLACE all-VARCHAR BRONZE table.
 # For tables with NO date field to window on (masters/texts). Runs on .36 (on-LAN, reaches
-# QA 192.168.144.179:8000). Deep $skip degrades past ~1M rows -> use only for small/medium tables.
+# QA 192.168.144.179:5200 HTTPS). Deep $skip degrades past ~1M rows -> use only for small/medium tables.
 
 on:
   workflow_dispatch:
@@ -52,14 +52,15 @@ jobs:
           SF_PASSWORD:  ${{ secrets.SF_PASSWORD }}
         run: |
           $py = @'
-          import os, sys, json, base64, time, re, socket, urllib.request, urllib.parse
+          import os, sys, json, base64, time, re, socket, ssl, urllib.request, urllib.parse
           from datetime import datetime, timezone
           import pandas as pd, snowflake.connector
           from snowflake.connector.pandas_tools import write_pandas
           socket.setdefaulttimeout(600)
+          SSL_CTX=ssl.create_default_context(); SSL_CTX.check_hostname=False; SSL_CTX.verify_mode=ssl.CERT_NONE
           SERVICE=os.environ['SERVICE']; ENTITY=os.environ['ENTITY']; TGT=os.environ['TARGET_TABLE']
           KEYS=[k.strip() for k in os.environ['KEYS'].split(',') if k.strip()]; ENV=os.environ['ODATA_ENV']
-          if ENV=='qa': HOST='http://192.168.144.179:8000'; CL='600'; U=os.environ['SAP_QA_USER']; P=os.environ['SAP_QA_PASS']
+          if ENV=='qa': HOST='https://192.168.144.179:5200'; CL='600'; U=os.environ['SAP_QA_USER']; P=os.environ['SAP_QA_PASS']
           else:         HOST='http://192.168.144.174:8000'; CL='210'; U=os.environ['SAP_DEV_USER']; P=os.environ['SAP_DEV_PASS']
           AUTH=base64.b64encode(f"{U}:{P}".encode()).decode()
           BASE=f"{HOST}/sap/opu/odata/sap/{SERVICE}/{ENTITY}?sap-client={CL}&%24format=json"
@@ -87,7 +88,7 @@ jobs:
                   for a in range(6):
                       try:
                           req=urllib.request.Request(url,headers=H)
-                          with urllib.request.urlopen(req,timeout=600) as r: data=json.loads(r.read().decode('utf-8')); break
+                          with urllib.request.urlopen(req,context=SSL_CTX,timeout=600) as r: data=json.loads(r.read().decode('utf-8')); break
                       except Exception as e: print("retry",a+1,str(e)[:70],flush=True); time.sleep(min(30,2**a))
                   else: raise SystemExit("pull failed")
                   pg=data.get('d',{}).get('results',[])

@@ -43,13 +43,14 @@ jobs:
         shell: powershell
         run: |
           $py = @'
-          import os, json, time, base64, socket, uuid, urllib.request, urllib.parse
+          import os, json, time, base64, socket, ssl, uuid, urllib.request, urllib.parse
           from datetime import datetime, timezone, timedelta
           import pandas as pd
           import snowflake.connector
           from snowflake.connector.pandas_tools import write_pandas
 
           socket.setdefaulttimeout(300)
+          SSL_CTX=ssl.create_default_context(); SSL_CTX.check_hostname=False; SSL_CTX.verify_mode=ssl.CERT_NONE
           SERVICE=os.environ['SERVICE']; ENTITY=os.environ['ENTITY']; TARGET_TABLE=os.environ['TARGET_TABLE']
           DATE_FIELD=os.environ['DATE_FIELD']; START_DATE=os.environ['START_DATE']; END_DATE=os.environ['END_DATE']
           WINDOW_DAYS=int(os.environ['WINDOW_DAYS']); ENV=os.environ['ODATA_ENV']
@@ -57,7 +58,7 @@ jobs:
           WHERE_FILTER=os.environ.get('WHERE_FILTER','').strip()
           PAGE_SIZE=int(os.environ.get('PAGE_SIZE','5000'))
           if ENV=='qa':
-              SAP_HOST='http://192.168.144.179:8000'; SAP_CLIENT='600'; SAP_USER=os.environ['SAP_QA_USER']; SAP_PASS=os.environ['SAP_QA_PASS']
+              SAP_HOST='https://192.168.144.179:5200'; SAP_CLIENT='600'; SAP_USER=os.environ['SAP_QA_USER']; SAP_PASS=os.environ['SAP_QA_PASS']
           else:
               SAP_HOST='http://192.168.144.174:8000'; SAP_CLIENT='210'; SAP_USER=os.environ['SAP_DEV_USER']; SAP_PASS=os.environ['SAP_DEV_PASS']
           SF_ACCOUNT=os.environ['SF_ACCOUNT']; SF_USER=os.environ['SF_USER']; SF_PASS=os.environ['SF_PASSWORD']
@@ -71,7 +72,7 @@ jobs:
               for a in range(tries):
                   try:
                       req=urllib.request.Request(url, headers=HEADERS)
-                      with urllib.request.urlopen(req, timeout=300) as r:
+                      with urllib.request.urlopen(req, context=SSL_CTX, timeout=300) as r:
                           return json.loads(r.read().decode('utf-8'))
                   except Exception as e:
                       last=e; print('   (http retry ' + str(a+1) + ' ' + type(e).__name__ + ')', flush=True); time.sleep(min(60, 8*(a+1)))

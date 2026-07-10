@@ -74,18 +74,19 @@ jobs:
           $py = @'
           """
           Direct SAP OData -> Snowflake BRONZE backfill (write_pandas variant).
-          Runs on .36 LAN, talks to SAP at 192.168.144.179:8000 (QA) directly,
+          Runs on .36 LAN, talks to SAP at 192.168.144.179:5200 (QA HTTPS) directly,
           no Cloudflare worker in between. Uses write_pandas() which under the
           hood does Parquet + PUT to internal stage + COPY INTO — 10-30x faster
           than executemany() for wide tables (240+ cols).
           """
-          import os, sys, json, time, base64, socket, uuid, urllib.request, urllib.error, urllib.parse
+          import os, sys, json, time, base64, socket, ssl, uuid, urllib.request, urllib.error, urllib.parse
           from datetime import datetime, timezone, timedelta
           import pandas as pd
           import snowflake.connector
           from snowflake.connector.pandas_tools import write_pandas
 
           socket.setdefaulttimeout(600)
+          SSL_CTX=ssl.create_default_context(); SSL_CTX.check_hostname=False; SSL_CTX.verify_mode=ssl.CERT_NONE
 
           SERVICE      = os.environ['SERVICE']
           ENTITY       = os.environ['ENTITY']
@@ -98,7 +99,7 @@ jobs:
           TRUNCATE     = os.environ.get('TRUNCATE', 'false').lower() == 'true'
 
           if ENV == 'qa':
-              SAP_HOST   = 'http://192.168.144.179:8000'
+              SAP_HOST   = 'https://192.168.144.179:5200'
               SAP_CLIENT = '600'
               SAP_USER   = os.environ['SAP_QA_USER']
               SAP_PASS   = os.environ['SAP_QA_PASS']
@@ -137,7 +138,7 @@ jobs:
               while True:
                   url = f"{BASE_URL}&%24filter={urllib.parse.quote(flt)}&%24top={page_size}&%24skip={skip}"
                   req = urllib.request.Request(url, headers=HEADERS)
-                  with urllib.request.urlopen(req, timeout=600) as r:
+                  with urllib.request.urlopen(req, context=SSL_CTX, timeout=600) as r:
                       data = json.loads(r.read().decode('utf-8'))
                   rows = data.get('d', {}).get('results', [])
                   for r2 in rows:
