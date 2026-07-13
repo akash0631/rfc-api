@@ -34,7 +34,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         private const string API_KEY = "v2-rfc-proxy-2026";
         private const string GREENON_URL = "https://engine.kartmax.in/api/import/catalogue-import-inventory";
         private const string GREENON_SITE_TOKEN = "UHwgPDz7YxPHimOYNEzg";
-        private const string GREENON_API_TOKEN = "UshlJr1FhG3tuXNN4ijf5az2adf7453dfsps";
+        // Rotated 2026-07-13: Green Honchos issued new token + Origin requirement.
+        private const string GREENON_API_TOKEN = "e4f19c7a82b5d06ef93a1c74bd5802fa";
+        private const string GREENON_ORIGIN = "https://kxv2kart.kartmax.co";
+        private const string GREENON_ACTION = "storeWiseInventory";
 
         [HttpPost]
         [Route("greenon-relay")]
@@ -76,12 +79,26 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
             try
             {
+                // Wrap raw array from SAP as {action, inventoryData}. If caller
+                // already sent the wrapper shape, pass through unchanged.
+                string forwardBody;
+                var trimmed = rawBody.TrimStart();
+                if (trimmed.StartsWith("["))
+                {
+                    forwardBody = "{\"action\":\"" + GREENON_ACTION + "\",\"inventoryData\":" + rawBody + "}";
+                }
+                else
+                {
+                    forwardBody = rawBody;
+                }
+
                 using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) })
                 {
                     http.DefaultRequestHeaders.Add("site_token", GREENON_SITE_TOKEN);
                     http.DefaultRequestHeaders.Add("token", GREENON_API_TOKEN);
+                    http.DefaultRequestHeaders.Add("Origin", GREENON_ORIGIN);
 
-                    var content = new StringContent(rawBody, Encoding.UTF8, "application/json");
+                    var content = new StringContent(forwardBody, Encoding.UTF8, "application/json");
                     var resp = await http.PostAsync(GREENON_URL, content);
                     string respBody = await resp.Content.ReadAsStringAsync();
                     int code = (int)resp.StatusCode;
