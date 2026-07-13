@@ -133,6 +133,14 @@ jobs:
           if selc:
               try: od("$format=json&$top=1&sap-client="+CLIENT+selc)
               except Exception as e: print("$select probe failed -> full-column pull:",str(e)[:70]); selc=""
+          # drop date fields the entity won't filter on (e.g. VBRP/LIKP aedat not projected -> 400 Bad Request)
+          if c["date_fields"]:
+              _ok=[]
+              for _d in c["date_fields"]:
+                  try: od("$format=json&$top=1&sap-client="+CLIENT+"&$filter="+urllib.parse.quote(_d+" ge datetime'2000-01-01T00:00:00'"),retries=2); _ok.append(_d)
+                  except Exception as _e: print("date field",_d,"not filterable -> drop:",str(_e)[:45])
+              c["date_fields"]=_ok
+              if not _ok and mode=="delta" and not full: print("ABORT: no filterable date field for",tbl,"- fix CONFIG date_fields"); sys.exit(1)
           # watermark (delta only)
           flt=""
           SD=os.environ.get("START_DATE","").strip(); ED=os.environ.get("END_DATE","").strip()
