@@ -21,7 +21,7 @@ on:
     - cron: '30 19 * * *'   # 01:00 IST — MARA daily (extend to a matrix once all services authorized)
 
 concurrency:
-  group: incr-sync
+  group: incr-sync-${{ github.event.inputs.table || 'cron' }}
   cancel-in-progress: false
 
 jobs:
