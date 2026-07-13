@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -11,22 +12,25 @@ using Vendor_Application_MVC.Controllers;
 namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 {
     /// <summary>
-    /// Green On SSL termination relay for SAP.
+    /// Green On SSL termination + chunking relay for SAP.
     ///
     /// SAP STRUST does not trust GTS Root R4 (Google chain kartmax.in uses).
-    /// Rather than block on Basis cert import, SAP posts payload here over
-    /// intranet HTTP; this endpoint forwards to Green On over HTTPS
-    /// (Windows trust store handles Google chain natively).
+    /// SAP posts payload here over intranet HTTP; this endpoint forwards to
+    /// Green On over HTTPS (Windows trust store handles Google chain natively)
+    /// and slices large arrays into GREENON_CHUNK-sized POSTs — Green On
+    /// returns 503 on payloads > ~5000 rows.
     ///
     /// POST /api/inv/greenon-relay
-    ///   Body: raw Green On payload (any JSON) — forwarded verbatim
-    ///   Headers: X-RFC-Key (auth) — Green On site_token + token injected server-side
+    ///   Body: JSON array of {sku, store_code, inventory}, or the wrapped
+    ///         {action, inventoryData:[...]} envelope (pass-through).
+    ///   Headers: X-RFC-Key (auth) — site_token + token + Origin injected here.
     ///
-    /// Response mirrors Green On:
-    ///   { "http_code": 200, "body": "...", "ok": true, "latency_ms": 234 }
+    /// Response:
+    ///   { ok, http_code, body, latency_ms, batches, ok_batches, fail_batches }
+    ///   ok=true iff every batch returned 2xx. http_code=worst status seen.
     ///
-    /// When SAP STRUST cert is fixed, retire this endpoint — Z_GO_INVENTORY_PUSH
-    /// can then call Green On directly.
+    /// When SAP STRUST cert is fixed, retire this endpoint — SAP FM can then
+    /// call Green On directly (still needs client-side chunking).
     /// </summary>
     [RoutePrefix("api/inv")]
     public class GreenOnRelayController : BaseController
@@ -38,6 +42,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         private const string GREENON_API_TOKEN = "e4f19c7a82b5d06ef93a1c74bd5802fa";
         private const string GREENON_ORIGIN = "https://kxv2kart.kartmax.co";
         private const string GREENON_ACTION = "storeWiseInventory";
+        // Green On 503s ~5K+ rows; 2K tested clean, 1K = safety margin.
+        private const int GREENON_CHUNK = 1000;
 
         [HttpPost]
         [Route("greenon-relay")]
@@ -77,45 +83,126 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
             var started = DateTime.UtcNow;
 
+            // Extract the inventoryData array whether caller sent raw array
+            // or the wrapped envelope. Non-JSON / non-array bodies fall through
+            // as single POST (unlikely, but preserves back-compat).
+            JArray items = null;
             try
             {
-                // Wrap raw array from SAP as {action, inventoryData}. If caller
-                // already sent the wrapper shape, pass through unchanged.
-                string forwardBody;
                 var trimmed = rawBody.TrimStart();
                 if (trimmed.StartsWith("["))
                 {
-                    forwardBody = "{\"action\":\"" + GREENON_ACTION + "\",\"inventoryData\":" + rawBody + "}";
+                    items = JArray.Parse(rawBody);
                 }
-                else
+                else if (trimmed.StartsWith("{"))
                 {
-                    forwardBody = rawBody;
+                    var envelope = JObject.Parse(rawBody);
+                    var invNode = envelope["inventoryData"];
+                    if (invNode is JArray) items = (JArray)invNode;
                 }
+            }
+            catch { /* leave items = null → single passthrough POST */ }
 
+            try
+            {
                 using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) })
                 {
                     http.DefaultRequestHeaders.Add("site_token", GREENON_SITE_TOKEN);
                     http.DefaultRequestHeaders.Add("token", GREENON_API_TOKEN);
                     http.DefaultRequestHeaders.Add("Origin", GREENON_ORIGIN);
 
-                    var content = new StringContent(forwardBody, Encoding.UTF8, "application/json");
-                    var resp = await http.PostAsync(GREENON_URL, content);
-                    string respBody = await resp.Content.ReadAsStringAsync();
-                    int code = (int)resp.StatusCode;
-                    bool ok = resp.IsSuccessStatusCode;
+                    // Passthrough path: unparseable/no-array bodies go verbatim.
+                    if (items == null)
+                    {
+                        var content = new StringContent(rawBody, Encoding.UTF8, "application/json");
+                        var resp = await http.PostAsync(GREENON_URL, content);
+                        string respBody = await resp.Content.ReadAsStringAsync();
+                        int code = (int)resp.StatusCode;
+                        return ResponseMessage(new HttpResponseMessage((System.Net.HttpStatusCode)code)
+                        {
+                            Content = new StringContent(
+                                JsonConvert.SerializeObject(new
+                                {
+                                    ok = resp.IsSuccessStatusCode,
+                                    http_code = code,
+                                    body = respBody,
+                                    latency_ms = (int)(DateTime.UtcNow - started).TotalMilliseconds,
+                                    batches = 1,
+                                    ok_batches = resp.IsSuccessStatusCode ? 1 : 0,
+                                    fail_batches = resp.IsSuccessStatusCode ? 0 : 1
+                                }),
+                                Encoding.UTF8, "application/json")
+                        });
+                    }
 
-                    // Return Green On's actual HTTP code so upstream SAP callers
-                    // see failures natively (was returning 200 wrapping ok:false,
-                    // which made SAP orchestrators count relay-reached as success).
-                    return ResponseMessage(new HttpResponseMessage((System.Net.HttpStatusCode)code)
+                    // Chunked path: slice inventoryData, POST sequentially.
+                    int total = items.Count;
+                    int batches = 0, ok_batches = 0, fail_batches = 0;
+                    int worstCode = 200;
+                    string firstError = null;
+
+                    for (int off = 0; off < total; off += GREENON_CHUNK)
+                    {
+                        int take = Math.Min(GREENON_CHUNK, total - off);
+                        var slice = new JArray();
+                        for (int i = 0; i < take; i++) slice.Add(items[off + i]);
+
+                        var envelope = new JObject
+                        {
+                            ["action"] = GREENON_ACTION,
+                            ["inventoryData"] = slice
+                        };
+                        var body = envelope.ToString(Formatting.None);
+                        var content = new StringContent(body, Encoding.UTF8, "application/json");
+
+                        HttpResponseMessage resp;
+                        int code;
+                        string respBody;
+                        try
+                        {
+                            resp = await http.PostAsync(GREENON_URL, content);
+                            respBody = await resp.Content.ReadAsStringAsync();
+                            code = (int)resp.StatusCode;
+                        }
+                        catch (Exception ex)
+                        {
+                            code = 599;
+                            respBody = "Batch exception: " + ex.Message;
+                        }
+
+                        batches++;
+                        if (code >= 200 && code < 300)
+                        {
+                            ok_batches++;
+                        }
+                        else
+                        {
+                            fail_batches++;
+                            if (firstError == null)
+                            {
+                                firstError = "batch[" + off + "-" + (off + take - 1) + "] http=" + code + " body=" + respBody;
+                            }
+                            if (code > worstCode) worstCode = code;
+                        }
+                    }
+
+                    bool allOk = fail_batches == 0;
+                    int finalCode = allOk ? 200 : (worstCode >= 400 ? worstCode : 502);
+                    return ResponseMessage(new HttpResponseMessage((System.Net.HttpStatusCode)finalCode)
                     {
                         Content = new StringContent(
-                            Newtonsoft.Json.JsonConvert.SerializeObject(new
+                            JsonConvert.SerializeObject(new
                             {
-                                ok = ok,
-                                http_code = code,
-                                body = respBody,
-                                latency_ms = (int)(DateTime.UtcNow - started).TotalMilliseconds
+                                ok = allOk,
+                                http_code = finalCode,
+                                body = allOk
+                                    ? "{\"status\":true,\"message\":\"all " + total + " rows accepted across " + batches + " batches\"}"
+                                    : firstError,
+                                latency_ms = (int)(DateTime.UtcNow - started).TotalMilliseconds,
+                                total_rows = total,
+                                batches = batches,
+                                ok_batches = ok_batches,
+                                fail_batches = fail_batches
                             }),
                             Encoding.UTF8, "application/json")
                     });
