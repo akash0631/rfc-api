@@ -35,7 +35,8 @@ jobs:
         run: |
           if ('${{ github.event_name }}' -eq 'schedule') {
             # AUTHORIZED tables synced daily — add the 9 blocked ones here as they get S_SERVICE auth
-            'tables=["MARA","BSAK","SKAT","CSKT","CSKS","EKKO","EKPO","VBRP","LIKP","LIPS","LTAK","LQUA","MSKU"]' | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+            # EKPO (slow OData ~130/min -> HANA-CSV route) + LIKP (OData entity fault) held out until completed
+            'tables=["MARA","BSAK","SKAT","CSKT","CSKS","EKKO","VBRP","LIPS","LTAK","LQUA","MSKU"]' | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           } else {
             'tables=["${{ github.event.inputs.table }}"]' | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           }
