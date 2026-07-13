@@ -17,8 +17,10 @@ on:
       full:  { description: 'delta tables: ignore watermark & pull all', required: false, default: 'false', type: string }
       start_date: { description: 'date-range re-sync start YYYY-MM-DD (optional; overrides watermark)', required: false, default: '', type: string }
       end_date:   { description: 'date-range re-sync end YYYY-MM-DD (optional)', required: false, default: '', type: string }
-  schedule:
-    - cron: '30 19 * * *'   # 01:00 IST — MARA daily (extend to a matrix once all services authorized)
+  # DAILY CRON DISABLED — daily PROD->BRONZE sync now runs on .24 (schtasks V2_PROD_DAILY_SYNC @ 02:00 IST,
+  # C:\temp\incr_sync_prod.py). GHA kept for manual workflow_dispatch + future parallel runners / backup.
+  # schedule:
+  #   - cron: '30 19 * * *'
 
 concurrency:
   group: incr-sync-${{ github.event.inputs.table || 'cron' }}
