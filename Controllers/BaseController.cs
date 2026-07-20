@@ -19,6 +19,11 @@ namespace Vendor_Application_MVC.Controllers
         {
             RfcConfigParameters rfcPar = new RfcConfigParameters();
             rfcPar.Add(RfcConfigParameters.Name, "ConnectionDEV"); // env-unique name prevents NCo dest cache collision
+            // NCo connection pooling (added 2026-07-20): reuse warm connections, avoid per-call SAP logon
+            rfcPar.Add(RfcConfigParameters.PoolSize, "10");           // warm idle connections kept open
+            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections ceiling
+            rfcPar.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
+            rfcPar.Add(RfcConfigParameters.IdleTimeout, "600");       // release idle connections after 10 min
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.174");//Target IP Address  // TCODE: SM59 -> check RFC connection
             rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID
             // system -> status
@@ -42,6 +47,11 @@ namespace Vendor_Application_MVC.Controllers
             //production
             RfcConfigParameters rfcPar = new RfcConfigParameters();
             rfcPar.Add(RfcConfigParameters.Name, "ConnectionPROD"); // env-unique name prevents NCo dest cache collision
+            // NCo connection pooling (added 2026-07-20): reuse warm connections, avoid per-call SAP logon
+            rfcPar.Add(RfcConfigParameters.PoolSize, "20");           // warm idle connections kept open (PROD .170 sized higher)
+            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "50");        // max concurrent connections ceiling
+            rfcPar.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
+            rfcPar.Add(RfcConfigParameters.IdleTimeout, "600");       // release idle connections after 10 min
             //rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.194");//Target IP Address  // TCODE: SM59 -> check RFC connection
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.170");
             // rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID
@@ -69,6 +79,11 @@ namespace Vendor_Application_MVC.Controllers
             //production
             RfcConfigParameters rfcPar = new RfcConfigParameters();
             rfcPar.Add(RfcConfigParameters.Name, "ConnectionQA"); // env-unique name prevents NCo dest cache collision
+            // NCo connection pooling (added 2026-07-20): reuse warm connections, avoid per-call SAP logon
+            rfcPar.Add(RfcConfigParameters.PoolSize, "10");           // warm idle connections kept open
+            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections ceiling
+            rfcPar.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
+            rfcPar.Add(RfcConfigParameters.IdleTimeout, "600");       // release idle connections after 10 min
             //rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.194");//Target IP Address  // TCODE: SM59 -> check RFC connection
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.179");
             // rfcPar.Add(RfcConfigParameters.Client, "210"); //Client ID

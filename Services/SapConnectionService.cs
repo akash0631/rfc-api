@@ -80,6 +80,11 @@ namespace Vendor_SRM_Routing_Application.Services
             par.Add(RfcConfigParameters.User,          row["RFC_USER"].ToString());
             par.Add(RfcConfigParameters.Password,      row["RFC_PASSWORD_ENC"].ToString());
             par.Add(RfcConfigParameters.Language,      row["LANGUAGE"]?.ToString() ?? "EN");
+            // NCo connection pooling (added 2026-07-20): reuse warm connections, avoid per-call SAP logon
+            par.Add(RfcConfigParameters.PoolSize,        "15");    // warm idle connections kept open
+            par.Add(RfcConfigParameters.MaxPoolSize,     "35");    // max concurrent connections ceiling
+            par.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
+            par.Add(RfcConfigParameters.IdleTimeout,     "600");   // release idle connections after 10 min
             return par;
         }
 
