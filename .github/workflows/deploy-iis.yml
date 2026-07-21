@@ -30,6 +30,11 @@ jobs:
   build-and-deploy:
     runs-on: [self-hosted, iis]
     name: Build and Deploy on .36 IIS runner
+    # SAFETY GATE: this job is bound to the 'sap-dev' Environment, which has a
+    # required reviewer. EVERY deploy to .36 / SAP DEV pauses here until a human
+    # clicks Approve in the Actions run — regardless of whether master was reached
+    # via the staging auto-merge bot OR a direct push. Reject = no deploy.
+    environment: sap-dev
 
     steps:
       - name: Fix git safe directory
