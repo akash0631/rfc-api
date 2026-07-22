@@ -79,7 +79,11 @@ jobs:
             "EKKO": dict(service="Z_SB_EKKO_FULL", entity="EkkoFull", target="SAP_EKKO", keys=["EBELN"], date_fields=["aedat","bedat"], mode="delta"),
             "EKPO": dict(service="Z_SB_EKPO_FULL", entity="EkpoFull", target="SAP_EKPO", keys=["EBELN","EBELP"], date_fields=["aedat","bedat"], mode="delta"),
             "VBRK": dict(service="Z_SB_VBRK_FULL", entity="VbrkFull", target="SAP_VBRK", keys=["VBELN"], date_fields=["fkdat","erdat"], mode="delta"),
-            "VBRP": dict(service="Z_SB_VBRP_FULL", entity="VbrpFull", target="SAP_VBRP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat"], mode="delta"),
+            # fkdat_ana probed first so backdated/late-created invoices are visible; runtime probe
+            # drops it automatically if VbrpFull won't filter on it. erdat kept as the watermark driver.
+            # overlap=7 (not the global 2): VBRP is the highest-volume delta and an outage longer than
+            # `overlap` leaves a permanent hole -- see incident 2026-07-22 (FKDAT 07-03..07-09 lost).
+            "VBRP": dict(service="Z_SB_VBRP_FULL", entity="VbrpFull", target="SAP_VBRP", keys=["VBELN","POSNR"], date_fields=["erdat","aedat","fkdat_ana"], mode="delta", overlap=7),
             "LIPS": dict(service="Z_SB_LIPS_FULL", entity="LipsFull", target="SAP_LIPS", keys=["VBELN","POSNR"], date_fields=["erdat"], mode="delta"),
             "LIKP": dict(service="Z_SB_LIKP_FULL", entity="LikpFull", target="SAP_LIKP", keys=["VBELN"], date_fields=["erdat","aedat"], mode="delta"),
             "LTAK": dict(service="Z_SB_LTAK", entity="LtakStk", target="SAP_LTAK", keys=["LGNUM","TANUM"], date_fields=["bdatu"], mode="delta", dfmt="iso"),
@@ -157,7 +161,7 @@ jobs:
                   if df0 in TS: base=mx
                   elif "-" in str(mx): base=datetime.datetime.strptime(str(mx)[:10],"%Y-%m-%d")
                   else: base=datetime.datetime.strptime(str(mx)[:8],"%Y%m%d")
-                  wm=(base-datetime.timedelta(days=OVERLAP)).strftime("%Y-%m-%dT00:00:00")
+                  wm=(base-datetime.timedelta(days=c.get("overlap",OVERLAP))).strftime("%Y-%m-%dT00:00:00")
                   flt=" or ".join(d+" ge datetime'"+wm+"'" for d in c["date_fields"])
           print("table",tbl,"mode",mode,"filter:",flt or "(full pull)","select:",bool(selc))
           rows=[]; skip=0; t0=time.time()
@@ -205,6 +209,26 @@ jobs:
               r=cur.fetchall(); nins=(r[0][0] if r and r[0] else 0); nupd=(r[0][1] if r and r[0] and len(r[0])>1 else 0); print("MERGE (ins,upd):",r)
           tgt=cur.execute("SELECT COUNT(*) FROM V2RETAIL.BRONZE."+c["target"]).fetchone()[0]
           print("target now:",tgt); logrow("SUCCESS",len(df),nins,nupd,tgt,flt=flt)
+          # Post-load completeness probe. A watermark of MAX(date)-overlap cannot detect a hole it
+          # already skipped past, so assert on business-date coverage instead of on the watermark.
+          # NON-FATAL by design: this must never fail a good nightly load, only make a hole visible.
+          if tbl=="VBRP":
+              try:
+                  gaps=cur.execute("SELECT FKDAT,DOCS,PLANTS,NETWR_CR,PCT_OF_REF,VERDICT "
+                                   "FROM V2RETAIL.BRONZE.V_SYNC_GAP_VBRP "
+                                   "WHERE VERDICT IN ('GAP','PARTIAL') "
+                                   "AND FKDAT >= DATEADD(day,-30,CURRENT_DATE) "
+                                   "AND FKDAT <  DATEADD(day,-1,CURRENT_DATE) ORDER BY FKDAT").fetchall()
+                  if gaps:
+                      for g in gaps:
+                          print("::warning title=VBRP bronze gap::FKDAT %s %s - %s docs, %s plants, %s Cr (%s%% of trailing avg)"
+                                % (g[0],g[5],g[1],g[2],g[3],g[4]))
+                      lo=str(min(g[0] for g in gaps)); hi=str(max(g[0] for g in gaps))
+                      print("::warning title=VBRP repair::Re-sync bypasses the watermark and MERGEs on VBELN+POSNR (idempotent): "
+                            "gh workflow run incremental-sync.yml --ref master -f table=VBRP -f start_date=%s -f end_date=%s" % (lo,hi))
+                  else:
+                      print("gap probe: no GAP/PARTIAL days in trailing 30d")
+              except Exception as e: print("gap probe skipped:",str(e)[:120])
           con.close(); print("DONE")
           '@
           Set-Content -Path incr_sync.py -Value $py -Encoding utf8
