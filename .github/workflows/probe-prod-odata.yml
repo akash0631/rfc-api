@@ -2,23 +2,11 @@ name: Probe PROD OData (one service)
 on:
   workflow_dispatch:
     inputs:
-      env:
-        description: 'qa or prod'
-        required: true
-        default: 'qa'
-        type: string
-      service:
-        description: 'Service e.g. Z_SB_MARD'
-        required: true
-        default: 'Z_SB_MARD'
-        type: string
-      entity:
-        description: 'Entity set (blank = first from metadata)'
-        required: false
-        default: ''
-        type: string
-permissions:
-  contents: read
+      env: { description: 'qa or prod', required: true, default: 'qa', type: string }
+      service: { description: 'Service', required: true, default: 'Z_SB_MARD', type: string }
+      entity: { description: 'Entity set', required: false, default: '', type: string }
+      filter: { description: 'OData $filter (optional)', required: false, default: '', type: string }
+permissions: { contents: read }
 jobs:
   probe:
     runs-on: [self-hosted, iis]
@@ -33,10 +21,11 @@ jobs:
           ODENV: ${{ inputs.env }}
           SVC: ${{ inputs.service }}
           ENT: ${{ inputs.entity }}
+          FLT: ${{ inputs.filter }}
         run: |
           $py = @'
-          import os, base64, ssl, re, urllib.request, urllib.error
-          ENVV=os.environ["ODENV"]; SVC=os.environ["SVC"]; ENT=os.environ.get("ENT","")
+          import os, base64, ssl, re, urllib.request, urllib.error, urllib.parse
+          ENVV=os.environ["ODENV"]; SVC=os.environ["SVC"]; ENT=os.environ.get("ENT",""); FLT=os.environ.get("FLT","")
           if ENVV=="prod":
               HOST="https://192.168.144.170:5202"; CLIENT="600"; U=os.environ["SAP_PROD_USER"]; P=os.environ["SAP_PROD_PASS"]
           else:
@@ -46,25 +35,17 @@ jobs:
           def get(u,acc="application/json"):
               rq=urllib.request.Request(u,headers={"Authorization":"Basic "+auth,"Accept":acc})
               try:
-                  with urllib.request.urlopen(rq,context=ctx,timeout=120) as r:
-                      return r.status, r.read().decode("utf-8","replace")
-              except urllib.error.HTTPError as e:
-                  return e.code, e.read().decode("utf-8","replace")[:1200]
-              except Exception as e:
-                  return "ERR", str(e)[:400]
+                  with urllib.request.urlopen(rq,context=ctx,timeout=300) as r: return r.status, r.read().decode("utf-8","replace")
+              except urllib.error.HTTPError as e: return e.code, e.read().decode("utf-8","replace")[:1000]
+              except Exception as e: return "ERR", str(e)[:400]
           base=HOST+"/sap/opu/odata/sap/"+SVC
-          print("ENV",ENVV,"SVC",SVC,flush=True)
           s,b=get(base+"/$metadata?sap-client="+CLIENT,"application/xml")
-          print("METADATA", s, flush=True)
-          sets=re.findall(r'EntitySet Name="([^"]+)"', b); print("EntitySets:", sets, flush=True)
+          sets=re.findall(r'EntitySet Name="([^"]+)"', b)
           es=ENT or (sets[0] if sets else "")
-          if es:
-              s2,b2=get(base+"/"+es+"?$top=5&$format=json&sap-client="+CLIENT)
-              print("PULL", es, s2, flush=True); print(b2[:1800], flush=True)
-              s3,b3=get(base+"/"+es+"/$count?sap-client="+CLIENT,"text/plain")
-              print("COUNT", s3, b3[:80], flush=True)
-          print("PROBE_DONE", flush=True)
+          print("ENV",ENVV,"META",s,"ENTITY",es,flush=True)
+          fq = ("&$filter="+urllib.parse.quote(FLT)) if FLT else ""
+          s3,b3=get(base+"/"+es+"/$count?sap-client="+CLIENT+fq,"text/plain"); print("COUNT(filter="+FLT+")",s3,b3[:80],flush=True)
+          s2,b2=get(base+"/"+es+"?$top=5&$format=json&sap-client="+CLIENT+fq); print("SAMPLE",s2,flush=True); print(b2[:1200],flush=True)
+          print("PROBE_DONE",flush=True)
           '@
-          $tmp = Join-Path $env:TEMP "probe_od.py"
-          $py | Out-File -FilePath $tmp -Encoding utf8
-          python $tmp
+          $tmp = Join-Path $env:TEMP "probe_od.py"; $py | Out-File -FilePath $tmp -Encoding utf8; python $tmp
