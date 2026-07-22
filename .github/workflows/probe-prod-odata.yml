@@ -2,6 +2,11 @@ name: Probe PROD OData (one service)
 on:
   workflow_dispatch:
     inputs:
+      env:
+        description: 'qa or prod'
+        required: true
+        default: 'qa'
+        type: string
       service:
         description: 'Service e.g. Z_SB_MARD'
         required: true
@@ -18,19 +23,24 @@ jobs:
   probe:
     runs-on: [self-hosted, iis]
     steps:
-      - name: Probe PROD OData
+      - name: Probe OData
         shell: powershell
         env:
           SAP_PROD_USER: ${{ secrets.SAP_PROD_USER }}
           SAP_PROD_PASS: ${{ secrets.SAP_PROD_PASS }}
+          SAP_QA_USER: ${{ secrets.SAP_QA_USER }}
+          SAP_QA_PASS: ${{ secrets.SAP_QA_PASS }}
+          ODENV: ${{ inputs.env }}
           SVC: ${{ inputs.service }}
           ENT: ${{ inputs.entity }}
         run: |
           $py = @'
           import os, base64, ssl, re, urllib.request, urllib.error
-          HOST="https://192.168.144.170:5202"; CLIENT="600"
-          U=os.environ["SAP_PROD_USER"]; P=os.environ["SAP_PROD_PASS"]
-          SVC=os.environ["SVC"]; ENT=os.environ.get("ENT","")
+          ENVV=os.environ["ODENV"]; SVC=os.environ["SVC"]; ENT=os.environ.get("ENT","")
+          if ENVV=="prod":
+              HOST="https://192.168.144.170:5202"; CLIENT="600"; U=os.environ["SAP_PROD_USER"]; P=os.environ["SAP_PROD_PASS"]
+          else:
+              HOST="https://192.168.144.179:5200"; CLIENT="600"; U=os.environ["SAP_QA_USER"]; P=os.environ["SAP_QA_PASS"]
           ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
           auth=base64.b64encode((U+":"+P).encode()).decode()
           def get(u,acc="application/json"):
@@ -43,10 +53,10 @@ jobs:
               except Exception as e:
                   return "ERR", str(e)[:400]
           base=HOST+"/sap/opu/odata/sap/"+SVC
+          print("ENV",ENVV,"SVC",SVC,flush=True)
           s,b=get(base+"/$metadata?sap-client="+CLIENT,"application/xml")
           print("METADATA", s, flush=True)
           sets=re.findall(r'EntitySet Name="([^"]+)"', b); print("EntitySets:", sets, flush=True)
-          print("Props:", re.findall(r'Property Name="([^"]+)"', b)[:30], flush=True)
           es=ENT or (sets[0] if sets else "")
           if es:
               s2,b2=get(base+"/"+es+"?$top=5&$format=json&sap-client="+CLIENT)
@@ -55,6 +65,6 @@ jobs:
               print("COUNT", s3, b3[:80], flush=True)
           print("PROBE_DONE", flush=True)
           '@
-          $tmp = Join-Path $env:TEMP "probe_prod.py"
+          $tmp = Join-Path $env:TEMP "probe_od.py"
           $py | Out-File -FilePath $tmp -Encoding utf8
           python $tmp
