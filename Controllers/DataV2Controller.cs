@@ -36,96 +36,39 @@ namespace Vendor_SRM_Routing_Application.Controllers
         private const string WIN_USER   = "akash.agarwal";
         private const string WIN_PASS   = "vrl@99999";
 
-        // Pooling is explicit here on purpose. ADO.NET keys its connection pool on
-        // (connection string + identity). The old code called LogonUser() per request,
-        // which minted a NEW token every time, so every request landed in its own pool
-        // bucket and paid a full domain logon + SQL handshake. Measured on .36:
-        //   per-call logon : median 45-86 ms, p95 1079 ms at 4 concurrent
-        //   cached  logon  : median  1 ms,    p95   16 ms at 8 concurrent
-        // Caching the token below is what lets the pool actually do its job.
         private static readonly string CS_INTEGRATED =
-            @"Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connection Timeout=15;MultipleActiveResultSets=true;Pooling=true;Min Pool Size=2;Max Pool Size=50;";
+            @"Server=192.168.151.28;Database=DataV2;Integrated Security=True;Connection Timeout=15;MultipleActiveResultSets=true;";
         private static readonly string CS_FALLBACK =
-            @"Server=192.168.151.28;Database=DataV2;User Id=V2ApiReader;Password=V2Api@2026;Connection Timeout=15;MultipleActiveResultSets=true;Pooling=true;Min Pool Size=2;Max Pool Size=50;";
-
-        // Impersonation token, minted once and reused. Guarded by _identityLock.
-        // A LOGON32_LOGON_NEW_CREDENTIALS token does not expire on its own, but it does
-        // become useless if WIN_PASS is rotated - InvalidateIdentity() handles that case.
-        private static WindowsIdentity _cachedIdentity;
-        private static IntPtr _cachedToken = IntPtr.Zero;
-        private static readonly object _identityLock = new object();
-
-        private static WindowsIdentity GetImpersonationIdentity()
-        {
-            var id = _cachedIdentity;
-            if (id != null) return id;
-
-            lock (_identityLock)
-            {
-                if (_cachedIdentity != null) return _cachedIdentity;
-
-                IntPtr token;
-                bool ok = LogonUser(WIN_USER, WIN_DOMAIN, WIN_PASS, 9, 0, out token); // LOGON32_LOGON_NEW_CREDENTIALS = network creds for remote SQL
-                if (!ok || token == IntPtr.Zero)
-                    throw new Exception("LogonUser failed for " + WIN_DOMAIN + "\\" + WIN_USER +
-                                        " (win32=" + Marshal.GetLastWin32Error() + ")");
-
-                _cachedToken   = token;
-                _cachedIdentity = new WindowsIdentity(token);
-                return _cachedIdentity;
-            }
-        }
-
-        // Drop the cached token so the next call mints a fresh one. Called when a
-        // connection attempt fails under the cached identity (e.g. password rotated).
-        private static void InvalidateIdentity()
-        {
-            lock (_identityLock)
-            {
-                if (_cachedIdentity != null) { try { _cachedIdentity.Dispose(); } catch { } }
-                _cachedIdentity = null;
-                if (_cachedToken != IntPtr.Zero) { CloseHandle(_cachedToken); _cachedToken = IntPtr.Zero; }
-            }
-        }
-
-        private static SqlConnection OpenImpersonated()
-        {
-            var wi = GetImpersonationIdentity();
-            SqlConnection conn = null;
-            Exception inner = null;
-            WindowsIdentity.RunImpersonated(wi.AccessToken, () => {
-                try
-                {
-                    conn = new SqlConnection(CS_INTEGRATED);
-                    conn.Open();
-                }
-                catch (Exception ex) { inner = ex; conn?.Dispose(); conn = null; }
-            });
-            if (conn != null && conn.State == ConnectionState.Open) return conn;
-            throw inner ?? new Exception("Impersonated connection did not open");
-        }
+            @"Server=192.168.151.28;Database=DataV2;User Id=V2ApiReader;Password=V2Api@2026;Connection Timeout=15;MultipleActiveResultSets=true;";
 
         // Returns an ALREADY OPEN connection — callers must NOT call conn.Open() again
         private SqlConnection GetConnection()
         {
-            // Strategy 1: cached impersonation of V2RD\akash.agarwal + Integrated Security.
-            // Retried once with a fresh token in case the cached one went stale.
-            for (int attempt = 0; attempt < 2; attempt++)
+            // Strategy 1: Impersonate V2RD\akash.agarwal, open with Integrated Security
+            IntPtr token = IntPtr.Zero;
+            try
             {
-                try { return OpenImpersonated(); }
-                catch
+                bool ok = LogonUser(WIN_USER, WIN_DOMAIN, WIN_PASS, 9, 0, out token); // LOGON32_LOGON_NEW_CREDENTIALS = network creds for remote SQL
+                if (ok && token != IntPtr.Zero)
                 {
-                    InvalidateIdentity();   // force a new logon on the retry
-                    if (attempt == 1) break;
+                    var wi = new WindowsIdentity(token);
+                    SqlConnection conn = null;
+                    WindowsIdentity.RunImpersonated(wi.AccessToken, () => {
+                        try {
+                            conn = new SqlConnection(CS_INTEGRATED);
+                            conn.Open();
+                        } catch { conn?.Dispose(); conn = null; }
+                    });
+                    if (conn != null && conn.State == ConnectionState.Open) return conn;
                 }
             }
+            catch { }
+            finally { if (token != IntPtr.Zero) CloseHandle(token); }
 
             // Strategy 2: Integrated Security without impersonation (if pool runs as domain account)
             try { var c = new SqlConnection(CS_INTEGRATED); c.Open(); return c; } catch { }
 
             // Strategy 3: SQL login fallback
-            // NOTE 2026-07-22: V2ApiReader currently fails with "Login failed for user".
-            // This strategy is dead until the account is fixed - see ops handover.
             try { var c = new SqlConnection(CS_FALLBACK); c.Open(); return c; } catch { }
 
             throw new Exception("All connection strings failed for Server 28");
@@ -170,10 +113,7 @@ namespace Vendor_SRM_Routing_Application.Controllers
         public HttpResponseMessage Health() {
             try {
                 using (var conn = GetConnection()) {
-                    // sys.tables instead of INFORMATION_SCHEMA.TABLES: the latter is a view
-                    // with per-row permission checks and cost ~440 ms on this 1406-table DB.
-                    // Verified 2026-07-22 that both return the same count (1406).
-                    using (var cmd = new SqlCommand("SELECT @@SERVERNAME svr, DB_NAME() db, GETDATE() ts, (SELECT COUNT(*) FROM sys.tables) tbl_count", conn)) {
+                    using (var cmd = new SqlCommand("SELECT @@SERVERNAME svr, DB_NAME() db, GETDATE() ts, (SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE') tbl_count", conn)) {
                         using (var rd = cmd.ExecuteReader()) {
                             rd.Read();
                             return Ok(new { status = "ok", server = rd["svr"].ToString(),
