@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
@@ -221,10 +222,14 @@ namespace Vendor_Application_MVC.Controllers.NSO
 
     public class ZecommOrderPostRequest
     {
-        /// <summary>Order header (ZECOMM_ORD_HEAD_STR) — required.</summary>
+        /// <summary>Order header (ZECOMM_ORD_HEAD_STR) — required.
+        /// Accepts an object or a single-element array (legacy raw-RFC shape).</summary>
+        [JsonConverter(typeof(SingleOrFirstOfArrayConverter<EcommOrderHead>))]
         public EcommOrderHead ET_HEAD { get; set; }
 
-        /// <summary>Bill-to / ship-to address (ZECOMM_ORD_ADD_STR) — optional.</summary>
+        /// <summary>Bill-to / ship-to address (ZECOMM_ORD_ADD_STR) — optional.
+        /// Accepts an object or a single-element array (legacy raw-RFC shape).</summary>
+        [JsonConverter(typeof(SingleOrFirstOfArrayConverter<EcommOrderAddr>))]
         public EcommOrderAddr ET_ADD { get; set; }
 
         /// <summary>Line items (ZECOMM_ORD_ITEM_STR) — one entry per SKU.</summary>
