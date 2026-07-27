@@ -24,7 +24,15 @@ namespace Vendor_Application_MVC.Controllers.NSO
         public override object ReadJson(JsonReader reader, Type objectType,
                                         object existingValue, JsonSerializer serializer)
         {
-            JToken token = JToken.Load(reader);
+            // Buffering through JToken would otherwise parse bare JSON numbers as
+            // Double (JToken.Load's default), silently truncating high-precision
+            // values before they reach the decimal? properties. Force decimal so
+            // object payloads bind bit-identically to direct deserialization.
+            FloatParseHandling previous = reader.FloatParseHandling;
+            reader.FloatParseHandling = FloatParseHandling.Decimal;
+            JToken token;
+            try { token = JToken.Load(reader); }
+            finally { reader.FloatParseHandling = previous; }
 
             switch (token.Type)
             {
