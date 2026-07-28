@@ -68,6 +68,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 RfcConfigParameters rfcPar;
                 switch (env.ToLower())
                 {
+                    // Production host and client, authenticating as SAP_CLOUDAI. Kept off "prod"
+                    // deliberately: the fixed-asset run needs A_S_ANLKL, which POWERBI lacks, and
+                    // every other production consumer must keep running - and keep stamping -
+                    // POWERBI. See BaseController.rfcConfigparametersproductionfa.
+                    case "prodfa":
+                        rfcPar = BaseController.rfcConfigparametersproductionfa();
+                        break;
                     case "prod":
                     case "production":
                         rfcPar = BaseController.rfcConfigparametersproduction();

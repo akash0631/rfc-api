@@ -1729,6 +1729,35 @@
       "graphql": {
         "enabled": false
       }
+    },
+    "ET_EAN_DATA": {
+      "source": {
+        "object": "dbo.ET_EAN_DATA",
+        "type": "table",
+        "key-fields": [
+          "ID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "read"
+            }
+          ]
+        }
+      ],
+      "rest": {
+        "enabled": true,
+        "path": "/api/ET_EAN_DATA"
+      },
+      "graphql": {
+        "enabled": false
+      },
+      "mappings": {
+        "SAD": "SAD"
+      }
     }
   }
 }
