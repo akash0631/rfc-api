@@ -74,6 +74,33 @@ namespace Vendor_Application_MVC.Controllers
             return rfcPar;
         }
 
+        // Production, but authenticating as SAP_CLOUDAI instead of the shared POWERBI account.
+        // Added 2026-07-28 for the Q1 FY26 fixed-asset capitalisation. POWERBI has no A_S_ANLKL
+        // authorisation, so asset creation fails with "Authorization missing for Company code 1100
+        // Asset class V030" - but every other production consumer (Power BI, DataV2 ingest) runs
+        // through rfcConfigparametersproduction() and must not be disturbed, and the documents they
+        // create must keep saying POWERBI. So this is a separate lane on ?env=prodfa rather than a
+        // change of user: same host, same client, different identity, and its own NCo connection
+        // name so the destination cache cannot collide with ConnectionPROD.
+        public static RfcConfigParameters rfcConfigparametersproductionfa()
+        {
+            RfcConfigParameters rfcPar = new RfcConfigParameters();
+            rfcPar.Add(RfcConfigParameters.Name, "ConnectionPRODFA"); // env-unique name prevents NCo dest cache collision
+            // Pooled smaller than ConnectionPROD: this lane carries one batch job, not the whole estate.
+            rfcPar.Add(RfcConfigParameters.PoolSize, "10");           // warm idle connections kept open
+            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections ceiling
+            rfcPar.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
+            rfcPar.Add(RfcConfigParameters.IdleTimeout, "600");       // release idle connections after 10 min
+            rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.170");
+            rfcPar.Add(RfcConfigParameters.Client, "600");
+            rfcPar.Add(RfcConfigParameters.User, "SAP_CLOUDAI");//User Name (USTYP=B system user, created in S4P 2026-07-28)
+            rfcPar.Add(RfcConfigParameters.Password, "Master@0905"); //User Password
+            rfcPar.Add(RfcConfigParameters.SystemID, "PRD");
+            rfcPar.Add(RfcConfigParameters.SystemNumber, "02");
+            rfcPar.Add(RfcConfigParameters.Language, "EN"); // system -> status
+            return rfcPar;
+        }
+
         public static RfcConfigParameters rfcConfigparametersquality()
         {
             //production
