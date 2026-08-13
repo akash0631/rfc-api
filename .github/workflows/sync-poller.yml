@@ -37,7 +37,8 @@ jobs:
           "PYEXE=$py" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Deps
         shell: powershell
-        run: & "$env:PYEXE" -m pip install --quiet --upgrade snowflake-connector-python
+        run: |
+          & "$env:PYEXE" -m pip install --quiet --upgrade snowflake-connector-python
       - name: Process pending requests
         shell: powershell
         env:
