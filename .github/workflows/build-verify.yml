@@ -1,0 +1,56 @@
+name: Build Verify (feature branches, no deploy)
+
+# WHY THIS EXISTS:
+#   build-check-merge.yml only builds the 'staging' branch — and a green build there
+#   AUTO-MERGES to master, which starts the .36 deploy. So there was no way to compile-
+#   check work in progress without entering the release chain.
+#   This workflow builds ANY branch except master/staging. It never merges, never
+#   deploys, never touches .36. Purely "does it compile".
+
+on:
+  push:
+    branches-ignore:
+      - master
+      - staging
+    paths:
+      - 'Controllers/**'
+      - 'Services/**'
+      - 'Models/**'
+      - 'App_Start/**'
+      - 'Views/**'
+      - '*.cs'
+      - '*.csproj'
+      - '*.config'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: MSBuild compile only
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: NuGet restore
+        shell: cmd
+        run: |
+          nuget restore Vendor_SRM_Routing_Application.sln
+          echo NuGet restore exit: %ERRORLEVEL%
+          if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: MSBuild compile Release
+        shell: cmd
+        run: |
+          msbuild Vendor_SRM_Routing_Application.sln ^
+            /p:Configuration=Release ^
+            /p:Platform="Any CPU" ^
+            /t:Build ^
+            /m ^
+            /v:minimal
+          echo MSBuild exit: %ERRORLEVEL%
+          if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
