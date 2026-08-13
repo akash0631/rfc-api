@@ -4,6 +4,9 @@ name: SAP sync poller (runs SYNC_REQUEST)
 # "Run" tab), dispatch the incremental-sync workflow for each, mark DISPATCHED. Needs a PAT
 # secret GH_PAT (fine-grained, Actions: read/write on akash0631/rfc-api) to trigger the other
 # workflow (the default GITHUB_TOKEN can't). Without GH_PAT, requests are marked ERROR (visible in UI).
+#
+# NOTE: the runner runs as a Windows service, whose account PATH may not include a per-user
+# Python. The "Resolve Python" step below finds python.exe explicitly so steps don't depend on PATH.
 
 on:
   schedule:
@@ -18,9 +21,23 @@ jobs:
   poll:
     runs-on: [self-hosted, iis]
     steps:
+      - name: Resolve Python
+        shell: powershell
+        run: |
+          $py = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+          if (-not $py) { $py = (Get-Command py.exe -ErrorAction SilentlyContinue).Source }
+          if (-not $py) {
+            $cands = @()
+            $cands += Get-ChildItem 'C:\Python*\python.exe','C:\Program Files\Python*\python.exe','C:\Program Files (x86)\Python*\python.exe' -ErrorAction SilentlyContinue | ForEach-Object FullName
+            $cands += Get-ChildItem 'C:\Users\*\AppData\Local\Programs\Python\Python*\python.exe' -ErrorAction SilentlyContinue | ForEach-Object FullName
+            $py = $cands | Where-Object { $_ } | Select-Object -First 1
+          }
+          if (-not $py) { Write-Error 'Python not found on runner. Fix: install Python + add to SYSTEM PATH, or run the runner service under an account that has python.'; exit 1 }
+          Write-Host "Using python: $py"
+          "PYEXE=$py" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Deps
         shell: powershell
-        run: python -m pip install --quiet --upgrade snowflake-connector-python
+        run: & "$env:PYEXE" -m pip install --quiet --upgrade snowflake-connector-python
       - name: Process pending requests
         shell: powershell
         env:
@@ -29,7 +46,7 @@ jobs:
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           GH_PAT:      ${{ secrets.GH_PAT }}
         run: |
-          $py = @'
+          $src = @'
           import os, subprocess, snowflake.connector
           con=snowflake.connector.connect(account=os.environ["SF_ACCOUNT"],user=os.environ["SF_USER"],password=os.environ["SF_PASSWORD"],warehouse="WH_SAP_LOAD",database="V2RETAIL",schema="BRONZE")
           cur=con.cursor()
@@ -51,5 +68,5 @@ jobs:
                   cur.execute("UPDATE V2RETAIL.BRONZE.SYNC_REQUEST SET STATUS='ERROR',NOTE=%s WHERE REQUEST_ID=%s",(str(e)[:500],rid)); print("dispatch failed",tbl,str(e)[:200])
           con.close(); print("poller done")
           '@
-          Set-Content -Path poller.py -Value $py -Encoding utf8
-          python poller.py
+          Set-Content -Path poller.py -Value $src -Encoding utf8
+          & "$env:PYEXE" poller.py
