@@ -11,9 +11,27 @@ name: Nightly restart — v2-hht-api (04:00 IST)
 # Manual use: Run workflow → mode=verify (default) only checks auth + capacity
 # and touches nothing. mode=restart performs a real restart.
 
+# SCHEDULE IS PARKED — the AZURE_CREDENTIALS secret in this repo is dead:
+#   AADSTS7000215: Invalid client secret provided   (verify run 31690685356, 13-Aug)
+# Nothing else in this repo uses that secret, so nothing else is broken by it.
+# A nightly job that fails at login every night is worse than no job: it is noise
+# plus a false sense of cover. Re-enable the cron line below once a working
+# credential is in place. Someone with AAD app-registration rights runs:
+#   az ad sp create-for-rbac --name v2-hht-nightly-restart \
+#     --role "Website Contributor" \
+#     --scopes /subscriptions/7c2e7784-61b3-4aa7-9967-f41b381406dd/resourceGroups/dab-rg/providers/Microsoft.Web/sites/v2-hht-api \
+#     --json-auth
+# then: gh secret set AZURE_CREDENTIALS -R akash0631/rfc-api < creds.json
+#
+# WHY THIS MATTERS FOR PROD: v2-hht-middleware talks to SAP through NCo directly
+# (HHT_PROD / HHT_QA destinations in HHTBaseHandler), so it carries the same
+# stale-function-metadata cache that made IM_ZONE arrive blank in QA on 13-Aug.
+# A nightly restart bounds that failure on PROD to <=24h, exactly like the 04:00
+# pool recycles now do on .36.
+
 on:
-  schedule:
-    - cron: '30 22 * * *'   # 22:30 UTC = 04:00 IST
+  # schedule:
+  #   - cron: '30 22 * * *'   # 22:30 UTC = 04:00 IST — re-enable with valid creds
   workflow_dispatch:
     inputs:
       mode:
