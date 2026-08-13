@@ -1,0 +1,75 @@
+name: Nightly restart — v2-hht-api (04:00 IST)
+
+# Restarts the HHT PROD Azure App Service once a night, matching the 04:00 IST
+# recycle now set on the three RFC app pools on .36.
+#
+# WHY A GUARD: a restart is only safe while the plan runs >= 2 instances. At 1
+# instance `az webapp restart` is a full HHT outage for ~30s — which is exactly
+# what the plan had drifted back to on 2026-08-13 before it was scaled to 2.
+# If capacity ever drops to 1 again, this job FAILS instead of restarting.
+#
+# Manual use: Run workflow → mode=verify (default) only checks auth + capacity
+# and touches nothing. mode=restart performs a real restart.
+
+on:
+  schedule:
+    - cron: '30 22 * * *'   # 22:30 UTC = 04:00 IST
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'verify = auth/capacity check only. restart = actually restart.'
+        required: true
+        default: 'verify'
+        type: choice
+        options: [verify, restart]
+
+jobs:
+  restart:
+    name: Restart v2-hht-api
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Check plan capacity (>= 2 instances required)
+        id: cap
+        run: |
+          CAP=$(az appservice plan show -n v2-hht-win-plan -g dab-rg --query sku.capacity -o tsv)
+          echo "capacity=$CAP" >> $GITHUB_OUTPUT
+          echo "Plan capacity: $CAP"
+          if [ "$CAP" -lt 2 ]; then
+            echo "::error::Plan capacity is $CAP. A restart at <2 instances is a full HHT outage. Refusing."
+            exit 1
+          fi
+
+      - name: State before
+        run: az webapp show -n v2-hht-api -g dab-rg --query "{state:state,name:name}" -o tsv
+
+      - name: Restart
+        if: github.event_name == 'schedule' || github.event.inputs.mode == 'restart'
+        run: |
+          az webapp restart -n v2-hht-api -g dab-rg
+          echo "Restart issued, waiting for warm-up..."
+          sleep 45
+
+      - name: Health check via HHT PROD path
+        if: github.event_name == 'schedule' || github.event.inputs.mode == 'restart'
+        run: |
+          for i in 1 2 3 4 5 6; do
+            CODE=$(curl -s -o /tmp/r.json -w '%{http_code}' -m 30 -X POST \
+              "https://hht-api.v2retail.net/prod/api/hht/noacljsonrfcadaptor?bapiname=STFC_CONNECTION" \
+              -H 'Content-Type: application/json' -d '{"REQUTEXT":"PING"}' || true)
+            if [ "$CODE" = "200" ] && grep -q "S4P" /tmp/r.json; then
+              echo "HHT PROD healthy after restart (attempt $i):"; head -c 200 /tmp/r.json; exit 0
+            fi
+            echo "attempt $i: HTTP $CODE — retrying in 20s"; sleep 20
+          done
+          echo "::error::HHT PROD path did not return a healthy S4P ping after restart."
+          exit 1
+
+      - name: Verify-only summary
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'verify'
+        run: echo "Verify mode — credentials and capacity OK, nothing restarted."
