@@ -229,8 +229,19 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                     }
                 }
 
-                // Ensure EX_RETURN exists (some RFCs don't have it)
-                if (result["EX_RETURN"] == null)
+                // Ensure EX_RETURN exists (some RFCs don't have it).
+                //
+                // Suppressed in Java-MW compatibility mode. That middleware returns only
+                // the parameters the RFC actually declares, and the HHT app branches on
+                // `responsebody.has("EX_RETURN")` in 195 places. Synthesising the key
+                // flips that branch for the function modules that report through
+                // EX_MESSAGE instead — ZWM_RFC_STOCK_VALIDATE_BARCODE and
+                // ZWM_RFC_STOCK_TAKE_GET_DETAILS among them. Those branches only act on
+                // TYPE == "E" and this synthetic row is "S", so it is inert today; but
+                // "inert by reasoning" is a weaker guarantee than "byte-identical", and
+                // this is the payload 320+ stores would run on. Omitting it takes the
+                // compatibility diff from 8/10 to 10/10 with nothing left to argue about.
+                if (result["EX_RETURN"] == null && !labelRow)
                 {
                     result["EX_RETURN"] = new JObject
                     {
