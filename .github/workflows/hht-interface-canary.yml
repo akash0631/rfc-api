@@ -1,0 +1,91 @@
+name: HHT interface canary (SAP PROD)
+
+# Watches every HHT function-module interface in SAP PROD and fails the moment one
+# changes shape.
+#
+# WHY:
+#   DEV/QA HHT traffic goes through rfc-api, which since 2026-08-13 self-heals a stale
+#   NCo metadata cache and reports dropped parameters in _PARAM_ERRORS. PROD traffic does
+#   not: it goes Azure -> Hybrid Connection -> 192.168.144.200:9080 Java middleware, whose
+#   JCo repository has no cache invalidation anywhere in the war (506 JCoRepository
+#   references, zero removeFunctionTemplateFromCache) and whose parameter binder iterates
+#   the SAP-side field list, so a parameter it has not cached is skipped in complete
+#   silence — no error, no log, no echo. Restarting the Azure app does NOT clear it. Only
+#   a Tomcat restart on .200 does, and that host is not remotely administrable from CI.
+#
+#   So PROD cannot fix itself and cannot tell you it is broken. This job is the smoke
+#   detector: a changed interface means a transport just landed, which means the Java MW
+#   is stale as of that moment, which means a new parameter is silently arriving blank
+#   on ~1000 devices until someone restarts Tomcat.
+#
+# COST: ~229 function-module metadata reads once a day. Each drops one FM from the .36
+# NCo cache and re-reads it from SAP — that clearing is the point, it is what makes the
+# answer ground truth instead of another cached copy, and it is harmless (the next proxy
+# call re-reads in about a second). No RFC is executed. Nothing is written.
+#
+# AFTER AN EXPECTED CHANGE: restart Tomcat on .200, verify the flow, then re-baseline
+#   python tools/hht_interface_canary.py --snapshot
+# and commit tools/hht_fm_interfaces.prod.json.
+
+on:
+  schedule:
+    - cron: '30 21 * * *'   # 21:30 UTC = 03:00 IST — an hour before the .36 pool recycle
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'SAP environment to check'
+        required: true
+        default: 'prod'
+        type: choice
+        options: [prod, qa, dev]
+  push:
+    branches: [master]
+    paths:
+      - 'tools/hht_interface_canary.py'
+      - 'tools/hht_fm_watchlist.txt'
+      - 'tools/hht_fm_interfaces.prod.json'
+      - '.github/workflows/hht-interface-canary.yml'
+
+jobs:
+  canary:
+    name: Compare live SAP interfaces against baseline
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check for interface drift
+        id: check
+        env:
+          # Same key the controller already hardcodes as API_KEY, so the secret is
+          # optional — set repo secret RFC_API_KEY to override.
+          RFC_API_KEY: ${{ secrets.RFC_API_KEY || 'v2-rfc-proxy-2026' }}
+          RFC_ENV: ${{ github.event.inputs.env || 'prod' }}
+        run: |
+          set -o pipefail
+          python tools/hht_interface_canary.py 2>&1 | tee canary.log
+
+      - name: Publish result to job summary
+        if: always()
+        env:
+          RFC_ENV: ${{ github.event.inputs.env || 'prod' }}
+        run: |
+          {
+            echo "## HHT interface canary — \`${RFC_ENV}\`"
+            echo ''
+            if [ "${{ steps.check.outcome }}" = "success" ]; then
+              echo 'No drift. The Java MW on 192.168.144.200 is consistent with SAP.'
+            else
+              echo '**Interface drift detected — the Java MW on 192.168.144.200 is now STALE.**'
+              echo ''
+              echo 'Restart Tomcat on .200, re-run the affected HHT flow, then re-baseline.'
+            fi
+            echo ''
+            echo '```'
+            cat canary.log 2>/dev/null || echo '(no output captured)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
