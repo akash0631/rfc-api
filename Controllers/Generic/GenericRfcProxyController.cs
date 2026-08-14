@@ -163,6 +163,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 // ── Build response with ALL export parameters ───────────────
                 JObject result = new JObject();
 
+                // See WantsLabelRow(). Resolved once so every table in one response
+                // agrees — a half-labelled payload would be worse than either choice.
+                bool labelRow = WantsLabelRow();
+
                 // Iterate over function metadata to get all exports
                 for (int i = 0; i < myfun.Metadata.ParameterCount; i++)
                 {
@@ -192,6 +196,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                             {
                                 IRfcTable table = myfun.GetTable(paramName);
                                 JArray tableArr = new JArray();
+
+                                // Java-MW compatibility row. Emitted before the data,
+                                // unconditionally when enabled — the MW sends it even
+                                // for an empty table, and the HHT loops index past it
+                                // either way.
+                                if (labelRow)
+                                    tableArr.Add(BuildLabelRow(table.Metadata));
+
                                 foreach (IRfcStructure row in table)
                                 {
                                     JObject rowObj = new JObject();
@@ -404,7 +416,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
             if (key.StartsWith("_", StringComparison.Ordinal)) return true;
             return key.Equals("bapiname", StringComparison.OrdinalIgnoreCase)
                 || key.Equals("env", StringComparison.OrdinalIgnoreCase)
-                || key.Equals("strict", StringComparison.OrdinalIgnoreCase);
+                || key.Equals("strict", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("labelrow", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -426,6 +439,62 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 (cfg == "0" || cfg.Equals("false", StringComparison.OrdinalIgnoreCase))) return false;
 
             return true;
+        }
+
+        /// <summary>
+        /// Whether to prepend a field-label row to every table, the way the legacy Java
+        /// middleware on 192.168.144.200 does.
+        ///
+        /// WHY THIS EXISTS: that middleware returns row 0 of every RFC table as SAP field
+        /// descriptions ("Height", "Serial Number Management Type", ...) rather than data.
+        /// The HHT Android app is built around it — 38 loops across 22 files are written
+        /// `for (int i = 1; i &lt; arr.length(); i++)` to step over it. This proxy has never
+        /// emitted that row, so on every environment routed here the app silently discards
+        /// the FIRST REAL DATA ROW of each table: a stock take listing five items shows
+        /// four. That has been true of dev and qa since 2026-05-04, and it is the one thing
+        /// blocking PROD from being routed here too.
+        ///
+        /// Off by default: every existing consumer of this proxy expects data rows only,
+        /// and this must not change under them. Per call with ?labelrow=1, or globally with
+        /// appSetting RfcProxy.LabelRow=true (Web.config edit, no redeploy).
+        /// </summary>
+        private static bool WantsLabelRow()
+        {
+            string q = System.Web.HttpContext.Current?.Request?.QueryString["labelrow"];
+            if (!string.IsNullOrEmpty(q))
+            {
+                if (q == "1" || q.Equals("true", StringComparison.OrdinalIgnoreCase)) return true;
+                if (q == "0" || q.Equals("false", StringComparison.OrdinalIgnoreCase)) return false;
+            }
+
+            string cfg = ConfigurationManager.AppSettings["RfcProxy.LabelRow"];
+            return !string.IsNullOrEmpty(cfg) &&
+                   (cfg == "1" || cfg.Equals("true", StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// One row of DDIC short texts keyed by field name, taken from the table's line
+        /// type so it is produced even when the table came back empty — which is exactly
+        /// what the Java MW does.
+        /// Falls back to the field name where SAP supplies no documentation; the app steps
+        /// over this row regardless, so its presence is what matters, not its wording.
+        /// </summary>
+        private static JObject BuildLabelRow(RfcTableMetadata tableMeta)
+        {
+            JObject labels = new JObject();
+            RfcStructureMetadata line = tableMeta.LineType;
+
+            for (int j = 0; j < line.FieldCount; j++)
+            {
+                RfcFieldMetadata field = line[j];
+                string text = null;
+                try { text = field.Documentation; }
+                catch { /* no DDIC text loaded for this field */ }
+
+                labels[field.Name] = string.IsNullOrWhiteSpace(text) ? field.Name : text;
+            }
+
+            return labels;
         }
 
         /// <summary>
