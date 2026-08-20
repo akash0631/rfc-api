@@ -38,7 +38,14 @@ jobs:
       - name: Deps
         shell: powershell
         run: |
-          & "$env:PYEXE" -m pip install --quiet --upgrade snowflake-connector-python
+          # Only hit PyPI if the module is missing (it is pre-installed on the runner).
+          # A plain --upgrade reached PyPI every run and hung to the 10-min timeout when
+          # the runner's outbound was slow -> flaky red poller runs. Skip when importable.
+          & "$env:PYEXE" -c "import snowflake.connector" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "installing snowflake-connector-python"
+            & "$env:PYEXE" -m pip install --quiet --disable-pip-version-check --timeout 30 --retries 2 snowflake-connector-python
+          } else { Write-Host "snowflake-connector present; skipping pip" }
       - name: Process pending requests
         shell: powershell
         env:
