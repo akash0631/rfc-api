@@ -21,12 +21,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     ///       (Nikhil Chhokra). Sibling of GreenOnPushController — same SAP
     ///       reader, different envelope and different vendor.
     ///
-    /// FM: Z_INV_STOREWISE_V1 (FG ZINV_RFC11) — SUM(MARD.LABST) by MATNR+WERKS
-    ///     over LGORT 0001+0002, MTART restricted to APP/GM/FBG. That is
-    ///     exactly the selection in spec section 6.
-    ///     V1 hard-floors IV_MIN_QTY to 1, so it cannot emit qty 0. Flip ?fm=
-    ///     to Z_INV_STOREWISE_V2 with minQty=-1 once V2 is live — see the
-    ///     zero-quantity note below.
+    /// FM: Z_INV_STOREWISE_V2 (FG ZINV_UT_API1, TR S4DK928230, DEV 2026-08-20).
+    ///     SUM(MARD.LABST) by MATNR+WERKS over LGORT 0001+0002, MTART
+    ///     restricted to APP/GM/FBG — exactly the selection in spec section 6 —
+    ///     plus deletion-flag exclusion and zero-quantity support.
+    ///     Z_INV_STOREWISE_V1 (FG ZINV_RFC11) is the Green On reader and stays
+    ///     available via ?fm=. V1 hard-floors IV_MIN_QTY to 1 and so can never
+    ///     emit qty 0. At minQty=1 the two agree exactly (DH24: 422 = 422).
     ///
     /// Envelope difference vs Green On: Townkart carries storeCode and
     /// businessDate at HEADER level, so one POST covers exactly one site.
@@ -41,9 +42,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     ///
     /// ZERO QUANTITY (spec 8.3): adjustmentType REPLACE means Townkart only
     /// touches SKUs present in the payload. A sold-out SKU that drops out of
-    /// the extract keeps its previous quantity and stays orderable. Sending
-    /// qty 0 requires Z_INV_STOREWISE_V2 (no min-qty floor). Until then this
-    /// controller runs spec Option 2 and the overselling window is open.
+    /// the extract keeps its previous quantity and stays orderable. Pass
+    /// minQty=-1 to lift the floor and send those SKUs as an explicit 0
+    /// (spec Option 1). The default minQty=1 is spec Option 2 and leaves the
+    /// overselling window open — deliberate, because Townkart has not yet
+    /// confirmed that qty 0 with REPLACE clears stock (open point O4), and
+    /// because zeros multiply the payload roughly 20x (DH24 DEV: 422 -> 8,510).
     ///
     /// Endpoint:
     ///   POST /api/inv/townkart-push
@@ -52,9 +56,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     ///     &amp;dryRun=true|false     (default TRUE — builds payload, no vendor call)
     ///     &amp;businessDate=2026-08-20 (default: server date, IST)
     ///     &amp;chunkSize=500          (records per POST, spec section 5)
-    ///     &amp;minQty=1               (-1 = no floor, needs fm=Z_INV_STOREWISE_V2)
+    ///     &amp;minQty=1               (-1 = no floor, emits sold-out SKUs as 0)
     ///     &amp;seg=APP,GM,FBG         (MTART segments)
-    ///     &amp;fm=Z_INV_STOREWISE_V1  (whitelisted reader FM)
+    ///     &amp;fm=Z_INV_STOREWISE_V2  (whitelisted reader FM)
     ///     &amp;confirm=ALL_STORES     (required to live-push werks=all)
     ///
     /// Auth (ours): X-RFC-Key: v2-rfc-proxy-2026
@@ -99,7 +103,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             int chunkSize = 500,
             int minQty = 1,
             string seg = "APP,GM,FBG",
-            string fm = "Z_INV_STOREWISE_V1",
+            string fm = "Z_INV_STOREWISE_V2",
             string confirm = null,
             bool sync = false)
         {
@@ -215,7 +219,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
             var siteResults = new List<JObject>();
             int grandSkus = 0, grandPushed = 0, grandFailed = 0;
-            int grandClamped = 0, grandBatches = 0;
+            int grandClamped = 0, grandBatches = 0, grandSapNeg = 0;
             bool abortRun = false;
             string abortReason = null;
             object samplePayload = null;
@@ -238,10 +242,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
                     var siteStart = DateTime.Now;
                     JArray rows;
-                    int fmCount;
+                    int fmCount, sapNeg;
                     try
                     {
-                        rows = ReadStock(dest, fmName, site, minQty, seg, out fmCount);
+                        rows = ReadStock(dest, fmName, site, minQty, seg,
+                                         out fmCount, out sapNeg);
                     }
                     catch (Exception ex)
                     {
@@ -258,6 +263,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     JArray items = MapItems(rows, site, out clamped);
                     grandSkus += items.Count;
                     grandClamped += clamped;
+                    grandSapNeg += sapNeg;
 
                     if (samplePayload == null && items.Count > 0)
                     {
@@ -280,6 +286,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                             ["status"] = items.Count == 0 ? "No stock" : "Dry run",
                             ["fm_count"] = fmCount,
                             ["skus"] = items.Count,
+                            ["negatives_clamped_in_sap"] = sapNeg,
                             ["negatives_clamped"] = clamped,
                             ["would_be_batches"] = siteBatches,
                             ["duration_ms"] = (int)(DateTime.Now - siteStart).TotalMilliseconds
@@ -347,6 +354,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                                    : (okBatches > 0 ? "Partially Successful" : "Failed"),
                         ["fm_count"] = fmCount,
                         ["skus"] = items.Count,
+                        ["negatives_clamped_in_sap"] = sapNeg,
                         ["negatives_clamped"] = clamped,
                         ["batches_sent"] = okBatches + failBatches,
                         ["batches_ok"] = okBatches,
@@ -391,6 +399,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     SitesInScope = werksList.Count,
                     SitesProcessed = siteResults.Count,
                     TotalSkus = grandSkus,
+                    NegativesClampedInSap = grandSapNeg,
                     NegativesClamped = grandClamped,
                     Batches = grandBatches,
                     Pushed = grandPushed,
@@ -414,7 +423,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         // ── SAP read ──────────────────────────────────────────────────────
 
         private JArray ReadStock(RfcDestination dest, string fmName, string site,
-                                 int minQty, string seg, out int fmCount)
+                                 int minQty, string seg, out int fmCount, out int sapNeg)
         {
             IRfcFunction fn = dest.Repository.CreateFunction(fmName);
             fn.SetValue("IV_WERKS_CSV", site);
@@ -423,6 +432,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             fn.Invoke(dest);
 
             fmCount = fn.GetInt("EV_COUNT");
+
+            // V2 clamps negative aggregates to 0 at source and reports the
+            // count. V1 has no such export, so ask only when it can exist.
+            sapNeg = 0;
+            if (fmName != "Z_INV_STOREWISE_V1")
+            {
+                try { sapNeg = fn.GetInt("EV_NEG_COUNT"); }
+                catch (Exception) { sapNeg = 0; }
+            }
             string json = fn.GetString("EV_JSON");
             if (string.IsNullOrWhiteSpace(json) || json.Length <= 2) return new JArray();
             return JArray.Parse(json);
