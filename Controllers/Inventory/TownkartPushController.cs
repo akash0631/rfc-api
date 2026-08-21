@@ -87,8 +87,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     ///                                    TOWNKART_ZERO_ADJUSTMENT)
     ///
     /// Auth (ours): X-RFC-Key: v2-rfc-proxy-2026
-    /// Auth (theirs): Authorization Bearer + X-Api-Key + X-Api-Token, read from
-    ///   config keys TOWNKART_TOKEN / TOWNKART_API_KEY. Never hardcode them —
+    /// Auth (theirs): the two endpoints do NOT share a scheme. Their Postman
+    ///   collection sends sku-inventory with X-Api-Key + X-Api-Token and no
+    ///   Authorization header, and sync-inventory-from-sap with Authorization
+    ///   Bearer + a context_shopId cookie and neither X-Api-*. The two bearers
+    ///   are different tokens. Config keys: TOWNKART_API_KEY (X-Api-Key),
+    ///   TOWNKART_TOKEN (X-Api-Token), TOWNKART_SYNC_TOKEN, TOWNKART_SYNC_COOKIE.
+    ///   Never hardcode them —
     ///   this repo is public. Web.config carries appSettings file="secrets.config"
     ///   on this branch, but that wiring only reaches the host on a deploy, so
     ///   machine environment variables are the path that works today and needs
@@ -246,8 +251,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 {
                     Status = false,
                     Message = "TOWNKART_TOKEN / TOWNKART_API_KEY not configured on this host. " +
-                              "Set them in secrets.config (or as machine environment variables). " +
-                              "Never commit them — this repo is public."
+                              "TOWNKART_API_KEY is the opaque 43-char X-Api-Key; TOWNKART_TOKEN " +
+                              "is the JWT sent as X-Api-Token. Set them as machine environment " +
+                              "variables (works with no deploy) or in secrets.config alongside " +
+                              "Web.config. Never commit them — this repo is public."
                 });
             }
 
@@ -262,16 +269,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             string abortReason = null;
             object samplePayload = null;
 
+            var invHeaders = InventoryHeaders(apiKey, bearer);
+
             using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(HTTP_TIMEOUT_SEC) })
             {
-                if (!dryRun)
-                {
-                    http.DefaultRequestHeaders.TryAddWithoutValidation(
-                        "Authorization", "Bearer " + bearer);
-                    http.DefaultRequestHeaders.TryAddWithoutValidation("X-Api-Key", apiKey);
-                    http.DefaultRequestHeaders.TryAddWithoutValidation("X-Api-Token", bearer);
-                }
-
                 // Spec section 13: sites run one after another, and a failure on
                 // one site must not stop the rest.
                 foreach (string site in werksList)
@@ -354,7 +355,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         };
 
                         BatchOutcome outcome = await PostWithRetry(
-                            http, TOWNKART_URL, payload.ToString(Formatting.None));
+                            http, TOWNKART_URL, payload.ToString(Formatting.None), invHeaders);
 
                         if (outcome.BodyOk.HasValue) bodyJudged++; else bodyUnjudged++;
 
@@ -420,14 +421,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 JObject syncResult = null;
                 if (sync && !dryRun && !abortRun)
                 {
-                    BatchOutcome s = await PostWithRetry(http, TOWNKART_SYNC_URL, "{}");
-                    syncResult = new JObject
-                    {
-                        ["http_code"] = s.Code,
-                        ["ok"] = s.Ok,
-                        ["latency_ms"] = s.LatencyMs,
-                        ["response"] = Snip(s.Body)
-                    };
+                    syncResult = await RunSync(http);
                 }
 
                 string runStatus =
@@ -594,8 +588,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 {
                     Status = false,
                     Message = "TOWNKART_TOKEN / TOWNKART_API_KEY not configured on this host. " +
-                              "Set them in secrets.config (or as machine environment variables). " +
-                              "Never commit them — this repo is public."
+                              "TOWNKART_API_KEY is the opaque 43-char X-Api-Key; TOWNKART_TOKEN " +
+                              "is the JWT sent as X-Api-Token. Set them as machine environment " +
+                              "variables (works with no deploy) or in secrets.config alongside " +
+                              "Web.config. Never commit them — this repo is public."
                 });
             }
 
@@ -730,16 +726,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 string abortReason = null;
                 object samplePayload = null;
 
+                var invHeaders = InventoryHeaders(apiKey, bearer);
+
                 using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(HTTP_TIMEOUT_SEC) })
                 {
-                    if (!dryRun)
-                    {
-                        http.DefaultRequestHeaders.TryAddWithoutValidation(
-                            "Authorization", "Bearer " + bearer);
-                        http.DefaultRequestHeaders.TryAddWithoutValidation("X-Api-Key", apiKey);
-                        http.DefaultRequestHeaders.TryAddWithoutValidation("X-Api-Token", bearer);
-                    }
-
                     foreach (var kv in bySite.OrderBy(k => k.Key))
                     {
                         if (abortRun) break;
@@ -801,7 +791,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                             };
 
                             BatchOutcome outcome = await PostWithRetry(
-                                http, TOWNKART_URL, payload.ToString(Formatting.None));
+                                http, TOWNKART_URL, payload.ToString(Formatting.None), invHeaders);
 
                             if (outcome.BodyOk.HasValue) bodyJudged++; else bodyUnjudged++;
 
@@ -861,14 +851,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     JObject syncResult = null;
                     if (sync && !dryRun && !abortRun && grandPushed > 0)
                     {
-                        BatchOutcome s = await PostWithRetry(http, TOWNKART_SYNC_URL, "{}");
-                        syncResult = new JObject
-                        {
-                            ["http_code"] = s.Code,
-                            ["ok"] = s.Ok,
-                            ["latency_ms"] = s.LatencyMs,
-                            ["response"] = Snip(s.Body)
-                        };
+                        syncResult = await RunSync(http);
                     }
 
                     // The whole point of holding the watermark here: it moves
@@ -1035,8 +1018,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 RawState = raw,
                 CredentialsConfigured =
                     !string.IsNullOrWhiteSpace(bearer) && !string.IsNullOrWhiteSpace(apiKey),
+                // Lengths only. Their sample X-Api-Key is 43 chars and the
+                // X-Api-Token JWT is 320, so a wrong-way-round pair is visible
+                // here without printing either secret.
                 TokenLength = string.IsNullOrWhiteSpace(bearer) ? 0 : bearer.Length,
                 ApiKeyLength = string.IsNullOrWhiteSpace(apiKey) ? 0 : apiKey.Length,
+                SyncTokenConfigured = !string.IsNullOrWhiteSpace(ReadSetting("TOWNKART_SYNC_TOKEN")),
+                SyncCookieConfigured = !string.IsNullOrWhiteSpace(ReadSetting("TOWNKART_SYNC_COOKIE")),
                 ZeroPolicy = zero.Describe(),
                 ReaderFm = "Z_INV_STOREWISE_V2",
                 DeltaFm = DELTA_FM,
@@ -1401,7 +1389,82 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             return null;
         }
 
-        private async Task<BatchOutcome> PostWithRetry(HttpClient http, string url, string body)
+        /// <summary>
+        /// The two Townkart endpoints do NOT share an auth scheme, so headers
+        /// are set per request rather than on the HttpClient.
+        ///
+        /// Their own Postman collection (V2Store (3).json, 20-Aug-2026) sends:
+        ///   sku-inventory            → X-Api-Key + X-Api-Token, no Authorization
+        ///   sync-inventory-from-sap  → Authorization: Bearer + Cookie, and
+        ///                              neither X-Api-Key nor X-Api-Token
+        /// The two bearer values are different tokens (320 vs 323 chars), and
+        /// X-Api-Key is an opaque 43-char string, not a JWT.
+        ///
+        /// An earlier revision put all three headers on the shared client, so
+        /// the inventory call carried an Authorization header the vendor never
+        /// asked for and the sync call carried the wrong credential and no
+        /// cookie. Matching their working request exactly removes a whole class
+        /// of 401 that would otherwise look like an expired token.
+        /// </summary>
+        /// <summary>
+        /// sync-inventory-from-sap runs on its own credential — a different
+        /// bearer plus a context_shopId cookie — so it fails closed rather than
+        /// borrowing the inventory token and returning a 401 that reads like an
+        /// expired key. Whether it is even required after a push is spec O7,
+        /// still unanswered, which is why it stays opt-in.
+        /// </summary>
+        private async Task<JObject> RunSync(HttpClient http)
+        {
+            string syncBearer = ReadSetting("TOWNKART_SYNC_TOKEN");
+            string syncCookie = ReadSetting("TOWNKART_SYNC_COOKIE");
+
+            if (string.IsNullOrWhiteSpace(syncBearer))
+            {
+                return new JObject
+                {
+                    ["skipped"] = true,
+                    ["reason"] = "TOWNKART_SYNC_TOKEN not configured. The sync endpoint uses a " +
+                                 "different bearer and a context_shopId cookie from the " +
+                                 "inventory endpoint — see their Postman collection. Sending " +
+                                 "the inventory token here would just 401."
+                };
+            }
+
+            BatchOutcome s = await PostWithRetry(
+                http, TOWNKART_SYNC_URL, "{}", SyncHeaders(syncBearer, syncCookie));
+
+            return new JObject
+            {
+                ["http_code"] = s.Code,
+                ["ok"] = s.Ok,
+                ["cookie_sent"] = !string.IsNullOrWhiteSpace(syncCookie),
+                ["latency_ms"] = s.LatencyMs,
+                ["response"] = Snip(s.Body)
+            };
+        }
+
+        private static Dictionary<string, string> InventoryHeaders(string apiKey, string apiToken)
+        {
+            return new Dictionary<string, string>
+            {
+                { "X-Api-Key", apiKey },
+                { "X-Api-Token", apiToken }
+            };
+        }
+
+        private static Dictionary<string, string> SyncHeaders(string bearer, string cookie)
+        {
+            var h = new Dictionary<string, string>
+            {
+                { "Authorization", bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                                   ? bearer : "Bearer " + bearer }
+            };
+            if (!string.IsNullOrWhiteSpace(cookie)) h["Cookie"] = cookie;
+            return h;
+        }
+
+        private async Task<BatchOutcome> PostWithRetry(HttpClient http, string url, string body,
+                                                       IDictionary<string, string> headers)
         {
             var started = DateTime.UtcNow;
             var result = new BatchOutcome { Code = 0, Body = "", Attempts = 0 };
@@ -1414,7 +1477,16 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 try
                 {
                     var content = new StringContent(body, Encoding.UTF8, "application/json");
-                    HttpResponseMessage resp = await http.PostAsync(url, content);
+                    var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+                    if (headers != null)
+                    {
+                        foreach (var kv in headers)
+                        {
+                            if (string.IsNullOrWhiteSpace(kv.Value)) continue;
+                            req.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
+                        }
+                    }
+                    HttpResponseMessage resp = await http.SendAsync(req);
                     result.Code = (int)resp.StatusCode;
                     result.Body = await resp.Content.ReadAsStringAsync();
 
