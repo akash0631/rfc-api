@@ -77,10 +77,22 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     ///     &amp;maxPairs=20000        (safety cap; halves the window if hit)
     ///     &amp;seedFrom=...          (one-off: create the watermark, no push)
     ///
+    ///   GET  /api/inv/townkart-state  — watermark age, credentials, policy
+    ///     ?env=dev|qa|prod
+    ///     &amp;staleMinutes=180      (age above which the verdict is STALE)
+    ///
+    ///   Both push endpoints also take, per spec 8.3 / vendor question Q1:
+    ///     &amp;zeroMode=send|skip        (default send; TOWNKART_ZERO_MODE)
+    ///     &amp;zeroAdjustment=REPLACE    (adjustmentType for qty 0 rows;
+    ///                                    TOWNKART_ZERO_ADJUSTMENT)
+    ///
     /// Auth (ours): X-RFC-Key: v2-rfc-proxy-2026
     /// Auth (theirs): Authorization Bearer + X-Api-Key + X-Api-Token, read from
     ///   config keys TOWNKART_TOKEN / TOWNKART_API_KEY. Never hardcode them —
-    ///   this repo is public. See Web.config appSettings file="secrets.config".
+    ///   this repo is public. Web.config carries appSettings file="secrets.config"
+    ///   on this branch, but that wiring only reaches the host on a deploy, so
+    ///   machine environment variables are the path that works today and needs
+    ///   no deploy at all. ReadSetting checks appSettings first, then Machine.
     /// </summary>
     [RoutePrefix("api/inv")]
     public class TownkartPushController : BaseController
@@ -125,7 +137,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             string seg = "APP,GM,FBG",
             string fm = "Z_INV_STOREWISE_V2",
             string confirm = null,
-            bool sync = false)
+            bool sync = false,
+            string zeroMode = null,
+            string zeroAdjustment = null)
         {
             var runStart = DateTime.Now;
 
@@ -237,9 +251,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 });
             }
 
+            ZeroPolicy zeroPolicy = ZeroPolicy.Resolve(zeroMode, zeroAdjustment);
+
             var siteResults = new List<JObject>();
             int grandSkus = 0, grandPushed = 0, grandFailed = 0;
             int grandClamped = 0, grandBatches = 0, grandSapNeg = 0;
+            int grandZeros = 0, grandZerosSkipped = 0;
+            int bodyJudged = 0, bodyUnjudged = 0;
             bool abortRun = false;
             string abortReason = null;
             object samplePayload = null;
@@ -279,11 +297,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         continue;
                     }
 
-                    int clamped;
-                    JArray items = MapItems(rows, site, out clamped);
+                    int clamped, zeros, zerosSkipped;
+                    JArray items = MapItems(rows, site, zeroPolicy,
+                                            out clamped, out zeros, out zerosSkipped);
                     grandSkus += items.Count;
                     grandClamped += clamped;
                     grandSapNeg += sapNeg;
+                    grandZeros += zeros;
+                    grandZerosSkipped += zerosSkipped;
 
                     if (samplePayload == null && items.Count > 0)
                     {
@@ -306,6 +327,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                             ["status"] = items.Count == 0 ? "No stock" : "Dry run",
                             ["fm_count"] = fmCount,
                             ["skus"] = items.Count,
+                            ["zero_qty"] = zeros,
+                            ["zeros_skipped"] = zerosSkipped,
                             ["negatives_clamped_in_sap"] = sapNeg,
                             ["negatives_clamped"] = clamped,
                             ["would_be_batches"] = siteBatches,
@@ -333,12 +356,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         BatchOutcome outcome = await PostWithRetry(
                             http, TOWNKART_URL, payload.ToString(Formatting.None));
 
+                        if (outcome.BodyOk.HasValue) bodyJudged++; else bodyUnjudged++;
+
                         batchLog.Add(new JObject
                         {
                             ["batch"] = (off / chunkSize) + 1,
                             ["skus"] = take,
                             ["http_code"] = outcome.Code,
                             ["ok"] = outcome.Ok,
+                            ["body_verdict"] = outcome.BodyOk.HasValue
+                                ? (outcome.BodyOk.Value ? "accepted" : "rejected")
+                                : "unrecognised",
+                            ["body_note"] = outcome.BodyNote,
                             ["attempts"] = outcome.Attempts,
                             ["latency_ms"] = outcome.LatencyMs,
                             ["response"] = Snip(outcome.Body)
@@ -374,6 +403,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                                    : (okBatches > 0 ? "Partially Successful" : "Failed"),
                         ["fm_count"] = fmCount,
                         ["skus"] = items.Count,
+                        ["zero_qty"] = zeros,
+                        ["zeros_skipped"] = zerosSkipped,
                         ["negatives_clamped_in_sap"] = sapNeg,
                         ["negatives_clamped"] = clamped,
                         ["batches_sent"] = okBatches + failBatches,
@@ -424,6 +455,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     Batches = grandBatches,
                     Pushed = grandPushed,
                     Failed = grandFailed,
+                    ZeroQtySkus = grandZeros,
+                    ZerosSkipped = grandZerosSkipped,
+                    ZeroPolicy = zeroPolicy.Describe(),
+                    BodyVerdict = BodyVerdictNote(bodyJudged, bodyUnjudged),
                     ZeroQtyCaveat = minQty > 0
                         ? "minQty=" + minQty + " — sold-out SKUs are omitted, so Townkart " +
                           "keeps their previous quantity (spec 8.3 Option 2). This is the " +
@@ -474,7 +509,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             int windowMinutes = 60,
             int maxPairs = 20000,
             string seedFrom = null,
-            bool sync = false)
+            bool sync = false,
+            string zeroMode = null,
+            string zeroAdjustment = null)
         {
             var runStart = DateTime.Now;
 
@@ -683,9 +720,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     bySite[s].Add(row);
                 }
 
+                ZeroPolicy zeroPolicy = ZeroPolicy.Resolve(zeroMode, zeroAdjustment);
+
                 var siteResults = new List<JObject>();
                 int grandSkus = 0, grandZeros = 0, grandPushed = 0, grandFailed = 0;
-                int grandClamped = 0, grandBatches = 0;
+                int grandClamped = 0, grandBatches = 0, grandZerosSkipped = 0;
+                int bodyJudged = 0, bodyUnjudged = 0;
                 bool abortRun = false;
                 string abortReason = null;
                 object samplePayload = null;
@@ -707,12 +747,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         var siteStart = DateTime.Now;
                         string site = kv.Key;
 
-                        int clamped;
-                        JArray items = MapItems(kv.Value, site, out clamped);
-                        int zeros = kv.Value.OfType<JObject>()
-                                            .Count(r => (int?)r["inventory"] == 0);
+                        int clamped, zeros, zerosSkipped;
+                        JArray items = MapItems(kv.Value, site, zeroPolicy,
+                                                out clamped, out zeros, out zerosSkipped);
                         grandSkus += items.Count;
                         grandZeros += zeros;
+                        grandZerosSkipped += zerosSkipped;
                         grandClamped += clamped;
 
                         if (samplePayload == null && items.Count > 0)
@@ -736,6 +776,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                                 ["status"] = items.Count == 0 ? "No changes" : "Dry run",
                                 ["skus"] = items.Count,
                                 ["zero_qty"] = zeros,
+                                ["zeros_skipped"] = zerosSkipped,
                                 ["negatives_clamped"] = clamped,
                                 ["would_be_batches"] = siteBatches,
                                 ["duration_ms"] = (int)(DateTime.Now - siteStart).TotalMilliseconds
@@ -762,12 +803,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                             BatchOutcome outcome = await PostWithRetry(
                                 http, TOWNKART_URL, payload.ToString(Formatting.None));
 
+                            if (outcome.BodyOk.HasValue) bodyJudged++; else bodyUnjudged++;
+
                             batchLog.Add(new JObject
                             {
                                 ["batch"] = (off / chunkSize) + 1,
                                 ["skus"] = take,
                                 ["http_code"] = outcome.Code,
                                 ["ok"] = outcome.Ok,
+                                ["body_verdict"] = outcome.BodyOk.HasValue
+                                    ? (outcome.BodyOk.Value ? "accepted" : "rejected")
+                                    : "unrecognised",
+                                ["body_note"] = outcome.BodyNote,
                                 ["attempts"] = outcome.Attempts,
                                 ["latency_ms"] = outcome.LatencyMs,
                                 ["response"] = Snip(outcome.Body)
@@ -801,6 +848,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                                        : (okBatches > 0 ? "Partially Successful" : "Failed"),
                             ["skus"] = items.Count,
                             ["zero_qty"] = zeros,
+                            ["zeros_skipped"] = zerosSkipped,
                             ["negatives_clamped"] = clamped,
                             ["batches_sent"] = okBatches + failBatches,
                             ["batches_ok"] = okBatches,
@@ -882,6 +930,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         Batches = grandBatches,
                         Pushed = grandPushed,
                         Failed = grandFailed,
+                        ZerosSkipped = grandZerosSkipped,
+                        ZeroPolicy = zeroPolicy.Describe(),
+                        BodyVerdict = BodyVerdictNote(bodyJudged, bodyUnjudged),
                         TownkartUrl = TOWNKART_URL,
                         SamplePayload = samplePayload,
                         SyncCall = syncResult,
@@ -896,6 +947,102 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             {
                 DeltaGate.Release();
             }
+        }
+
+        // ── Health / state (read-only) ────────────────────────────────────
+        //
+        // Everything this integration depends on that is NOT in the repo:
+        // the watermark file, the credentials, and the zero policy. A cron
+        // that quietly stops advancing the watermark looks identical to a
+        // quiet estate from the outside, so the age is the signal to alert on.
+
+        [HttpGet]
+        [Route("townkart-state")]
+        public IHttpActionResult State(string env = "dev", int staleMinutes = 180)
+        {
+            IEnumerable<string> keyHeaders;
+            bool hasKey = Request.Headers.TryGetValues("X-RFC-Key", out keyHeaders);
+            if (!hasKey || keyHeaders.FirstOrDefault() != API_KEY)
+            {
+                return Json(new { Status = false, Message = "Unauthorized" });
+            }
+
+            string channel = "TOWNKART_" + (env ?? "dev").Trim().ToUpperInvariant();
+            string dir = StateDir();
+            string path = WatermarkPath(channel);
+
+            bool dirExists = Directory.Exists(dir);
+            bool dirWritable = false;
+            string dirNote = null;
+            if (dirExists)
+            {
+                try
+                {
+                    string probe = Path.Combine(dir, ".writeprobe");
+                    File.WriteAllText(probe, "");
+                    File.Delete(probe);
+                    dirWritable = true;
+                }
+                catch (Exception ex)
+                {
+                    dirNote = "Not writable by the app pool identity: " + ex.Message;
+                }
+            }
+            else
+            {
+                dirNote = "Does not exist. It is created on first seed, but the app pool " +
+                          "identity must be able to create it.";
+            }
+
+            DateTime at;
+            bool haveWm = TryLoadWatermark(channel, out at);
+            double ageMin = haveWm ? (DateTime.Now - at).TotalMinutes : 0;
+
+            // Raw file too, so a corrupt watermark is visible rather than just
+            // reported as absent.
+            string raw = null;
+            if (File.Exists(path))
+            {
+                try { raw = Snip(File.ReadAllText(path)); }
+                catch (Exception ex) { raw = "unreadable: " + ex.Message; }
+            }
+
+            string bearer = ReadSetting("TOWNKART_TOKEN");
+            string apiKey = ReadSetting("TOWNKART_API_KEY");
+
+            ZeroPolicy zero = ZeroPolicy.Resolve(null, null);
+
+            string verdict =
+                !haveWm ? (raw == null ? "NOT SEEDED" : "WATERMARK UNREADABLE")
+                : ageMin > staleMinutes ? "STALE"
+                : "OK";
+
+            return Json(new
+            {
+                Status = verdict == "OK",
+                Verdict = verdict,
+                Env = env,
+                Channel = channel,
+                StateDir = dir,
+                StateDirExists = dirExists,
+                StateDirWritable = dirWritable,
+                StateDirNote = dirNote,
+                StateFile = path,
+                StateFileExists = File.Exists(path),
+                WatermarkAt = haveWm ? at.ToString("yyyy-MM-dd HH:mm:ss") : null,
+                WatermarkAgeMinutes = haveWm ? (int?)Math.Round(ageMin) : null,
+                StaleAfterMinutes = staleMinutes,
+                RawState = raw,
+                CredentialsConfigured =
+                    !string.IsNullOrWhiteSpace(bearer) && !string.IsNullOrWhiteSpace(apiKey),
+                TokenLength = string.IsNullOrWhiteSpace(bearer) ? 0 : bearer.Length,
+                ApiKeyLength = string.IsNullOrWhiteSpace(apiKey) ? 0 : apiKey.Length,
+                ZeroPolicy = zero.Describe(),
+                ReaderFm = "Z_INV_STOREWISE_V2",
+                DeltaFm = DELTA_FM,
+                TownkartUrl = TOWNKART_URL,
+                ServerTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            });
         }
 
         // ── Watermark state (host-local, survives deploys) ────────────────
@@ -1026,9 +1173,64 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
         // ── Mapping (spec section 8.2) ────────────────────────────────────
 
-        private JArray MapItems(JArray rows, string site, out int clamped)
+        /// <summary>
+        /// How a zero-quantity row is expressed to Townkart. Vendor question
+        /// Q1/O4 — does quantity 0 under REPLACE actually clear their stock, or
+        /// do they need a different adjustmentType, or a separate de-list call?
+        ///
+        /// The reader FM does not change under any of those answers: it already
+        /// emits an explicit 0. Only this mapping moves, so the answer is a
+        /// setting rather than a rebuild.
+        ///
+        ///   zeroMode=send (default) — qty 0 goes as a normal REPLACE row
+        ///   zeroMode=skip           — zero rows are dropped from the payload
+        ///   zeroAdjustment=X        — zero rows carry adjustmentType X instead
+        ///
+        /// Defaults come from TOWNKART_ZERO_MODE / TOWNKART_ZERO_ADJUSTMENT so
+        /// the answer can be applied on the host without a deploy.
+        /// </summary>
+        private class ZeroPolicy
+        {
+            public string Mode;
+            public string Adjustment;
+
+            public static ZeroPolicy Resolve(string mode, string adjustment)
+            {
+                string m = (mode ?? ReadSetting("TOWNKART_ZERO_MODE") ?? "send")
+                           .Trim().ToLowerInvariant();
+                if (m != "skip") m = "send";
+
+                string a = adjustment ?? ReadSetting("TOWNKART_ZERO_ADJUSTMENT");
+                a = string.IsNullOrWhiteSpace(a) ? ADJUSTMENT_TYPE : a.Trim();
+
+                return new ZeroPolicy { Mode = m, Adjustment = a };
+            }
+
+            public bool Skip { get { return Mode == "skip"; } }
+
+            public string Describe()
+            {
+                if (Skip)
+                {
+                    return "zeroMode=skip — sold-out SKUs are NOT sent, so Townkart keeps " +
+                           "their previous quantity and they stay orderable. Only correct " +
+                           "if Townkart clears stock some other way.";
+                }
+                return Adjustment == ADJUSTMENT_TYPE
+                    ? "zeroMode=send — sold-out SKUs go as quantity 0 with adjustmentType " +
+                      ADJUSTMENT_TYPE + ". Assumes 0 under REPLACE clears their stock (Q1/O4, " +
+                      "unconfirmed)."
+                    : "zeroMode=send — sold-out SKUs go as quantity 0 with adjustmentType " +
+                      Adjustment + " (overridden from " + ADJUSTMENT_TYPE + ").";
+            }
+        }
+
+        private JArray MapItems(JArray rows, string site, ZeroPolicy zero,
+                                out int clamped, out int zeros, out int zerosSkipped)
         {
             clamped = 0;
+            zeros = 0;
+            zerosSkipped = 0;
             var items = new JArray();
 
             foreach (JObject row in rows.OfType<JObject>())
@@ -1044,6 +1246,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     clamped++;
                 }
 
+                // Counted AFTER the clamp — a clamped negative is a zero we
+                // send, and the count of zeros sent is the whole question.
+                if (qty == 0)
+                {
+                    zeros++;
+                    if (zero.Skip)
+                    {
+                        zerosSkipped++;
+                        continue;
+                    }
+                }
+
                 items.Add(new JObject
                 {
                     ["itemSKU"] = sku,
@@ -1051,7 +1265,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     ["shelfCode"] = SHELF_CODE,
                     ["inventoryType"] = INVENTORY_TYPE,
                     ["sla"] = SLA,
-                    ["adjustmentType"] = ADJUSTMENT_TYPE,
+                    ["adjustmentType"] = qty == 0 ? zero.Adjustment : ADJUSTMENT_TYPE,
                     ["remarks"] = GenericArticle(sku) + "-" + site,
                     ["facilityCode"] = FACILITY_CODE
                 });
@@ -1080,6 +1294,111 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             public string Body;
             public int Attempts;
             public int LatencyMs;
+
+            /// <summary>
+            /// What the response BODY said, independent of the status code.
+            /// true = body confirms acceptance, false = body reports rejected
+            /// records, null = shape not recognised.
+            /// </summary>
+            public bool? BodyOk;
+            public string BodyNote;
+        }
+
+        /// <summary>
+        /// A 2xx is not proof of acceptance. Spec section 12 shows a response
+        /// envelope but never says whether a batch can be accepted at the HTTP
+        /// layer while individual records inside it are rejected — that is
+        /// vendor question Q5/O6, still unanswered.
+        ///
+        /// Until it is answered, this reads the body for any of the shapes a
+        /// partial-accept API normally uses and fails the batch when it finds
+        /// one. Failing a batch that actually succeeded costs one re-send, and
+        /// REPLACE makes a re-send idempotent. Passing a batch that was
+        /// actually rejected advances the watermark over it and loses those
+        /// rows for good. The asymmetry decides the direction.
+        ///
+        /// Returns null when nothing is recognised, so an unknown envelope
+        /// falls back to the status code rather than failing everything.
+        /// </summary>
+        private static bool? JudgeBody(string body, out string note)
+        {
+            note = null;
+            if (string.IsNullOrWhiteSpace(body)) return null;
+
+            JObject o;
+            try
+            {
+                string t = body.TrimStart();
+                if (t.Length == 0 || t[0] != '{') return null;
+                o = JObject.Parse(body);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            // 1. Explicit boolean success flag.
+            string[] boolKeys = { "success", "isSuccess", "ok", "Status", "status" };
+            foreach (string k in boolKeys)
+            {
+                JToken t = o[k];
+                if (t == null) continue;
+                if (t.Type == JTokenType.Boolean)
+                {
+                    if ((bool)t) return true;
+                    note = k + "=false";
+                    return false;
+                }
+                if (t.Type == JTokenType.String)
+                {
+                    string v = ((string)t ?? "").Trim();
+                    if (v.Equals("error", StringComparison.OrdinalIgnoreCase) ||
+                        v.Equals("failed", StringComparison.OrdinalIgnoreCase) ||
+                        v.Equals("failure", StringComparison.OrdinalIgnoreCase) ||
+                        v.Equals("rejected", StringComparison.OrdinalIgnoreCase))
+                    {
+                        note = k + "=" + v;
+                        return false;
+                    }
+                }
+            }
+
+            // 2. A non-empty list of rejected records.
+            string[] listKeys =
+            {
+                "errors", "failedRecords", "failed", "rejected",
+                "invalidRecords", "failures", "rejectedItems", "errorList"
+            };
+            foreach (string k in listKeys)
+            {
+                JArray a = o[k] as JArray;
+                if (a != null && a.Count > 0)
+                {
+                    note = k + "[" + a.Count + "]";
+                    return false;
+                }
+            }
+
+            // 3. A non-zero rejection count.
+            string[] countKeys =
+            {
+                "failedCount", "errorCount", "rejectedCount",
+                "failureCount", "invalidCount"
+            };
+            foreach (string k in countKeys)
+            {
+                JToken t = o[k];
+                if (t == null) continue;
+                int n;
+                if (int.TryParse(((t.Type == JTokenType.String) ? (string)t : t.ToString()),
+                                 out n) && n > 0)
+                {
+                    note = k + "=" + n;
+                    return false;
+                }
+            }
+
+            return null;
         }
 
         private async Task<BatchOutcome> PostWithRetry(HttpClient http, string url, string body)
@@ -1101,7 +1420,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
                     if (resp.IsSuccessStatusCode)
                     {
-                        result.Ok = true;
+                        string bodyNote;
+                        result.BodyOk = JudgeBody(result.Body, out bodyNote);
+                        result.BodyNote = bodyNote;
+
+                        // A 2xx whose body reports rejected records is not an
+                        // acceptance. Record-level rejection is deterministic,
+                        // so it is not retried — it is surfaced, and it holds
+                        // the watermark back.
+                        result.Ok = result.BodyOk != false;
                         break;
                     }
 
@@ -1146,6 +1473,34 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         }
 
         // ── Helpers ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Says out loud whether acceptance was decided by the body or only by
+        /// the status code. "Every batch returned 200" is not the same claim as
+        /// "every record was taken", and the difference is invisible unless it
+        /// is printed.
+        /// </summary>
+        private static string BodyVerdictNote(int judged, int unjudged)
+        {
+            int total = judged + unjudged;
+            if (total == 0) return null;
+
+            if (judged == 0)
+            {
+                return "No batch response matched a known accept/reject envelope — " +
+                       "acceptance was judged on the HTTP status code alone. If Townkart " +
+                       "can reject individual records inside a 2xx (Q5/O6, unanswered), " +
+                       "those rows are being counted as delivered and the watermark moves " +
+                       "past them. Read batch_log[].response and teach JudgeBody the real " +
+                       "shape before trusting a live run.";
+            }
+            if (unjudged > 0)
+            {
+                return judged + " of " + total + " batch responses were recognised at body " +
+                       "level; the rest fell back to the HTTP status code.";
+            }
+            return "All " + total + " batch responses were recognised at body level.";
+        }
 
         private static string Snip(string s)
         {
