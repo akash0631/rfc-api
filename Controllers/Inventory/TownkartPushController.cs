@@ -1385,9 +1385,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         siteResults.Add(new JObject
                         {
                             ["store_code"] = site,
+                            // "Partially Successful" is exactly the reassuring
+                            // phrase this store must not get: the accepted
+                            // batches will be sent again on the next run and
+                            // added twice. Say so in the status itself, not
+                            // only in a field somebody has to go and read.
                             ["status"] = failBatches == 0 ? "Success"
                                        : siteAmbiguous ? "UNKNOWN — may have applied"
-                                       : (okBatches > 0 ? "Partially Successful" : "Failed"),
+                                       : doubleApplyRisk ? "PARTIAL — re-run will double-apply"
+                                       : "Failed",
                             ["skus"] = items.Count,
                             ["batches_ok"] = okBatches,
                             ["batches_failed"] = failBatches,
