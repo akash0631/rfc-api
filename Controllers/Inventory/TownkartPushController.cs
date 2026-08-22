@@ -1232,10 +1232,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 var siteResults = new List<JObject>();
                 int grandSkus = 0, grandPushed = 0, grandFailed = 0, grandBatches = 0;
                 int bodyJudged = 0, bodyUnjudged = 0;
+                int ambiguousBatches = 0;
                 bool abortRun = false;
                 string abortReason = null;
                 object samplePayload = null;
                 var advanced = new List<string>();
+                var ambiguousStores = new List<string>();
 
                 using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(HTTP_TIMEOUT_SEC) })
                 {
@@ -1304,10 +1306,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                                 ["inventoryData"] = slice
                             };
 
+                            // retryAmbiguous:false — an additive quantity must
+                            // never be re-sent on a maybe.
                             BatchOutcome outcome = await PostWithRetry(
-                                http, moveUrl, payload.ToString(Formatting.None), invHeaders);
+                                http, moveUrl, payload.ToString(Formatting.None), invHeaders,
+                                retryAmbiguous: false);
 
                             if (outcome.BodyOk.HasValue) bodyJudged++; else bodyUnjudged++;
+                            if (outcome.Ambiguous) ambiguousBatches++;
 
                             batchLog.Add(new JObject
                             {
@@ -1320,6 +1326,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                                     : "unrecognised",
                                 ["body_note"] = outcome.BodyNote,
                                 ["latency_ms"] = outcome.LatencyMs,
+                                ["ambiguous"] = outcome.Ambiguous,
                                 ["response"] = Snip(outcome.Body)
                             });
 
@@ -1327,6 +1334,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                             else
                             {
                                 failBatches++; grandFailed += take;
+                                if (outcome.Ambiguous && !ambiguousStores.Contains(site))
+                                    ambiguousStores.Add(site);
                                 if (outcome.Code == 401 || outcome.Code == 403)
                                 {
                                     abortRun = true;
@@ -1337,21 +1346,33 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                             }
                         }
 
-                        // Per store, and only on a clean sweep. A partial
-                        // store keeps its old baseline and re-sends the
-                        // whole window next time — which is safe ONLY
-                        // because a failed batch was never applied.
+                        // Per store, and only on a clean sweep. A partial store
+                        // keeps its old baseline and re-sends the whole window
+                        // next time — safe only because a REFUSED batch (4xx,
+                        // 429, or a body-level rejection) provably never
+                        // applied.
+                        //
+                        // An AMBIGUOUS batch breaks that argument: it may have
+                        // landed. Holding the baseline re-sends it and doubles
+                        // the quantity; advancing drops it. Neither is right,
+                        // so the store is held AND named — the re-send is the
+                        // recoverable half of the coin flip, but a human has to
+                        // know it happened. Until Townkart support an
+                        // idempotency key this is the best available answer.
+                        bool siteAmbiguous = ambiguousStores.Contains(site);
                         if (failBatches == 0) { marks[site] = now; advanced.Add(site); }
 
                         siteResults.Add(new JObject
                         {
                             ["store_code"] = site,
                             ["status"] = failBatches == 0 ? "Success"
+                                       : siteAmbiguous ? "UNKNOWN — may have applied"
                                        : (okBatches > 0 ? "Partially Successful" : "Failed"),
                             ["skus"] = items.Count,
                             ["batches_ok"] = okBatches,
                             ["batches_failed"] = failBatches,
                             ["baseline_advanced"] = failBatches == 0,
+                            ["needs_review"] = siteAmbiguous,
                             ["batch_log"] = batchLog
                         });
                     }
@@ -1364,8 +1385,19 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         RunStatus = abortRun ? "Failed"
                                   : dryRun ? "Dry run"
                                   : grandFailed == 0 ? "Success"
+                                  : ambiguousBatches > 0 ? "UNKNOWN — manual reconciliation needed"
                                   : grandPushed > 0 ? "Partially Successful" : "Failed",
                         AbortReason = abortReason,
+                        AmbiguousBatches = ambiguousBatches,
+                        AmbiguousStores = ambiguousStores,
+                        AmbiguousNote = ambiguousBatches == 0 ? null
+                            : ambiguousBatches + " batch(es) failed with a 5xx or a timeout and were "
+                            + "NOT retried, because this feed is additive and a re-send would add the "
+                            + "quantity twice. Townkart may or may not have applied them. The affected "
+                            + "stores kept their old baseline, so the next run will re-send the same "
+                            + "window — if Townkart did apply these batches, that will double-count. "
+                            + "Reconcile these stores against Townkart before the next run, or ask "
+                            + "Townkart for an idempotency key so the ambiguity stops existing.",
                         Env = env,
                         Fm = MOVE_FM,
                         DryRun = dryRun,
@@ -1942,6 +1974,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             /// </summary>
             public bool? BodyOk;
             public string BodyNote;
+
+            /// <summary>
+            /// Set when the batch failed in a way that MIGHT still have been
+            /// applied at the far end (5xx, or a transport timeout) and was
+            /// deliberately not retried because the feed is additive. The
+            /// quantity is in an unknown state: re-sending may double it,
+            /// dropping it may lose it. Needs a human, not a retry.
+            /// </summary>
+            public bool Ambiguous;
         }
 
         /// <summary>
@@ -2115,8 +2156,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             return h;
         }
 
+        /// <param name="retryAmbiguous">
+        /// Whether an outcome that MIGHT already have been applied (5xx, or a
+        /// transport timeout) may be retried. True for the absolute snapshot
+        /// feed, where REPLACE makes a re-send harmless. MUST be false for the
+        /// additive movement feed: there a re-send adds the quantity a second
+        /// time, and nothing downstream ever re-reads a balance to correct it.
+        ///
+        /// A 429 is retried either way — rate limiting is a refusal, so the
+        /// request provably did not apply. That is the only failure we can
+        /// distinguish; 5xx and timeouts are genuinely unknowable from here,
+        /// which is why an idempotency key is on the open-questions list.
+        /// </param>
         private async Task<BatchOutcome> PostWithRetry(HttpClient http, string url, string body,
-                                                       IDictionary<string, string> headers)
+                                                       IDictionary<string, string> headers,
+                                                       bool retryAmbiguous = true)
         {
             var started = DateTime.UtcNow;
             var result = new BatchOutcome { Code = 0, Body = "", Attempts = 0 };
@@ -2171,6 +2225,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     }
                     else if (result.Code >= 500)
                     {
+                        if (!retryAmbiguous)
+                        {
+                            // May already have been applied. Under ADD a retry
+                            // would add the quantity twice, so stop and let the
+                            // run surface it instead.
+                            result.Ambiguous = true;
+                            break;
+                        }
                         waitMs = attempt < RETRY_WAITS_MS.Length ? RETRY_WAITS_MS[attempt] : -1;
                     }
                     else
@@ -2181,10 +2243,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 }
                 catch (Exception ex)
                 {
-                    // Timeout / transport error. Retried like a 5xx; REPLACE
-                    // makes a re-send idempotent (spec 11.1).
+                    // Timeout / transport error. The request may have been
+                    // received and applied before the connection dropped, so
+                    // this is the same unknowable case as a 5xx: retried only
+                    // for the REPLACE feed (spec 11.1), never for movements.
                     result.Code = 599;
                     result.Body = "Transport: " + ex.Message;
+                    if (!retryAmbiguous) { result.Ambiguous = true; break; }
                     waitMs = attempt < RETRY_WAITS_MS.Length ? RETRY_WAITS_MS[attempt] : -1;
                 }
 
