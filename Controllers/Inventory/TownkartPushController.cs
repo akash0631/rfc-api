@@ -1238,6 +1238,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 object samplePayload = null;
                 var advanced = new List<string>();
                 var ambiguousStores = new List<string>();
+                var doubleApplyStores = new List<string>();
 
                 using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(HTTP_TIMEOUT_SEC) })
                 {
@@ -1291,7 +1292,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         }
 
                         var batchLog = new JArray();
-                        int okBatches = 0, failBatches = 0;
+                        int okBatches = 0, failBatches = 0, skippedBatches = 0;
 
                         for (int off = 0; off < items.Count; off += chunkSize)
                         {
@@ -1341,25 +1342,44 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                                     abortRun = true;
                                     abortReason = "HTTP " + outcome.Code + " from Townkart — token " +
                                                   "expired or invalid. Run aborted at site " + site + ".";
-                                    break;
                                 }
+
+                                // Stop this store at the first failure. Every
+                                // further batch we send widens the prefix that
+                                // a re-run will double-apply (see below), and
+                                // buys nothing: the baseline is already held.
+                                int unsent = items.Count - (off + take);
+                                grandFailed += unsent;
+                                skippedBatches = (unsent + chunkSize - 1) / chunkSize;
+                                break;
                             }
                         }
 
                         // Per store, and only on a clean sweep. A partial store
-                        // keeps its old baseline and re-sends the whole window
-                        // next time — safe only because a REFUSED batch (4xx,
-                        // 429, or a body-level rejection) provably never
-                        // applied.
+                        // keeps its old baseline so nothing is LOST — but that
+                        // is not the same as being safe, and the REPLACE-era
+                        // reasoning that used to sit here was wrong.
                         //
-                        // An AMBIGUOUS batch breaks that argument: it may have
-                        // landed. Holding the baseline re-sends it and doubles
-                        // the quantity; advancing drops it. Neither is right,
-                        // so the store is held AND named — the re-send is the
-                        // recoverable half of the coin flip, but a human has to
-                        // know it happened. Until Townkart support an
-                        // idempotency key this is the best available answer.
+                        // Holding the baseline makes the next run re-read the
+                        // same window and re-send the WHOLE store, including
+                        // the batches that already returned 200. Under REPLACE
+                        // that was free. Under ADD every one of those already-
+                        // applied batches lands a second time. So a partial
+                        // store is a guaranteed double-count on re-run, not a
+                        // coin flip — the ambiguous case below is the coin
+                        // flip, and this one is worse.
+                        //
+                        // It cannot be fixed by resuming from a prefix: the
+                        // next window is [baseline, now'], a superset, so the
+                        // item list differs and "skip the first N" is unsound.
+                        // The batch loop therefore stops at the first failure
+                        // to keep the applied prefix as small as possible, and
+                        // the prefix is reported rather than hidden. A vendor
+                        // idempotency key (Q17) removes the problem entirely.
                         bool siteAmbiguous = ambiguousStores.Contains(site);
+                        bool doubleApplyRisk = okBatches > 0 && failBatches > 0;
+                        if (doubleApplyRisk && !doubleApplyStores.Contains(site))
+                            doubleApplyStores.Add(site);
                         if (failBatches == 0) { marks[site] = now; advanced.Add(site); }
 
                         siteResults.Add(new JObject
@@ -1371,8 +1391,16 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                             ["skus"] = items.Count,
                             ["batches_ok"] = okBatches,
                             ["batches_failed"] = failBatches,
+                            ["batches_skipped"] = skippedBatches,
                             ["baseline_advanced"] = failBatches == 0,
-                            ["needs_review"] = siteAmbiguous,
+                            ["needs_review"] = siteAmbiguous || doubleApplyRisk,
+                            ["batches_already_applied"] = okBatches,
+                            ["double_apply_warning"] = !doubleApplyRisk ? null
+                                : okBatches + " batch(es) were accepted before this store failed. "
+                                + "The baseline was held so nothing is lost, but re-running will "
+                                + "send those accepted batches again and ADD their quantities a "
+                                + "second time. Reconcile this store, or hold it out of the next "
+                                + "run, until Townkart support an idempotency key.",
                             ["batch_log"] = batchLog
                         });
                     }
@@ -1385,9 +1413,17 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         RunStatus = abortRun ? "Failed"
                                   : dryRun ? "Dry run"
                                   : grandFailed == 0 ? "Success"
-                                  : ambiguousBatches > 0 ? "UNKNOWN — manual reconciliation needed"
+                                  : (ambiguousBatches > 0 || doubleApplyStores.Count > 0)
+                                        ? "UNKNOWN — manual reconciliation needed"
                                   : grandPushed > 0 ? "Partially Successful" : "Failed",
                         AbortReason = abortReason,
+                        DoubleApplyStores = doubleApplyStores,
+                        DoubleApplyNote = doubleApplyStores.Count == 0 ? null
+                            : doubleApplyStores.Count + " store(s) had batches accepted before a "
+                            + "later batch failed. Their baselines were held, so nothing is lost — "
+                            + "but a plain re-run will ADD the accepted batches a second time. This "
+                            + "is certain, not a risk. Reconcile or exclude those stores before the "
+                            + "next run. An idempotency key from Townkart (Q17) removes it.",
                         AmbiguousBatches = ambiguousBatches,
                         AmbiguousStores = ambiguousStores,
                         AmbiguousNote = ambiguousBatches == 0 ? null
