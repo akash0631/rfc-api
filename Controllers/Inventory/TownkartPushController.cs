@@ -130,6 +130,33 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         // caller passes the window and owns the watermark.
         private const string DELTA_FM = "Z_INV_DELTA_UT_V1";
 
+        // FG ZINV_UT_MOV1, TR S4DK928276, DEV 2026-08-22.
+        //
+        // UT 2026-08-22: the 5 AM snapshot is absolute, but SAP cannot give
+        // an intraday balance because POS sales only post at 11 PM. So the
+        // intraday feed carries MOVEMENT, not balance, and Townkart applies
+        // it to the running total Axapta is already decrementing.
+        private const string MOVE_FM = "Z_INV_MOVE_UT_V1";
+
+        // Sale movement types Axapta already reports, which must never be
+        // sent again or the same piece is deducted twice.
+        //
+        // 251 POS sale and 252 its return are Axapta's. 601/602 — the
+        // delivery goods issue and its reversal — are NOT: Axapta carries no
+        // website sales, so the web channel reaches Townkart only through
+        // this feed. Confirmed with Akash 2026-08-22. Everything unlisted is
+        // carried, so a movement type nobody anticipated shows up as a
+        // visible quantity rather than vanishing.
+        private const string MOVE_EXCL_BWART = "251,252";
+
+        // Additive semantics. REPLACE is wrong here by construction: the
+        // whole point is "apply -2 to whatever you currently hold", which is
+        // what UT described ("UT calculates 6 - 2 = 4"). Their spec v1.0
+        // documents only REPLACE, so this value has to be one THEY implement
+        // — it is a setting rather than a constant so their answer costs a
+        // config change, not a rebuild.
+        private const string MOVE_ADJUSTMENT = "ADD";
+
         [HttpPost]
         [Route("townkart-push")]
         public async Task<IHttpActionResult> Push(
@@ -266,6 +293,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             int grandZeros = 0, grandZerosSkipped = 0;
             int bodyJudged = 0, bodyUnjudged = 0;
             bool abortRun = false;
+
+            // The instant each store's MARD was read, kept only for stores
+            // whose snapshot actually reached Townkart. This becomes that
+            // store's movement-feed start, so the additive feed picks up
+            // exactly where the absolute one stopped — see SaveMoveMarks.
+            var snapshotAt = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             string abortReason = null;
             object samplePayload = null;
 
@@ -322,6 +355,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
                     if (dryRun || items.Count == 0)
                     {
+                        // A live store with no stock is still a valid
+                        // baseline — it was read, and the answer was zero.
+                        // A dry run delivered nothing, so it seeds nothing.
+                        if (!dryRun) snapshotAt[site] = siteStart;
+
                         siteResults.Add(new JObject
                         {
                             ["store_code"] = site,
@@ -397,6 +435,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         }
                     }
 
+                    // Only a store Townkart took in full gets a movement
+                    // baseline. A partial store would start its additive
+                    // feed from a total the vendor never actually holds.
+                    if (failBatches == 0) snapshotAt[site] = siteStart;
+
                     siteResults.Add(new JObject
                     {
                         ["store_code"] = site,
@@ -414,6 +457,41 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         ["duration_ms"] = (int)(DateTime.Now - siteStart).TotalMilliseconds,
                         ["batch_log"] = batchLog
                     });
+                }
+
+                // Hand the movement feed its starting line. Merged rather
+                // than replaced, so a single-store re-snapshot moves only
+                // that store and leaves the rest of the estate alone.
+                JObject moveSeed = null;
+                if (snapshotAt.Count > 0)
+                {
+                    string moveChannel = "TOWNKART_" + (env ?? "dev").Trim().ToUpperInvariant();
+                    Dictionary<string, DateTime> marks;
+                    if (!TryLoadMoveMarks(moveChannel, out marks))
+                    {
+                        moveSeed = new JObject
+                        {
+                            ["seeded"] = false,
+                            ["error"] = "Existing movement state file is unreadable; refusing to " +
+                                        "overwrite it. Inspect " + MovePath(moveChannel) +
+                                        " — the movement feed is additive, so a wrong baseline " +
+                                        "drifts permanently."
+                        };
+                    }
+                    else
+                    {
+                        foreach (var kv in snapshotAt) marks[kv.Key] = kv.Value;
+                        SaveMoveMarks(moveChannel, marks);
+                        moveSeed = new JObject
+                        {
+                            ["seeded"] = true,
+                            ["stores_seeded"] = snapshotAt.Count,
+                            ["stores_tracked"] = marks.Count,
+                            ["state_file"] = MovePath(moveChannel),
+                            ["note"] = "Each store's movement window starts at the instant its " +
+                                       "own snapshot was read, not at a single run-wide cutoff."
+                        };
+                    }
                 }
 
                 // Spec O7: unconfirmed whether this must follow the push.
@@ -465,6 +543,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                           "that changed. Use /api/inv/townkart-delta instead.",
                     TownkartUrl = TOWNKART_URL,
                     SamplePayload = samplePayload,
+                    MovementSeed = moveSeed,
                     SyncCall = syncResult,
                     StartedAt = runStart.ToString("yyyy-MM-dd HH:mm:ss"),
                     FinishedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -932,6 +1011,525 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             }
         }
 
+        // ── Non-sale movement feed (UT 2026-08-22) ────────────────────────
+        //
+        // Townkart hold a running total: the 5 AM snapshot sets it, Axapta
+        // decrements it as things sell. Everything else that moves stock in
+        // a store — GRT, transfer out, damage, manual adjustment — is
+        // invisible to them until the next morning. Their worked example:
+        //
+        //   05:00  SAP 10, sent to UT              UT 10
+        //   day    2 sold POS + 2 sold web         UT  6   (SAP still 10)
+        //   day    GRT of 2                        SAP 8,  UT still 6
+        //   truth  4
+        //
+        // Sending SAP's 8 would be as wrong as leaving 6. Only "-2" is
+        // right, because only UT knows what the sales already took off.
+        //
+        // NOTE ON THE TRANSPORT HALF: UT have asked for a separate API and
+        // have not published it yet. The reader, the netting and the
+        // per-store watermark are all determinate and are finished; the
+        // endpoint URL and the field names are not. TOWNKART_MOVE_URL is
+        // therefore unset by default and a live run refuses rather than
+        // guessing at somebody else's contract. Dry runs work fully and
+        // show the exact payload we intend to send.
+
+        private static readonly SemaphoreSlim MoveGate = new SemaphoreSlim(1, 1);
+
+        [HttpPost]
+        [Route("townkart-movement")]
+        public async Task<IHttpActionResult> Movement(
+            string env = "dev",
+            bool dryRun = true,
+            string werks = null,
+            string seg = "APP,GM,FBG",
+            int chunkSize = 500,
+            int maxRows = 50000,
+            string exclBwart = null,
+            string pool = null,
+            string adjustment = null)
+        {
+            var runStart = DateTime.Now;
+
+            IEnumerable<string> keyHeaders;
+            bool hasKey = Request.Headers.TryGetValues("X-RFC-Key", out keyHeaders);
+            if (!hasKey || keyHeaders.FirstOrDefault() != API_KEY)
+                return Json(new { Status = false, Message = "Unauthorized — missing or invalid X-RFC-Key" });
+
+            if (chunkSize < 1 || chunkSize > 5000)
+                return Json(new { Status = false, Message = "chunkSize must be 1..5000" });
+
+            RfcConfigParameters rfcPar;
+            if (!TryResolveEnv(env, out rfcPar))
+                return Json(new { Status = false, Message = "Invalid env '" + env + "'" });
+
+            string channel = "TOWNKART_" + env.Trim().ToUpperInvariant();
+
+            Dictionary<string, DateTime> marks;
+            if (!TryLoadMoveMarks(channel, out marks))
+                return Json(new
+                {
+                    Status = false,
+                    Message = "Movement state file is unreadable. Refusing to run — this feed is " +
+                              "additive, so guessing a baseline drifts permanently.",
+                    StateFile = MovePath(channel)
+                });
+
+            if (marks.Count == 0)
+                return Json(new
+                {
+                    Status = false,
+                    Message = "No store has a movement baseline yet. Run /api/inv/townkart-push " +
+                              "live first — it records each store's snapshot instant and seeds " +
+                              "this feed from there.",
+                    StateFile = MovePath(channel)
+                });
+
+            // A store is eligible only if its snapshot succeeded. Anything
+            // the caller names that has no baseline is reported, not
+            // silently skipped — a quietly absent store looks identical to
+            // a store with nothing to send.
+            var wanted = new List<string>();
+            var noBaseline = new List<string>();
+            if (!string.IsNullOrWhiteSpace(werks))
+            {
+                foreach (string w in werks.Split(',').Select(x => x.Trim().ToUpperInvariant())
+                                          .Where(x => x.Length > 0).Distinct())
+                {
+                    if (marks.ContainsKey(w)) wanted.Add(w); else noBaseline.Add(w);
+                }
+            }
+            else wanted.AddRange(marks.Keys);
+
+            if (wanted.Count == 0)
+                return Json(new
+                {
+                    Status = false,
+                    Message = "None of the requested stores has a movement baseline.",
+                    StoresWithoutBaseline = noBaseline
+                });
+
+            string moveUrl = ReadSetting("TOWNKART_MOVE_URL");
+            if (!dryRun && string.IsNullOrWhiteSpace(moveUrl))
+                return Json(new
+                {
+                    Status = false,
+                    Message = "TOWNKART_MOVE_URL is not set. UT have asked for a separate " +
+                              "movement API but have not published its address or payload " +
+                              "shape yet, so there is nothing to POST to. Dry runs work and " +
+                              "show exactly what we intend to send."
+                });
+
+            string bearer = ReadSetting("TOWNKART_TOKEN");
+            string apiKey = ReadSetting("TOWNKART_API_KEY");
+            if (!dryRun && (string.IsNullOrWhiteSpace(bearer) || string.IsNullOrWhiteSpace(apiKey)))
+                return Json(new { Status = false, Message = "Townkart credentials not configured on this host." });
+
+            if (!await MoveGate.WaitAsync(0))
+                return Json(new { Status = false, Message = "A movement run is already in progress on this host. Skipped." });
+
+            try
+            {
+                RfcDestination dest;
+                try { dest = RfcDestinationManager.GetDestination(rfcPar); }
+                catch (Exception ex)
+                { return Json(new { Status = false, Message = "RFC connect failed: " + ex.Message }); }
+
+                string adj = string.IsNullOrWhiteSpace(adjustment)
+                    ? (ReadSetting("TOWNKART_MOVE_ADJUSTMENT") ?? MOVE_ADJUSTMENT)
+                    : adjustment.Trim();
+                string excl = string.IsNullOrWhiteSpace(exclBwart)
+                    ? (ReadSetting("TOWNKART_MOVE_EXCL_BWART") ?? MOVE_EXCL_BWART)
+                    : exclBwart.Trim();
+
+                DateTime now = DateTime.Now;
+
+                // Stores sharing a baseline share one FM call. After the
+                // first run they all converge on the same "to", so the
+                // fan-out collapses to a single call in steady state and is
+                // only wide on the first pass after a snapshot.
+                var groups = wanted.GroupBy(s => marks[s].ToString("yyyyMMddHHmmss"))
+                                   .OrderBy(g => g.Key).ToList();
+
+                var siteRows = new Dictionary<string, JArray>(StringComparer.OrdinalIgnoreCase);
+                var groupLog = new JArray();
+                int grandRows = 0, grandPairs = 0, grandNetZero = 0;
+
+                foreach (var g in groups)
+                {
+                    DateTime from = marks[g.First()];
+                    if (from > now)
+                        return Json(new
+                        {
+                            Status = false,
+                            Message = "Baseline " + from.ToString("yyyy-MM-dd HH:mm:ss") +
+                                      " is in the future. Re-snapshot those stores.",
+                            Stores = g.ToList()
+                        });
+
+                    string sites = string.Join(",", g);
+                    JArray rows;
+                    int rowCount, pairs, emitted, netZero, pos, neg;
+                    bool truncated;
+                    string fmMsg;
+                    try
+                    {
+                        rows = ReadMovements(dest, from, now, sites, seg, maxRows, excl, pool,
+                                             out rowCount, out pairs, out emitted, out netZero,
+                                             out pos, out neg, out truncated, out fmMsg);
+                    }
+                    catch (Exception ex)
+                    {
+                        return Json(new
+                        {
+                            Status = false,
+                            Message = MOVE_FM + " failed: " + ex.Message,
+                            Stores = g.ToList(),
+                            WindowFrom = from.ToString("yyyy-MM-dd HH:mm:ss")
+                        });
+                    }
+
+                    // Truncation here is not a performance note. A dropped
+                    // movement is never re-derived, because nothing in this
+                    // design re-reads a balance to correct it.
+                    if (truncated)
+                        return Json(new
+                        {
+                            Status = false,
+                            Message = "More than " + maxRows + " movement rows in this window. " +
+                                      "Raise &maxRows or run more often. Nothing was sent and no " +
+                                      "baseline moved — an additive feed cannot recover a row it " +
+                                      "never saw.",
+                            Stores = g.ToList(),
+                            WindowFrom = from.ToString("yyyy-MM-dd HH:mm:ss"),
+                            WindowTo = now.ToString("yyyy-MM-dd HH:mm:ss")
+                        });
+
+                    grandRows += rowCount; grandPairs += pairs; grandNetZero += netZero;
+
+                    groupLog.Add(new JObject
+                    {
+                        ["window_from"] = from.ToString("yyyy-MM-dd HH:mm:ss"),
+                        ["stores"] = new JArray(g.ToList()),
+                        ["mseg_rows"] = rowCount,
+                        ["pairs"] = pairs,
+                        ["netted_to_zero"] = netZero,
+                        ["emitted"] = emitted,
+                        ["positive"] = pos,
+                        ["negative"] = neg,
+                        ["fm_message"] = fmMsg
+                    });
+
+                    foreach (JObject row in rows.OfType<JObject>())
+                    {
+                        string s = (string)row["store_code"];
+                        if (string.IsNullOrWhiteSpace(s)) continue;
+                        if (!siteRows.ContainsKey(s)) siteRows[s] = new JArray();
+                        siteRows[s].Add(row);
+                    }
+                }
+
+                var siteResults = new List<JObject>();
+                int grandSkus = 0, grandPushed = 0, grandFailed = 0, grandBatches = 0;
+                int bodyJudged = 0, bodyUnjudged = 0;
+                int ambiguousBatches = 0;
+                bool abortRun = false;
+                string abortReason = null;
+                object samplePayload = null;
+                var advanced = new List<string>();
+                var ambiguousStores = new List<string>();
+                var doubleApplyStores = new List<string>();
+
+                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(HTTP_TIMEOUT_SEC) })
+                {
+                    var invHeaders = InventoryHeaders(apiKey, bearer);
+
+                    foreach (string site in wanted.OrderBy(s => s))
+                    {
+                        if (abortRun) break;
+
+                        JArray rows;
+                        if (!siteRows.TryGetValue(site, out rows)) rows = new JArray();
+                        JArray items = MapMovements(rows, site, adj);
+                        grandSkus += items.Count;
+
+                        if (samplePayload == null && items.Count > 0)
+                            samplePayload = new
+                            {
+                                storeCode = site,
+                                businessDate = runStart.ToString("yyyy-MM-dd"),
+                                inventoryData = items.Take(2).ToList()
+                            };
+
+                        int siteBatches = (items.Count + chunkSize - 1) / chunkSize;
+                        grandBatches += siteBatches;
+
+                        if (items.Count == 0)
+                        {
+                            // Nothing moved. The baseline still advances —
+                            // the window was genuinely consumed.
+                            if (!dryRun) { marks[site] = now; advanced.Add(site); }
+                            siteResults.Add(new JObject
+                            {
+                                ["store_code"] = site,
+                                ["status"] = "No movements",
+                                ["skus"] = 0
+                            });
+                            continue;
+                        }
+
+                        if (dryRun)
+                        {
+                            siteResults.Add(new JObject
+                            {
+                                ["store_code"] = site,
+                                ["status"] = "Dry run",
+                                ["skus"] = items.Count,
+                                ["would_be_batches"] = siteBatches,
+                                ["sample"] = new JArray(items.Take(3))
+                            });
+                            continue;
+                        }
+
+                        var batchLog = new JArray();
+                        int okBatches = 0, failBatches = 0, skippedBatches = 0;
+
+                        for (int off = 0; off < items.Count; off += chunkSize)
+                        {
+                            int take = Math.Min(chunkSize, items.Count - off);
+                            var slice = new JArray();
+                            for (int i = 0; i < take; i++) slice.Add(items[off + i]);
+
+                            var payload = new JObject
+                            {
+                                ["storeCode"] = site,
+                                ["businessDate"] = runStart.ToString("yyyy-MM-dd"),
+                                ["inventoryData"] = slice
+                            };
+
+                            // retryAmbiguous:false — an additive quantity must
+                            // never be re-sent on a maybe.
+                            BatchOutcome outcome = await PostWithRetry(
+                                http, moveUrl, payload.ToString(Formatting.None), invHeaders,
+                                retryAmbiguous: false);
+
+                            if (outcome.BodyOk.HasValue) bodyJudged++; else bodyUnjudged++;
+                            if (outcome.Ambiguous) ambiguousBatches++;
+
+                            batchLog.Add(new JObject
+                            {
+                                ["batch"] = (off / chunkSize) + 1,
+                                ["skus"] = take,
+                                ["http_code"] = outcome.Code,
+                                ["ok"] = outcome.Ok,
+                                ["body_verdict"] = outcome.BodyOk.HasValue
+                                    ? (outcome.BodyOk.Value ? "accepted" : "rejected")
+                                    : "unrecognised",
+                                ["body_note"] = outcome.BodyNote,
+                                ["latency_ms"] = outcome.LatencyMs,
+                                ["ambiguous"] = outcome.Ambiguous,
+                                ["response"] = Snip(outcome.Body)
+                            });
+
+                            if (outcome.Ok) { okBatches++; grandPushed += take; }
+                            else
+                            {
+                                failBatches++; grandFailed += take;
+                                if (outcome.Ambiguous && !ambiguousStores.Contains(site))
+                                    ambiguousStores.Add(site);
+                                if (outcome.Code == 401 || outcome.Code == 403)
+                                {
+                                    abortRun = true;
+                                    abortReason = "HTTP " + outcome.Code + " from Townkart — token " +
+                                                  "expired or invalid. Run aborted at site " + site + ".";
+                                }
+
+                                // Stop this store at the first failure. Every
+                                // further batch we send widens the prefix that
+                                // a re-run will double-apply (see below), and
+                                // buys nothing: the baseline is already held.
+                                int unsent = items.Count - (off + take);
+                                grandFailed += unsent;
+                                skippedBatches = (unsent + chunkSize - 1) / chunkSize;
+                                break;
+                            }
+                        }
+
+                        // Per store, and only on a clean sweep. A partial store
+                        // keeps its old baseline so nothing is LOST — but that
+                        // is not the same as being safe, and the REPLACE-era
+                        // reasoning that used to sit here was wrong.
+                        //
+                        // Holding the baseline makes the next run re-read the
+                        // same window and re-send the WHOLE store, including
+                        // the batches that already returned 200. Under REPLACE
+                        // that was free. Under ADD every one of those already-
+                        // applied batches lands a second time. So a partial
+                        // store is a guaranteed double-count on re-run, not a
+                        // coin flip — the ambiguous case below is the coin
+                        // flip, and this one is worse.
+                        //
+                        // It cannot be fixed by resuming from a prefix: the
+                        // next window is [baseline, now'], a superset, so the
+                        // item list differs and "skip the first N" is unsound.
+                        // The batch loop therefore stops at the first failure
+                        // to keep the applied prefix as small as possible, and
+                        // the prefix is reported rather than hidden. A vendor
+                        // idempotency key (Q17) removes the problem entirely.
+                        bool siteAmbiguous = ambiguousStores.Contains(site);
+                        bool doubleApplyRisk = okBatches > 0 && failBatches > 0;
+                        if (doubleApplyRisk && !doubleApplyStores.Contains(site))
+                            doubleApplyStores.Add(site);
+                        if (failBatches == 0) { marks[site] = now; advanced.Add(site); }
+
+                        siteResults.Add(new JObject
+                        {
+                            ["store_code"] = site,
+                            ["status"] = failBatches == 0 ? "Success"
+                                       : siteAmbiguous ? "UNKNOWN — may have applied"
+                                       : (okBatches > 0 ? "Partially Successful" : "Failed"),
+                            ["skus"] = items.Count,
+                            ["batches_ok"] = okBatches,
+                            ["batches_failed"] = failBatches,
+                            ["batches_skipped"] = skippedBatches,
+                            ["baseline_advanced"] = failBatches == 0,
+                            ["needs_review"] = siteAmbiguous || doubleApplyRisk,
+                            ["batches_already_applied"] = okBatches,
+                            ["double_apply_warning"] = !doubleApplyRisk ? null
+                                : okBatches + " batch(es) were accepted before this store failed. "
+                                + "The baseline was held so nothing is lost, but re-running will "
+                                + "send those accepted batches again and ADD their quantities a "
+                                + "second time. Reconcile this store, or hold it out of the next "
+                                + "run, until Townkart support an idempotency key.",
+                            ["batch_log"] = batchLog
+                        });
+                    }
+
+                    if (!dryRun && advanced.Count > 0) SaveMoveMarks(channel, marks);
+
+                    return Json(new
+                    {
+                        Status = !abortRun && (dryRun || grandFailed == 0),
+                        RunStatus = abortRun ? "Failed"
+                                  : dryRun ? "Dry run"
+                                  : grandFailed == 0 ? "Success"
+                                  : (ambiguousBatches > 0 || doubleApplyStores.Count > 0)
+                                        ? "UNKNOWN — manual reconciliation needed"
+                                  : grandPushed > 0 ? "Partially Successful" : "Failed",
+                        AbortReason = abortReason,
+                        DoubleApplyStores = doubleApplyStores,
+                        DoubleApplyNote = doubleApplyStores.Count == 0 ? null
+                            : doubleApplyStores.Count + " store(s) had batches accepted before a "
+                            + "later batch failed. Their baselines were held, so nothing is lost — "
+                            + "but a plain re-run will ADD the accepted batches a second time. This "
+                            + "is certain, not a risk. Reconcile or exclude those stores before the "
+                            + "next run. An idempotency key from Townkart (Q17) removes it.",
+                        AmbiguousBatches = ambiguousBatches,
+                        AmbiguousStores = ambiguousStores,
+                        AmbiguousNote = ambiguousBatches == 0 ? null
+                            : ambiguousBatches + " batch(es) failed with a 5xx or a timeout and were "
+                            + "NOT retried, because this feed is additive and a re-send would add the "
+                            + "quantity twice. Townkart may or may not have applied them. The affected "
+                            + "stores kept their old baseline, so the next run will re-send the same "
+                            + "window — if Townkart did apply these batches, that will double-count. "
+                            + "Reconcile these stores against Townkart before the next run, or ask "
+                            + "Townkart for an idempotency key so the ambiguity stops existing.",
+                        Env = env,
+                        Fm = MOVE_FM,
+                        DryRun = dryRun,
+                        Channel = channel,
+                        AdjustmentType = adj,
+                        ExcludedMovementTypes = excl,
+                        StoragePool = string.IsNullOrWhiteSpace(pool) ? "0001,0002" : pool,
+                        WindowTo = now.ToString("yyyy-MM-dd HH:mm:ss"),
+                        StoresInScope = wanted.Count,
+                        StoresWithoutBaseline = noBaseline,
+                        BaselineGroups = groups.Count,
+                        MsegRows = grandRows,
+                        Pairs = grandPairs,
+                        NettedToZero = grandNetZero,
+                        TotalSkus = grandSkus,
+                        Batches = grandBatches,
+                        Pushed = grandPushed,
+                        Failed = grandFailed,
+                        BaselinesAdvanced = advanced.Count,
+                        BodyVerdict = BodyVerdictNote(bodyJudged, bodyUnjudged),
+                        MovementUrl = string.IsNullOrWhiteSpace(moveUrl)
+                            ? "(TOWNKART_MOVE_URL unset — awaiting UT's movement API spec)"
+                            : moveUrl,
+                        SamplePayload = samplePayload,
+                        StartedAt = runStart.ToString("yyyy-MM-dd HH:mm:ss"),
+                        DurationMs = (int)(DateTime.Now - runStart).TotalMilliseconds,
+                        Sites = siteResults
+                    });
+                }
+            }
+            finally { MoveGate.Release(); }
+        }
+
+        private JArray ReadMovements(RfcDestination dest, DateTime from, DateTime to,
+                                     string werks, string seg, int maxRows, string excl, string pool,
+                                     out int rows, out int pairs, out int emitted, out int netZero,
+                                     out int pos, out int neg, out bool truncated, out string message)
+        {
+            IRfcFunction fn = dest.Repository.CreateFunction(MOVE_FM);
+            fn.SetValue("IV_FROM_DT", from.ToString("yyyyMMdd"));
+            fn.SetValue("IV_FROM_TM", from.ToString("HHmmss"));
+            fn.SetValue("IV_TO_DT", to.ToString("yyyyMMdd"));
+            fn.SetValue("IV_TO_TM", to.ToString("HHmmss"));
+            fn.SetValue("IV_MAX_ROWS", maxRows);
+            if (!string.IsNullOrWhiteSpace(werks)) fn.SetValue("IV_WERKS_CSV", werks);
+            if (!string.IsNullOrWhiteSpace(seg)) fn.SetValue("IV_SEG_CSV", seg);
+            if (!string.IsNullOrWhiteSpace(excl)) fn.SetValue("IV_EXCL_BWART", excl);
+            if (!string.IsNullOrWhiteSpace(pool)) fn.SetValue("IV_POOL_CSV", pool);
+            fn.Invoke(dest);
+
+            rows = fn.GetInt("EV_ROWS");
+            pairs = fn.GetInt("EV_PAIRS");
+            emitted = fn.GetInt("EV_EMITTED");
+            netZero = fn.GetInt("EV_NETZERO");
+            pos = fn.GetInt("EV_POS_COUNT");
+            neg = fn.GetInt("EV_NEG_COUNT");
+            truncated = (fn.GetString("EV_TRUNC") ?? "").Trim() == "X";
+            message = fn.GetString("EV_MESSAGE");
+
+            string json = fn.GetString("EV_JSON");
+            if (string.IsNullOrWhiteSpace(json) || json.Length <= 2) return new JArray();
+            return JArray.Parse(json);
+        }
+
+        /// <summary>
+        /// Movement rows are signed and MUST NOT be clamped. MapItems clamps
+        /// negatives to zero because a negative BALANCE is nonsense; here a
+        /// negative is the entire message, and clamping would silently
+        /// delete every outbound movement while still reporting success.
+        /// </summary>
+        private JArray MapMovements(JArray rows, string site, string adjustment)
+        {
+            var items = new JArray();
+            foreach (JObject row in rows.OfType<JObject>())
+            {
+                string sku = (string)row["sku"];
+                if (string.IsNullOrWhiteSpace(sku)) continue;
+
+                int qty = row["movement"] != null ? (int)row["movement"] : 0;
+                if (qty == 0) continue;   // nothing to apply
+
+                items.Add(new JObject
+                {
+                    ["itemSKU"] = sku,
+                    ["quantity"] = qty,
+                    ["shelfCode"] = SHELF_CODE,
+                    ["inventoryType"] = INVENTORY_TYPE,
+                    ["sla"] = SLA,
+                    ["adjustmentType"] = adjustment,
+                    ["remarks"] = GenericArticle(sku) + "-" + site,
+                    ["facilityCode"] = FACILITY_CODE
+                });
+            }
+            return items;
+        }
+
         // ── Health / state (read-only) ────────────────────────────────────
         //
         // Everything this integration depends on that is NOT in the repo:
@@ -1026,8 +1624,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 SyncTokenConfigured = !string.IsNullOrWhiteSpace(ReadSetting("TOWNKART_SYNC_TOKEN")),
                 SyncCookieConfigured = !string.IsNullOrWhiteSpace(ReadSetting("TOWNKART_SYNC_COOKIE")),
                 ZeroPolicy = zero.Describe(),
+                Movement = MoveStateSummary(channel),
                 ReaderFm = "Z_INV_STOREWISE_V2",
                 DeltaFm = DELTA_FM,
+                MoveFm = MOVE_FM,
                 TownkartUrl = TOWNKART_URL,
                 ServerTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             });
@@ -1086,6 +1686,126 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             // Write-then-move: a half-written watermark reads as corrupt and
             // fails the next run closed, which is worse than a stale one.
             string path = WatermarkPath(channel);
+            string tmp = path + ".tmp";
+            File.WriteAllText(tmp, o.ToString(Formatting.Indented));
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(tmp, path);
+        }
+
+        /// <summary>
+        /// Movement feed health. The oldest baseline is the number that
+        /// matters: a store nobody has swept is a store whose GRTs and
+        /// transfers are piling up unsent, and from outside that looks
+        /// exactly like a store where nothing happened.
+        /// </summary>
+        private static JObject MoveStateSummary(string channel)
+        {
+            Dictionary<string, DateTime> marks;
+            if (!TryLoadMoveMarks(channel, out marks))
+                return new JObject
+                {
+                    ["state"] = "UNREADABLE",
+                    ["state_file"] = MovePath(channel),
+                    ["note"] = "Additive feed — a wrong baseline drifts permanently. Inspect by hand."
+                };
+
+            if (marks.Count == 0)
+                return new JObject
+                {
+                    ["state"] = "NOT SEEDED",
+                    ["state_file"] = MovePath(channel),
+                    ["note"] = "Run the full push live; it seeds each store from its own snapshot instant."
+                };
+
+            DateTime oldest = marks.Values.Min();
+            DateTime newest = marks.Values.Max();
+            return new JObject
+            {
+                ["state"] = "SEEDED",
+                ["stores_tracked"] = marks.Count,
+                ["oldest_baseline"] = oldest.ToString("yyyy-MM-dd HH:mm:ss"),
+                ["oldest_age_minutes"] = (int)Math.Round((DateTime.Now - oldest).TotalMinutes),
+                ["newest_baseline"] = newest.ToString("yyyy-MM-dd HH:mm:ss"),
+                ["state_file"] = MovePath(channel),
+                ["adjustment_type"] = ReadSetting("TOWNKART_MOVE_ADJUSTMENT") ?? MOVE_ADJUSTMENT,
+                ["excluded_movement_types"] =
+                    ReadSetting("TOWNKART_MOVE_EXCL_BWART") ?? MOVE_EXCL_BWART,
+                ["movement_url"] = ReadSetting("TOWNKART_MOVE_URL") ??
+                    "(unset — awaiting UT's movement API spec)"
+            };
+        }
+
+        // ── Movement watermarks: one per store, not one per channel ───────
+        //
+        // The snapshot is absolute and the movement feed is additive, and
+        // that combination makes the boundary between them unforgiving in
+        // BOTH directions. Under REPLACE a re-send was free, so seeding to
+        // the run's start was the safe choice — an overlap simply rewrote
+        // the same number. Under ADD an overlap adds the same movement
+        // twice, and a gap drops it; neither ever self-corrects, and both
+        // accumulate every single day.
+        //
+        // A single cutoff for the whole estate cannot be right, because
+        // each store's MARD is read at its own moment during a run that
+        // takes minutes. So each store's movement window begins at the
+        // instant ITS snapshot was read, and a store whose snapshot failed
+        // gets no watermark at all rather than a wrong one.
+
+        private static string MovePath(string channel)
+        {
+            return Path.Combine(StateDir(), "movement_" + channel + ".json");
+        }
+
+        /// <summary>
+        /// Returns false only when the file exists but cannot be read. A
+        /// missing file is "nothing seeded yet", which is a legitimate state
+        /// and yields an empty map.
+        /// </summary>
+        private static bool TryLoadMoveMarks(string channel, out Dictionary<string, DateTime> marks)
+        {
+            marks = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            string path = MovePath(channel);
+            if (!File.Exists(path)) return true;
+            try
+            {
+                JObject o = JObject.Parse(File.ReadAllText(path));
+                JObject stores = o["stores"] as JObject;
+                if (stores == null) return true;
+                foreach (var kv in stores)
+                {
+                    DateTime at;
+                    if (TryParseStamp((string)kv.Value, out at)) marks[kv.Key] = at;
+                }
+                return true;
+            }
+            catch (Exception)
+            {
+                // Same reasoning as the snapshot watermark: silently
+                // restarting from now would skip every movement since the
+                // last good run, and under ADD that loss is permanent.
+                marks = null;
+                return false;
+            }
+        }
+
+        private static void SaveMoveMarks(string channel, Dictionary<string, DateTime> marks)
+        {
+            string dir = StateDir();
+            Directory.CreateDirectory(dir);
+
+            var stores = new JObject();
+            foreach (var kv in marks.OrderBy(k => k.Key))
+                stores[kv.Key] = kv.Value.ToString("yyyyMMddHHmmss");
+
+            var o = new JObject
+            {
+                ["channel"] = channel,
+                ["stores"] = stores,
+                ["store_count"] = marks.Count,
+                ["updated"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            };
+
+            string path = MovePath(channel);
             string tmp = path + ".tmp";
             File.WriteAllText(tmp, o.ToString(Formatting.Indented));
             if (File.Exists(path)) File.Delete(path);
@@ -1290,6 +2010,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             /// </summary>
             public bool? BodyOk;
             public string BodyNote;
+
+            /// <summary>
+            /// Set when the batch failed in a way that MIGHT still have been
+            /// applied at the far end (5xx, or a transport timeout) and was
+            /// deliberately not retried because the feed is additive. The
+            /// quantity is in an unknown state: re-sending may double it,
+            /// dropping it may lose it. Needs a human, not a retry.
+            /// </summary>
+            public bool Ambiguous;
         }
 
         /// <summary>
@@ -1463,8 +2192,21 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             return h;
         }
 
+        /// <param name="retryAmbiguous">
+        /// Whether an outcome that MIGHT already have been applied (5xx, or a
+        /// transport timeout) may be retried. True for the absolute snapshot
+        /// feed, where REPLACE makes a re-send harmless. MUST be false for the
+        /// additive movement feed: there a re-send adds the quantity a second
+        /// time, and nothing downstream ever re-reads a balance to correct it.
+        ///
+        /// A 429 is retried either way — rate limiting is a refusal, so the
+        /// request provably did not apply. That is the only failure we can
+        /// distinguish; 5xx and timeouts are genuinely unknowable from here,
+        /// which is why an idempotency key is on the open-questions list.
+        /// </param>
         private async Task<BatchOutcome> PostWithRetry(HttpClient http, string url, string body,
-                                                       IDictionary<string, string> headers)
+                                                       IDictionary<string, string> headers,
+                                                       bool retryAmbiguous = true)
         {
             var started = DateTime.UtcNow;
             var result = new BatchOutcome { Code = 0, Body = "", Attempts = 0 };
@@ -1519,6 +2261,14 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     }
                     else if (result.Code >= 500)
                     {
+                        if (!retryAmbiguous)
+                        {
+                            // May already have been applied. Under ADD a retry
+                            // would add the quantity twice, so stop and let the
+                            // run surface it instead.
+                            result.Ambiguous = true;
+                            break;
+                        }
                         waitMs = attempt < RETRY_WAITS_MS.Length ? RETRY_WAITS_MS[attempt] : -1;
                     }
                     else
@@ -1529,10 +2279,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 }
                 catch (Exception ex)
                 {
-                    // Timeout / transport error. Retried like a 5xx; REPLACE
-                    // makes a re-send idempotent (spec 11.1).
+                    // Timeout / transport error. The request may have been
+                    // received and applied before the connection dropped, so
+                    // this is the same unknowable case as a 5xx: retried only
+                    // for the REPLACE feed (spec 11.1), never for movements.
                     result.Code = 599;
                     result.Body = "Transport: " + ex.Message;
+                    if (!retryAmbiguous) { result.Ambiguous = true; break; }
                     waitMs = attempt < RETRY_WAITS_MS.Length ? RETRY_WAITS_MS[attempt] : -1;
                 }
 
