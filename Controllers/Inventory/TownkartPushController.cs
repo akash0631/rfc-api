@@ -1451,6 +1451,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         StoresInScope = wanted.Count,
                         StoresWithoutBaseline = noBaseline,
                         BaselineGroups = groups.Count,
+                        // One entry per distinct baseline, i.e. per FM call.
+                        // In production almost every store has its own
+                        // snapshot instant, so a run is mostly groups — and
+                        // without this there is no way to tell which window
+                        // produced which rows when reconciling a store.
+                        Groups = groupLog,
                         MsegRows = grandRows,
                         Pairs = grandPairs,
                         NettedToZero = grandNetZero,
