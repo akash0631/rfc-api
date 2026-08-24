@@ -243,7 +243,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
                 // Left unset unless overridden, so the FM applies its own
                 // documented defaults: pool 0001/0002, segments APP/GM/FBG,
-                // unrestricted stock only, and movement types 251/252/601/602
+                // unrestricted stock only, and movement types 251/252
                 // excluded. Those defaults live in one place — the FM — and
                 // are not restated here, so they cannot drift apart.
                 if (!string.IsNullOrWhiteSpace(seg)) fn.SetValue("IV_SEG_CSV", seg);
@@ -332,9 +332,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     sign = "movement is signed and relative. Negative means stock left the " +
                            "store, positive means it arrived. Apply it to the running total; " +
                            "do not treat it as a balance and do not clamp it at zero.",
-                    excluded = "Movements Axapta already reports to you are excluded at " +
-                               "source (POS sale and its return), as is the nightly e-commerce " +
-                               "goods issue. Everything else is carried by default."
+                    excluded = "Only the movements Axapta already reports to you are excluded " +
+                               "at source: POS sale and its return. Everything else is carried " +
+                               "by default, including goods issues to customers (601/602), " +
+                               "which cover scrap, corporate, wholesale and intercompany sales " +
+                               "rather than web orders."
                 },
                 diagnostics = new
                 {
