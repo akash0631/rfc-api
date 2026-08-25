@@ -58,9 +58,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     /// simply wins, replaying a window is idempotent, and page order does not
     /// matter. Do not add these to anything.
     ///
-    /// FMs:
-    ///   Z_GO_INV_PULL_V2   FG ZGO_PULL2,  TR S4DK928326
-    ///   Z_GO_DELTA_PULL_V1 FG ZGO_DPULL1, TR S4DK928326
+    /// FMs, both on released TR S4DK928360, which carries exactly these two
+    /// function groups and nothing else:
+    ///   Z_GO_STOCK_PULL_V1  FG ZGO_STK1
+    ///   Z_GO_STOCK_DELTA_V1 FG ZGO_STK2
     ///
     /// Store scope: T001W-VLFKZ is 'A' for a store in this system and 'B' for
     /// a DC / hub / factory — the convention reads inverted from the usual
@@ -80,8 +81,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     [RoutePrefix("api/gh")]
     public class GreenHonchosInventoryPullController : BaseController
     {
-        private const string SNAP_FM = "Z_GO_INV_PULL_V2";
-        private const string DELTA_FM = "Z_GO_DELTA_PULL_V1";
+        private const string SNAP_FM = "Z_GO_STOCK_PULL_V1";
+        private const string DELTA_FM = "Z_GO_STOCK_DELTA_V1";
 
         // One store per page by default. A PROD store carries roughly 2,500
         // positive pairs, so the FM's own ceiling of 25 stores would be a
