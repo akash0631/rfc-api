@@ -26,6 +26,17 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     ///         {action, inventoryData:[...]} envelope (pass-through).
     ///   Headers: X-RFC-Key (auth) — site_token + token + Origin injected here.
     ///
+    /// POST /api/inv/greenon-relay-prod
+    ///   Same contract, but forwards under the PRODUCTION tenant headers
+    ///   (GREENON_PROD_* keys). The two routes exist because the kartmax
+    ///   import URL is identical for staging and production — the tenant is
+    ///   chosen by the headers alone — and every SAP system (DEV/QA/PROD)
+    ///   posts to this one relay host. Keeping staging and production as
+    ///   separate routes means a QA test push can never reach the live
+    ///   storefront: point only PROD SAP's ZAPI_AI_CREDS row at -prod.
+    ///   503 (fail-closed, nothing sent) until all three GREENON_PROD_*
+    ///   header keys are configured on the host.
+    ///
     /// Response:
     ///   { ok, http_code, body, latency_ms, batches, ok_batches, fail_batches }
     ///   ok=true iff every batch returned 2xx. http_code=worst status seen.
@@ -52,6 +63,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         // Green On 503s ~5K+ rows; 2K tested clean, 1K = safety margin.
         private const int GREENON_CHUNK = 1000;
 
+        // Production tenant (shop.v2kart.com), served by /greenon-relay-prod.
+        // Config-only: the three header values have NO compiled fallback, so a
+        // host without them 503s rather than silently posting to the staging
+        // tenant — and the production token never appears in this public repo.
+        private static readonly string GREENON_PROD_URL = ReadSetting("GREENON_PROD_URL") ?? "https://engine.kartmax.in/api/import/catalogue-import-inventory";
+        private static readonly string GREENON_PROD_SITE_TOKEN = ReadSetting("GREENON_PROD_SITE_TOKEN");
+        private static readonly string GREENON_PROD_API_TOKEN = ReadSetting("GREENON_PROD_API_TOKEN");
+        private static readonly string GREENON_PROD_ORIGIN = ReadSetting("GREENON_PROD_ORIGIN");
+
         // appSettings (secrets.config) -> machine env var -> process env var.
         // Same three-tier lookup TownkartPushController uses for its tokens.
         private static string ReadSetting(string key)
@@ -66,7 +86,36 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
         [HttpPost]
         [Route("greenon-relay")]
-        public async System.Threading.Tasks.Task<IHttpActionResult> Relay()
+        public System.Threading.Tasks.Task<IHttpActionResult> Relay()
+        {
+            return RelayTo(GREENON_URL, GREENON_SITE_TOKEN, GREENON_API_TOKEN, GREENON_ORIGIN);
+        }
+
+        [HttpPost]
+        [Route("greenon-relay-prod")]
+        public System.Threading.Tasks.Task<IHttpActionResult> RelayProd()
+        {
+            if (string.IsNullOrEmpty(GREENON_PROD_SITE_TOKEN) ||
+                string.IsNullOrEmpty(GREENON_PROD_API_TOKEN) ||
+                string.IsNullOrEmpty(GREENON_PROD_ORIGIN))
+            {
+                return System.Threading.Tasks.Task.FromResult<IHttpActionResult>(
+                    ResponseMessage(new HttpResponseMessage((System.Net.HttpStatusCode)503)
+                    {
+                        Content = new StringContent(
+                            JsonConvert.SerializeObject(new
+                            {
+                                ok = false,
+                                http_code = 503,
+                                body = "greenon-relay-prod is not configured on this host — set GREENON_PROD_SITE_TOKEN, GREENON_PROD_API_TOKEN and GREENON_PROD_ORIGIN in secrets.config and recycle the pool. This route never falls back to the staging tenant."
+                            }),
+                            Encoding.UTF8, "application/json")
+                    }));
+            }
+            return RelayTo(GREENON_PROD_URL, GREENON_PROD_SITE_TOKEN, GREENON_PROD_API_TOKEN, GREENON_PROD_ORIGIN);
+        }
+
+        private async System.Threading.Tasks.Task<IHttpActionResult> RelayTo(string url, string siteToken, string apiToken, string origin)
         {
             IEnumerable<string> keyHeaders;
             bool hasKey = Request.Headers.TryGetValues("X-RFC-Key", out keyHeaders);
@@ -126,15 +175,15 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             {
                 using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) })
                 {
-                    http.DefaultRequestHeaders.Add("site_token", GREENON_SITE_TOKEN);
-                    http.DefaultRequestHeaders.Add("token", GREENON_API_TOKEN);
-                    http.DefaultRequestHeaders.Add("Origin", GREENON_ORIGIN);
+                    http.DefaultRequestHeaders.Add("site_token", siteToken);
+                    http.DefaultRequestHeaders.Add("token", apiToken);
+                    http.DefaultRequestHeaders.Add("Origin", origin);
 
                     // Passthrough path: unparseable/no-array bodies go verbatim.
                     if (items == null)
                     {
                         var content = new StringContent(rawBody, Encoding.UTF8, "application/json");
-                        var resp = await http.PostAsync(GREENON_URL, content);
+                        var resp = await http.PostAsync(url, content);
                         string respBody = await resp.Content.ReadAsStringAsync();
                         int code = (int)resp.StatusCode;
                         return ResponseMessage(new HttpResponseMessage((System.Net.HttpStatusCode)code)
@@ -179,7 +228,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         string respBody;
                         try
                         {
-                            resp = await http.PostAsync(GREENON_URL, content);
+                            resp = await http.PostAsync(url, content);
                             respBody = await resp.Content.ReadAsStringAsync();
                             code = (int)resp.StatusCode;
                         }
