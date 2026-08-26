@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -36,14 +37,32 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     public class GreenOnRelayController : BaseController
     {
         private const string API_KEY = "v2-rfc-proxy-2026";
-        private const string GREENON_URL = "https://engine.kartmax.in/api/import/catalogue-import-inventory";
-        private const string GREENON_SITE_TOKEN = "UHwgPDz7YxPHimOYNEzg";
+        // URL / site_token / token / Origin are read from the HOST (secrets.config,
+        // merged into appSettings by Web.config) so a tenant switch is a config edit
+        // plus a pool recycle, not a rebuild. This repo is public: never put a real
+        // production token in these literals. The compiled values below are the
+        // pre-existing staging pair, kept as a fallback so a host with no override
+        // behaves exactly as before.
+        private static readonly string GREENON_URL = ReadSetting("GREENON_URL") ?? "https://engine.kartmax.in/api/import/catalogue-import-inventory";
+        private static readonly string GREENON_SITE_TOKEN = ReadSetting("GREENON_SITE_TOKEN") ?? "UHwgPDz7YxPHimOYNEzg";
         // Rotated 2026-07-13: Green Honchos issued new token + Origin requirement.
-        private const string GREENON_API_TOKEN = "e4f19c7a82b5d06ef93a1c74bd5802fa";
-        private const string GREENON_ORIGIN = "https://kxv2kart.kartmax.co";
+        private static readonly string GREENON_API_TOKEN = ReadSetting("GREENON_API_TOKEN") ?? "e4f19c7a82b5d06ef93a1c74bd5802fa";
+        private static readonly string GREENON_ORIGIN = ReadSetting("GREENON_ORIGIN") ?? "https://kxv2kart.kartmax.co";
         private const string GREENON_ACTION = "storeWiseInventory";
         // Green On 503s ~5K+ rows; 2K tested clean, 1K = safety margin.
         private const int GREENON_CHUNK = 1000;
+
+        // appSettings (secrets.config) -> machine env var -> process env var.
+        // Same three-tier lookup TownkartPushController uses for its tokens.
+        private static string ReadSetting(string key)
+        {
+            string v = ConfigurationManager.AppSettings[key];
+            if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
+            v = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Machine);
+            if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
+            v = Environment.GetEnvironmentVariable(key);
+            return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        }
 
         [HttpPost]
         [Route("greenon-relay")]
