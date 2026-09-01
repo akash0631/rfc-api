@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Hosting;
 using System.Web.Http;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Vendor_Application_MVC.Controllers;
 
@@ -241,7 +242,28 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
             {
                 try
                 {
-                    if (File.Exists(path)) return JObject.Parse(File.ReadAllText(path));
+                    // DateParseHandling.None is NOT optional. Json.NET's default
+                    // turns any ISO-8601 string into a Date token, so
+                    // submitted_utc stops being the text we wrote: casting it
+                    // back with (string) renders a DateTime without its zone,
+                    // TryParse then yields Kind=Unspecified, and the
+                    // ToUniversalTime() in Poll() subtracts the server's offset
+                    // from an instant that was ALREADY UTC. On this IST box that
+                    // added exactly 19800s to every job's age, so a job three
+                    // seconds old reported "No result after 19807s - the worker
+                    // was interrupted", which is the one answer that must never
+                    // be wrong: it invites a retry, and a retried variant
+                    // creation makes a duplicate article that cannot be deleted.
+                    // Keeping every value as the string we stored also means a
+                    // record round-trips byte-for-byte.
+                    if (File.Exists(path))
+                    {
+                        using (var sr = new StringReader(File.ReadAllText(path)))
+                        using (var jr = new JsonTextReader(sr) { DateParseHandling = DateParseHandling.None })
+                        {
+                            return JObject.Load(jr);
+                        }
+                    }
                 }
                 catch (IOException) { }        // mid-write
                 Thread.Sleep(50);              // absent or locked: both are retryable
