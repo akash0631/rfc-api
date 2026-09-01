@@ -4,6 +4,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -303,6 +305,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
                 allowed_headers = ALLOWED_HEADERS,
                 max_body_bytes = MAX_BODY_BYTES,
                 timeout_seconds = UPSTREAM_TIMEOUT_SEC,
+                log_dir = LogDir(),
+                log_durable = Directory.Exists(LogDir()) && _lastWriteError == null,
+                log_write_error = _lastWriteError,
+                log_retention_days = MAX_LOG_DAYS,
                 server = Environment.MachineName
             });
         }
@@ -353,26 +359,54 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
 
         // ── GET /api/bom/log ─────────────────────────────────────────────
         /// <summary>
-        /// Last 200 relay calls: path, method, BOM status, timing, caller IP.
+        /// Recent relay calls: path, method, BOM status, timing, caller IP.
         /// No request or response bodies, and no Authorization header, are
-        /// held anywhere in this buffer.
+        /// held anywhere — not in the buffer and not in the file.
+        ///
+        /// Reads the daily JSONL files first, so the history survives an app
+        /// pool recycle. The in-memory ring is the fallback for a host where
+        /// the directory cannot be written, and `durable` says which one
+        /// answered — a log that quietly forgets is worse than one that
+        /// admits it.
         /// </summary>
         [HttpGet]
         [Route("log")]
-        public IHttpActionResult Log(int limit = 50)
+        public IHttpActionResult Log(int limit = 50, int days = 7)
         {
             if (!KeyOk())
                 return Content(HttpStatusCode.Unauthorized, new { error = "invalid relay key" });
 
             if (limit < 1) limit = 1;
-            if (limit > MaxLogEntries) limit = MaxLogEntries;
+            if (limit > 1000) limit = 1000;
+            if (days < 1) days = 1;
+            if (days > MAX_LOG_DAYS) days = MAX_LOG_DAYS;
 
-            var entries = _log.ToArray();
-            var result = new List<BomLogEntry>();
-            for (int i = entries.Length - 1; i >= 0 && result.Count < limit; i--)
-                result.Add(entries[i]);
+            List<BomLogEntry> result;
+            bool durable = false;
 
-            return Ok(new { status = true, count = result.Count, entries = result });
+            var fromDisk = ReadFromDisk(limit, days);
+            if (fromDisk != null)
+            {
+                result = fromDisk;
+                durable = true;
+            }
+            else
+            {
+                var entries = _log.ToArray();
+                result = new List<BomLogEntry>();
+                for (int i = entries.Length - 1; i >= 0 && result.Count < limit; i--)
+                    result.Add(entries[i]);
+            }
+
+            return Ok(new
+            {
+                status = true,
+                durable = durable,
+                source = durable ? LogDir() : "memory (ring buffer, lost on pool recycle)",
+                write_error = _lastWriteError,
+                count = result.Count,
+                entries = result
+            });
         }
 
         // ── Shared ───────────────────────────────────────────────────────
@@ -472,14 +506,41 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
             return "";
         }
 
-        // ── Ring buffer. Metadata only: never a body, never Authorization ──
+        // ── The log. Metadata only: never a body, never Authorization ──────
+        //
+        // One JSONL file per UTC day under LogDir(), plus an in-memory ring as
+        // the fallback when that directory cannot be written. The file is what
+        // makes the history outlive an app pool recycle — the ring alone does
+        // not, which is exactly how the first six calls of 1-Sep-2026 were
+        // lost between a test and the read that went looking for them.
+        //
+        // The directory must sit OUTSIDE the site root: C:\V2RfcTest is build
+        // output and deploy-iis.yml writes over it.
         private const int MaxLogEntries = 200;
+        private const int MAX_LOG_DAYS = 30;
+        private const string LOG_DIR_SETTING = "BOM_LOG_DIR";
+        private const string DEFAULT_LOG_DIR = @"C:\V2RfcState\bom-relay";
+
         private static readonly ConcurrentQueue<BomLogEntry> _log = new ConcurrentQueue<BomLogEntry>();
+        private static readonly object _fileLock = new object();
+        private static string _lastWriteError;
+        private static DateTime _lastPruneUtc = DateTime.MinValue;
+
+        private static string LogDir()
+        {
+            string dir = ReadSetting(LOG_DIR_SETTING);
+            return string.IsNullOrWhiteSpace(dir) ? DEFAULT_LOG_DIR : dir;
+        }
+
+        private static string LogPath(DateTime utcDay)
+        {
+            return Path.Combine(LogDir(), "bom-relay-" + utcDay.ToString("yyyyMMdd") + ".jsonl");
+        }
 
         private static void Record(string path, string method, int bomStatus, Stopwatch sw,
                                    string callerIp, string error)
         {
-            _log.Enqueue(new BomLogEntry
+            var entry = new BomLogEntry
             {
                 Timestamp = DateTime.UtcNow,
                 Path = path,
@@ -488,9 +549,88 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
                 ElapsedMs = sw.ElapsedMilliseconds,
                 CallerIp = callerIp,
                 Error = error
-            });
+            };
+
+            _log.Enqueue(entry);
             BomLogEntry drop;
             while (_log.Count > MaxLogEntries) _log.TryDequeue(out drop);
+
+            // A logging failure must never take the payment path down with it.
+            try
+            {
+                string dir = LogDir();
+                lock (_fileLock)
+                {
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    File.AppendAllText(LogPath(entry.Timestamp),
+                                       JsonConvert.SerializeObject(entry) + Environment.NewLine,
+                                       new UTF8Encoding(false));
+                    _lastWriteError = null;
+                }
+                Prune();
+            }
+            catch (Exception ex)
+            {
+                _lastWriteError = ex.Message;
+            }
+        }
+
+        /// <summary>
+        /// Reads newest-first across the last `days` daily files. Returns null
+        /// when the directory is unreadable, which is the signal to fall back
+        /// to the ring rather than to report an empty history as fact.
+        /// </summary>
+        private static List<BomLogEntry> ReadFromDisk(int limit, int days)
+        {
+            try
+            {
+                string dir = LogDir();
+                if (!Directory.Exists(dir)) return null;
+
+                var result = new List<BomLogEntry>();
+                DateTime day = DateTime.UtcNow.Date;
+
+                for (int d = 0; d < days && result.Count < limit; d++, day = day.AddDays(-1))
+                {
+                    string file = LogPath(day);
+                    if (!File.Exists(file)) continue;
+
+                    string[] lines;
+                    lock (_fileLock) { lines = File.ReadAllLines(file); }
+
+                    for (int i = lines.Length - 1; i >= 0 && result.Count < limit; i--)
+                    {
+                        if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                        try { result.Add(JsonConvert.DeserializeObject<BomLogEntry>(lines[i])); }
+                        catch { /* a torn last line is not a reason to lose the rest */ }
+                    }
+                }
+                return result;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Drops files older than MAX_LOG_DAYS. Runs at most daily.</summary>
+        private static void Prune()
+        {
+            if ((DateTime.UtcNow - _lastPruneUtc).TotalHours < 24) return;
+            _lastPruneUtc = DateTime.UtcNow;
+            try
+            {
+                var cutoff = DateTime.UtcNow.Date.AddDays(-MAX_LOG_DAYS);
+                foreach (string f in Directory.GetFiles(LogDir(), "bom-relay-*.jsonl"))
+                {
+                    string stamp = Path.GetFileNameWithoutExtension(f).Replace("bom-relay-", "");
+                    DateTime when;
+                    if (DateTime.TryParseExact(stamp, "yyyyMMdd", CultureInfo.InvariantCulture,
+                                               DateTimeStyles.None, out when) && when < cutoff)
+                        File.Delete(f);
+                }
+            }
+            catch { /* housekeeping is not worth an exception on the payment path */ }
         }
     }
 
