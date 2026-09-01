@@ -23,7 +23,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     ///       (Nikhil Chhokra). Sibling of GreenOnPushController — same SAP
     ///       reader, different envelope and different vendor.
     ///
-    /// FM: Z_INV_STOREWISE_V2 (FG ZINV_UT_API1, TR S4DK928230, DEV 2026-08-20).
+    /// FM: Z_INV_STOREWISE_V3 (FG ZINV_UT_API1, TR S4DK928560, 2026-09-01) —
+    /// site scope from ZUNI_SITE_FCODE + ZART_CHAR_MATNR article filter.
+    /// V2 (TR S4DK928230) remains whitelisted for comparison reads.
     ///     SUM(MARD.LABST) by MATNR+WERKS over LGORT 0001+0002, MTART
     ///     restricted to APP/GM/FBG — exactly the selection in spec section 6 —
     ///     plus deletion-flag exclusion and zero-quantity support.
@@ -66,7 +68,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     ///     &amp;chunkSize=500          (records per POST, spec section 5)
     ///     &amp;minQty=1               (-1 = no floor, emits sold-out SKUs as 0)
     ///     &amp;seg=APP,GM,FBG         (MTART segments)
-    ///     &amp;fm=Z_INV_STOREWISE_V2  (whitelisted reader FM)
+    ///     &amp;fm=Z_INV_STOREWISE_V3  (whitelisted reader FM)
     ///     &amp;confirm=ALL_STORES     (required to live-push werks=all)
     ///
     ///   POST /api/inv/townkart-delta  — movement delta (steady state)
@@ -114,7 +116,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         private const string INVENTORY_TYPE = "GOOD_INVENTORY";
         private const string SLA = "000";
         private const string ADJUSTMENT_TYPE = "REPLACE";
-        private const string FACILITY_CODE = "V2KART";
+
+        // 2026-09-01 incident: facilityCode is NOT a constant. It is per
+        // store — ZUNI_SITE_FCODE-ZZFCODE (HD22→HD22, DH24→
+        // V2RETAIL_DH25_CURRENT, HB05→HB01…). The old constant "V2KART"
+        // matched nothing on Townkart's side and rode on 19.1M records.
+        // Resolved per site at run time via LoadSiteScope.
 
         // Spec section 11: 5xx and timeout retry 3 times, 5s / 15s / 45s.
         private static readonly int[] RETRY_WAITS_MS = { 5000, 15000, 45000 };
@@ -123,7 +130,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         private static readonly string[] ALLOWED_FMS =
         {
             "Z_INV_STOREWISE_V1",
-            "Z_INV_STOREWISE_V2"
+            "Z_INV_STOREWISE_V2",
+            // V3 (FG ZINV_UT_API1, TR S4DK928560, 2026-09-01): adds the
+            // ZART_CHAR_MATNR article-eligibility filter and enforces the
+            // ZUNI_SITE_FCODE site scope inside SAP as well. The default.
+            "Z_INV_STOREWISE_V3"
         };
 
         // FG ZINV_UT_DLT1, TR S4DK928232, DEV 2026-08-20. Stateless: the
@@ -167,7 +178,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             int chunkSize = 500,
             int minQty = 1,
             string seg = "APP,GM,FBG",
-            string fm = "Z_INV_STOREWISE_V2",
+            string fm = "Z_INV_STOREWISE_V3",
             string confirm = null,
             bool sync = false,
             string zeroMode = null,
@@ -243,19 +254,29 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             bool wantsAll = !string.IsNullOrWhiteSpace(werks) &&
                             werks.Trim().Equals("all", StringComparison.OrdinalIgnoreCase);
 
-            List<string> werksList;
+            SiteScope scope;
             try
             {
-                werksList = ResolveWerks(dest, werks);
+                scope = LoadSiteScope(dest);
             }
             catch (Exception ex)
             {
-                return Json(new { Status = false, Message = "WERKS resolve failed: " + ex.Message });
+                return Json(new { Status = false, Message = "Townkart site scope failed: " + ex.Message });
             }
+
+            List<JObject> excludedSites;
+            List<string> werksList = ResolveWerks(werks, scope, out excludedSites);
 
             if (werksList.Count == 0)
             {
-                return Json(new { Status = false, Message = "No WERKS in scope" });
+                return Json(new
+                {
+                    Status = false,
+                    Message = "No Townkart site in scope. The scope is ZUNI_SITE_FCODE " +
+                              "restricted to retail plants (T001W VLFKZ = 'A') — " +
+                              "werks values outside it are listed in ExcludedSites.",
+                    ExcludedSites = excludedSites
+                });
             }
 
             // A live all-stores push sent 6.9M unrequested rows to the other
@@ -332,7 +353,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     }
 
                     int clamped, zeros, zerosSkipped;
-                    JArray items = MapItems(rows, site, zeroPolicy,
+                    JArray items = MapItems(rows, site, scope.Fcode[site], zeroPolicy,
                                             out clamped, out zeros, out zerosSkipped);
                     grandSkus += items.Count;
                     grandClamped += clamped;
@@ -520,6 +541,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     MinQty = minQty,
                     Seg = seg,
                     SitesInScope = werksList.Count,
+                    ExcludedSites = excludedSites,
                     SitesProcessed = siteResults.Count,
                     TotalSkus = grandSkus,
                     NegativesClampedInSap = grandSapNeg,
@@ -698,6 +720,32 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     return Json(new { Status = false, Message = "RFC connect failed: " + ex.Message });
                 }
 
+                // 2026-09-01 incident: an absent werks parameter used to mean
+                // "whatever moved anywhere in the client". The delta is scoped
+                // to the Townkart estate exactly like the full push.
+                SiteScope scope;
+                try
+                {
+                    scope = LoadSiteScope(dest);
+                }
+                catch (Exception ex)
+                {
+                    return Json(new { Status = false, Message = "Townkart site scope failed: " + ex.Message });
+                }
+
+                List<JObject> excludedSites;
+                List<string> deltaSites = ResolveWerks(werks, scope, out excludedSites);
+                if (deltaSites.Count == 0)
+                {
+                    return Json(new
+                    {
+                        Status = false,
+                        Message = "No Townkart site in scope for the delta.",
+                        ExcludedSites = excludedSites
+                    });
+                }
+                string werksCsv = string.Join(",", deltaSites);
+
                 string bizDate;
                 if (string.IsNullOrWhiteSpace(businessDate))
                 {
@@ -746,7 +794,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     bool truncated;
                     try
                     {
-                        rows = ReadDelta(dest, from, to, werks, seg, maxPairs,
+                        rows = ReadDelta(dest, from, to, werksCsv, seg, maxPairs,
                                          out pairs, out truncated, out zeroCount,
                                          out sapNeg, out fmMessage);
                     }
@@ -791,6 +839,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 {
                     string s = (string)row["store_code"];
                     if (string.IsNullOrWhiteSpace(s)) continue;
+                    // Belt to the FM's braces: nothing outside the mapped
+                    // retail scope is ever sent, whatever the FM returned.
+                    if (!scope.Stores.Contains(s)) continue;
                     if (!bySite.ContainsKey(s)) bySite[s] = new JArray();
                     bySite[s].Add(row);
                 }
@@ -817,7 +868,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         string site = kv.Key;
 
                         int clamped, zeros, zerosSkipped;
-                        JArray items = MapItems(kv.Value, site, zeroPolicy,
+                        JArray items = MapItems(kv.Value, site, scope.Fcode[site], zeroPolicy,
                                                 out clamped, out zeros, out zerosSkipped);
                         grandSkus += items.Count;
                         grandZeros += zeros;
@@ -984,6 +1035,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         WatermarkAdvanced = advanced,
                         WatermarkNote = advanceNote,
                         ChangedPairs = pairs,
+                        SitesInScope = deltaSites.Count,
+                        ExcludedSites = excludedSites,
                         SitesTouched = bySite.Count,
                         TotalSkus = grandSkus,
                         ZeroQtySkus = grandZeros,
@@ -1135,6 +1188,26 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 catch (Exception ex)
                 { return Json(new { Status = false, Message = "RFC connect failed: " + ex.Message }); }
 
+                // 2026-09-01 incident: the estate-wide bootstrap left movement
+                // baselines for 593 stores, so the marks file must not define
+                // the scope. ZUNI_SITE_FCODE does.
+                SiteScope scope;
+                try { scope = LoadSiteScope(dest); }
+                catch (Exception ex)
+                { return Json(new { Status = false, Message = "Townkart site scope failed: " + ex.Message }); }
+
+                var outOfScope = wanted.Where(w => !scope.Stores.Contains(w))
+                                       .OrderBy(w => w).ToList();
+                wanted = wanted.Where(w => scope.Stores.Contains(w)).ToList();
+                if (wanted.Count == 0)
+                    return Json(new
+                    {
+                        Status = false,
+                        Message = "No Townkart site in scope for the movement feed. " +
+                                  "Baselines outside ZUNI_SITE_FCODE are ignored.",
+                        OutOfScopeStores = outOfScope
+                    });
+
                 string adj = string.IsNullOrWhiteSpace(adjustment)
                     ? (ReadSetting("TOWNKART_MOVE_ADJUSTMENT") ?? MOVE_ADJUSTMENT)
                     : adjustment.Trim();
@@ -1250,7 +1323,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
 
                         JArray rows;
                         if (!siteRows.TryGetValue(site, out rows)) rows = new JArray();
-                        JArray items = MapMovements(rows, site, adj);
+                        JArray items = MapMovements(rows, site, adj, scope.Fcode[site]);
                         grandSkus += items.Count;
 
                         if (samplePayload == null && items.Count > 0)
@@ -1450,6 +1523,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                         WindowTo = now.ToString("yyyy-MM-dd HH:mm:ss"),
                         StoresInScope = wanted.Count,
                         StoresWithoutBaseline = noBaseline,
+                        OutOfScopeStores = outOfScope,
                         BaselineGroups = groups.Count,
                         // One entry per distinct baseline, i.e. per FM call.
                         // In production almost every store has its own
@@ -1516,7 +1590,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
         /// negative is the entire message, and clamping would silently
         /// delete every outbound movement while still reporting success.
         /// </summary>
-        private JArray MapMovements(JArray rows, string site, string adjustment)
+        private JArray MapMovements(JArray rows, string site, string adjustment,
+                                    string facilityCode)
         {
             var items = new JArray();
             foreach (JObject row in rows.OfType<JObject>())
@@ -1536,7 +1611,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     ["sla"] = SLA,
                     ["adjustmentType"] = adjustment,
                     ["remarks"] = GenericArticle(sku) + "-" + site,
-                    ["facilityCode"] = FACILITY_CODE
+                    ["facilityCode"] = facilityCode
                 });
             }
             return items;
@@ -1637,7 +1712,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 SyncCookieConfigured = !string.IsNullOrWhiteSpace(ReadSetting("TOWNKART_SYNC_COOKIE")),
                 ZeroPolicy = zero.Describe(),
                 Movement = MoveStateSummary(channel),
-                ReaderFm = "Z_INV_STOREWISE_V2",
+                ReaderFm = "Z_INV_STOREWISE_V3",
                 DeltaFm = DELTA_FM,
                 MoveFm = MOVE_FM,
                 TownkartUrl = TOWNKART_URL,
@@ -1945,7 +2020,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             }
         }
 
-        private JArray MapItems(JArray rows, string site, ZeroPolicy zero,
+        private JArray MapItems(JArray rows, string site, string facilityCode,
+                                ZeroPolicy zero,
                                 out int clamped, out int zeros, out int zerosSkipped)
         {
             clamped = 0;
@@ -1987,7 +2063,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                     ["sla"] = SLA,
                     ["adjustmentType"] = qty == 0 ? zero.Adjustment : ADJUSTMENT_TYPE,
                     ["remarks"] = GenericArticle(sku) + "-" + site,
-                    ["facilityCode"] = FACILITY_CODE
+                    ["facilityCode"] = facilityCode
                 });
             }
 
@@ -2361,43 +2437,147 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
         }
 
-        private List<string> ResolveWerks(RfcDestination dest, string werksParam)
+        /// <summary>
+        /// The Townkart estate, from SAP truth rather than a plant-type scan:
+        /// ZUNI_SITE_FCODE names the sites and their facility codes, T001W
+        /// VLFKZ separates retail stores (REPLACE snapshots) from DC-type
+        /// destinations (movement-shaped ADD/REMOVE feed — out of scope for
+        /// every endpoint in this controller until that feed is designed).
+        ///
+        /// 2026-09-01 incident: the previous resolver read T001W VLFKZ='A'
+        /// alone, which is wrong in both directions — it pulled in ~590
+        /// plants that are not Townkart destinations, and it dropped
+        /// DH24/DH25/DU05, which are type B but genuinely mapped.
+        /// </summary>
+        private class SiteScope
         {
-            if (!string.IsNullOrWhiteSpace(werksParam) &&
-                !werksParam.Equals("all", StringComparison.OrdinalIgnoreCase))
-            {
-                return werksParam.Split(',')
-                    .Select(w => w.Trim().ToUpperInvariant())
-                    .Where(w => w.Length > 0 && w.Length <= 4)
-                    .Distinct()
-                    .ToList();
-            }
+            public readonly Dictionary<string, string> Fcode =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            public readonly HashSet<string> Stores =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public readonly HashSet<string> Dcs =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
 
-            // Retail stores only — VLFKZ='A' excludes DC/HUB (VLFKZ='B').
+        private SiteScope LoadSiteScope(RfcDestination dest)
+        {
+            var scope = new SiteScope();
+
             IRfcFunction fn = dest.Repository.CreateFunction("RFC_READ_TABLE");
-            fn.SetValue("QUERY_TABLE", "T001W");
-
-            IRfcTable opt = fn.GetTable("OPTIONS");
-            IRfcStructure optRow = opt.Metadata.LineType.CreateStructure();
-            optRow.SetValue("TEXT", "VLFKZ = 'A'");
-            opt.Append(optRow);
-
+            fn.SetValue("QUERY_TABLE", "ZUNI_SITE_FCODE");
+            fn.SetValue("DELIMITER", "|");
             IRfcTable fld = fn.GetTable("FIELDS");
-            IRfcStructure fldRow = fld.Metadata.LineType.CreateStructure();
-            fldRow.SetValue("FIELDNAME", "WERKS");
-            fld.Append(fldRow);
-
+            foreach (string f in new[] { "WERKS", "ZZFCODE" })
+            {
+                IRfcStructure r = fld.Metadata.LineType.CreateStructure();
+                r.SetValue("FIELDNAME", f);
+                fld.Append(r);
+            }
             fn.Invoke(dest);
 
-            IRfcTable data = fn.GetTable("DATA");
-            var list = new List<string>();
-            foreach (IRfcStructure row in data)
+            foreach (IRfcStructure row in fn.GetTable("DATA"))
             {
-                string wa = row.GetString("WA") ?? "";
-                string w = wa.Length >= 4 ? wa.Substring(0, 4).Trim() : wa.Trim();
-                if (w.Length > 0) list.Add(w);
+                string[] parts = (row.GetString("WA") ?? "").Split('|');
+                if (parts.Length < 2) continue;
+                string w = parts[0].Trim().ToUpperInvariant();
+                string f = parts[1].Trim();
+                if (w.Length == 0 || f.Length == 0) continue;
+                scope.Fcode[w] = f;
             }
-            return list.Distinct().OrderBy(w => w).ToList();
+
+            if (scope.Fcode.Count == 0)
+            {
+                // Refusing to fall back to T001W: that fallback is exactly
+                // what pushed 593 stores on 2026-08-31.
+                throw new Exception("ZUNI_SITE_FCODE is empty in this system — " +
+                                    "there is no Townkart scope to push to.");
+            }
+
+            IRfcFunction t = dest.Repository.CreateFunction("RFC_READ_TABLE");
+            t.SetValue("QUERY_TABLE", "T001W");
+            t.SetValue("DELIMITER", "|");
+            IRfcTable tf = t.GetTable("FIELDS");
+            foreach (string f in new[] { "WERKS", "VLFKZ" })
+            {
+                IRfcStructure r = tf.Metadata.LineType.CreateStructure();
+                r.SetValue("FIELDNAME", f);
+                tf.Append(r);
+            }
+            IRfcTable opt = t.GetTable("OPTIONS");
+            bool first = true;
+            foreach (string w in scope.Fcode.Keys.OrderBy(k => k))
+            {
+                // One OPTIONS row per site keeps every line far under the
+                // 72-char cap regardless of how many rows the table grows to.
+                IRfcStructure o = opt.Metadata.LineType.CreateStructure();
+                o.SetValue("TEXT", (first ? "" : "OR ") + "WERKS = '" + w + "'");
+                opt.Append(o);
+                first = false;
+            }
+            t.Invoke(dest);
+
+            foreach (IRfcStructure row in t.GetTable("DATA"))
+            {
+                string[] parts = (row.GetString("WA") ?? "").Split('|');
+                if (parts.Length < 2) continue;
+                string w = parts[0].Trim().ToUpperInvariant();
+                if (!scope.Fcode.ContainsKey(w)) continue;
+                if (parts[1].Trim() == "A") scope.Stores.Add(w);
+                else scope.Dcs.Add(w);
+            }
+
+            // A mapped site with no T001W row at all is not pushable either;
+            // classify it with the DCs so it shows up in the exclusions.
+            foreach (string w in scope.Fcode.Keys)
+                if (!scope.Stores.Contains(w) && !scope.Dcs.Contains(w))
+                    scope.Dcs.Add(w);
+
+            return scope;
+        }
+
+        private List<string> ResolveWerks(string werksParam, SiteScope scope,
+                                          out List<JObject> excluded)
+        {
+            excluded = new List<JObject>();
+            const string DC_REASON =
+                "DC destination (T001W VLFKZ != 'A') — takes the movement-shaped " +
+                "ADD/REMOVE feed, not REPLACE balances. Excluded until that feed exists.";
+
+            bool wantsAll = string.IsNullOrWhiteSpace(werksParam) ||
+                            werksParam.Trim().Equals("all", StringComparison.OrdinalIgnoreCase);
+
+            if (wantsAll)
+            {
+                foreach (string dc in scope.Dcs.OrderBy(w => w))
+                    excluded.Add(new JObject
+                    {
+                        ["store_code"] = dc,
+                        ["reason"] = DC_REASON
+                    });
+                return scope.Stores.OrderBy(w => w).ToList();
+            }
+
+            var kept = new List<string>();
+            foreach (string w in werksParam.Split(',')
+                         .Select(x => x.Trim().ToUpperInvariant())
+                         .Where(x => x.Length > 0).Distinct())
+            {
+                if (scope.Stores.Contains(w))
+                {
+                    kept.Add(w);
+                }
+                else
+                {
+                    excluded.Add(new JObject
+                    {
+                        ["store_code"] = w,
+                        ["reason"] = scope.Dcs.Contains(w)
+                            ? DC_REASON
+                            : "Not a Townkart site — no ZUNI_SITE_FCODE row."
+                    });
+                }
+            }
+            return kept;
         }
 
         private bool TryResolveEnv(string env, out RfcConfigParameters rfcPar)
