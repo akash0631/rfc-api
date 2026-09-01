@@ -27,15 +27,17 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
     ///
     /// POST /api/bom/forward
     ///   Headers: X-Relay-Key (auth)
-    ///   Body:    { path, method, headers{}, body }
+    ///   Body:    { base_url, path, method, headers{}, body }
     ///   Returns: 200 { status, headers, body, elapsed_ms }  = BOM was reached,
     ///            and `status` is whatever BOM answered (403 and 500 included).
     ///            Non-200 = the relay itself failed; BOM was never reached.
     ///
-    /// This is deliberately NOT a general proxy. The upstream host is a
-    /// constant, the caller supplies only a path under /v1/ or /v2/, the
-    /// method is GET or POST, and exactly three request headers are forwarded.
-    /// Nothing else the caller sends reaches the bank.
+    /// This is deliberately NOT a general proxy. base_url is matched against a
+    /// compile-time allowlist holding exactly the production host, the caller
+    /// supplies only a path under /v1/ or /v2/, the method is GET or POST, and
+    /// exactly four request headers are forwarded. Nothing else the caller
+    /// sends reaches the bank. UAT is never relayed — it has no IP
+    /// restriction and the payment functions call it directly.
     ///
     /// Bodies carry encrypted banking data and are never logged. The ring
     /// buffer below records path, status, timing and caller IP only, and the
@@ -44,9 +46,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
     [RoutePrefix("api/bom")]
     public class BomForwardController : ApiController
     {
-        // The caller supplies a PATH, never a host. Changing this constant is
-        // the only way to point the relay somewhere else.
+        // Production MahaPay. The caller may name a base_url, but it is matched
+        // against ALLOWED_HOSTS by exact string, so the only way to point the
+        // relay somewhere else is to edit this file. UAT deliberately absent:
+        // it carries no IP restriction, so it is called directly and must not
+        // be reachable through a relay that exists to spend our whitelisted IP.
         private const string BOM_HOST = "https://mahaapi.bankofmaharashtra.bank.in";
+        private static readonly string[] ALLOWED_HOSTS = { BOM_HOST };
 
         private const string KEY_HEADER = "X-Relay-Key";
         private const string KEY_SETTING = "BOM_RELAY_KEY";
@@ -55,7 +61,9 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
         private const int MAX_PATH_LENGTH = 512;
         private const int UPSTREAM_TIMEOUT_SEC = 60;
 
-        private static readonly string[] ALLOWED_HEADERS = { "Content-Type", "Authorization", "channel" };
+        // Auth-Token carries BOM's MahaPay session token on the submit and
+        // status APIs, so it is forwarded alongside Authorization.
+        private static readonly string[] ALLOWED_HEADERS = { "Content-Type", "Authorization", "Auth-Token", "channel" };
         private static readonly string[] ALLOWED_METHODS = { "GET", "POST" };
         private static readonly string[] ALLOWED_PATH_PREFIXES = { "/v1/", "/v2/" };
 
@@ -147,6 +155,18 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
                 return Content(HttpStatusCode.BadRequest, new { error = "bad request body" });
             }
 
+            // base_url is matched by exact string. Omitted or blank means the
+            // production host, which keeps the first spec's payload shape
+            // working — the default is the only allowlisted value either way.
+            string baseUrl = string.IsNullOrWhiteSpace(req.base_url)
+                ? BOM_HOST
+                : req.base_url.Trim();
+            if (!ALLOWED_HOSTS.Contains(baseUrl, StringComparer.Ordinal))
+            {
+                Record("-", "-", 0, sw, callerIp, "host_not_allowed");
+                return Content(HttpStatusCode.BadRequest, new { error = "host not allowed" });
+            }
+
             string path = req.path.Trim();
             if (!IsPathAllowed(path))
             {
@@ -168,10 +188,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
                 return Content(HttpStatusCode.BadRequest, new { error = "body too large" });
             }
 
-            // 3. Build the upstream request. Host is fixed; only allowlisted
-            //    headers survive. Host, Cookie, X-Forwarded-*, X-Relay-Key and
-            //    everything else the caller sent are dropped here.
-            var upstream = new HttpRequestMessage(new HttpMethod(method), BOM_HOST + path);
+            // 3. Build the upstream request. The host is the allowlisted value
+            //    checked above; only allowlisted headers survive. Host, Cookie,
+            //    X-Forwarded-*, X-Relay-Key and everything else the caller sent
+            //    are dropped here.
+            var upstream = new HttpRequestMessage(new HttpMethod(method), baseUrl + path);
             string contentType = "application/json";
 
             if (req.headers != null)
@@ -276,6 +297,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
                 service = "bom-forward",
                 upstream = BOM_HOST,
                 key_configured = true,
+                allowed_hosts = ALLOWED_HOSTS,
                 allowed_path_prefixes = ALLOWED_PATH_PREFIXES,
                 allowed_methods = ALLOWED_METHODS,
                 allowed_headers = ALLOWED_HEADERS,
@@ -474,6 +496,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Payments
 
     public class ForwardRequest
     {
+        public string base_url { get; set; }
         public string path { get; set; }
         public string method { get; set; }
         public Dictionary<string, string> headers { get; set; }
