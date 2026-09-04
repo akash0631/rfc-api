@@ -69,6 +69,31 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                     });
                 }
 
+                // ── Superseded RFC names ────────────────────────────────────
+                // ZMM_VAR_ART_CREATION_RFC creates the variant article and then
+                // silently loses its VKP0 whenever FROM_DATE or TO_DATE arrives as
+                // ISO YYYYMMDD: it passes the dates to ZCL_MM_ARTICLE_FINAL
+                // untouched and the class reads them as DDMMYYYY, so the VK11 batch
+                // input dies on the selection screen. It reports "Created
+                // Successfully" regardless, because it discards the class's own
+                // PRICE_STATUS. That left 5,598 PROD variants across 679 generics
+                // unpriced between 24-Aug and 04-Sep-2026.
+                //
+                // ZMM_VAR_ART_CRT_V8 takes the identical interface (IM_DATA
+                // ZMM_VAR_ART_TT / EX_RETURN ZMM_VAR_ART_MSG, checked in FUPARAREF
+                // on PROD), normalises both date notations, refuses a blank rate,
+                // is idempotent on (generic, size, colour) and verifies the price
+                // against A073 + KONP. Callers do not have to change.
+                //
+                // The mapping is REPORTED back as RfcRouted rather than applied
+                // silently — a proxy that runs a different function than the one
+                // asked for must say so.
+                string requestedRfc = rfcName;
+                if (string.Equals(rfcName, "ZMM_VAR_ART_CREATION_RFC", StringComparison.OrdinalIgnoreCase))
+                {
+                    rfcName = "ZMM_VAR_ART_CRT_V8";
+                }
+
                 // ── Select SAP environment ──────────────────────────────────
                 string env = System.Web.HttpContext.Current?.Request?.QueryString["env"] ?? "dev";
                 RfcConfigParameters rfcPar = ResolveRfcParams(env);
@@ -254,6 +279,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 // Diagnoses silent drops (e.g. Pool B writing to V65 but AUSP empty)
                 // without needing SAP-side trace access.
                 result["_RFC_NAME"] = rfcName;
+                if (!string.Equals(requestedRfc, rfcName, StringComparison.Ordinal))
+                    result["_RFC_REQUESTED"] = requestedRfc;
                 result["_ENV"] = env;
                 result["_PARAMS_APPLIED"] = paramApplied;
                 if (paramErrors.Count > 0) result["_PARAM_ERRORS"] = paramErrors;
