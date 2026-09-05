@@ -93,6 +93,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
 
                 // 6. Extract output table
                 var rows = ExtractRows(func, ep.ReturnTable);
+                int totalRows = rows.Count;
                 sw.Stop();
 
                 // 7. Max records guard
@@ -101,8 +102,17 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                         "Returned " + rows.Count + " records without a date filter. " +
                         "Provide dateFrom + dateTo (max 90 days) for transactional RFCs.");
 
+                // 7b. Server-side row cap via ?limit=N query param. Cheap sampling.
+                int limit = 0;
+                var limitStr = System.Web.HttpContext.Current?.Request?.QueryString["limit"];
+                if (!string.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out int n) && n > 0 && n < rows.Count)
+                {
+                    rows = rows.GetRange(0, n);
+                    limit = n;
+                }
+
                 // 8. Log to Snowflake
-                _sf.LogAccess(requestId, rfcCode, "/api/execute/" + rfcCode, 200, sw.ElapsedMilliseconds, rows.Count);
+                _sf.LogAccess(requestId, rfcCode, "/api/execute/" + rfcCode, 200, sw.ElapsedMilliseconds, totalRows);
 
                 return Request.CreateResponse(HttpStatusCode.OK, new {
                     Success     = true,
@@ -110,6 +120,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.RfcSync
                     RfcCode     = rfcCode,
                     FunctionName = ep.FunctionName,
                     RecordCount = rows.Count,
+                    TotalRows   = totalRows,
+                    Truncated   = limit > 0,
                     ElapsedMs   = sw.ElapsedMilliseconds,
                     Data        = rows
                 });
