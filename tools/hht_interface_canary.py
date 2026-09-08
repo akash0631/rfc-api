@@ -34,6 +34,23 @@ re-reads it from SAP, returning the live interface. Clearing is the point: it is
 makes the answer ground truth rather than another cached copy. It is also harmless —
 the next proxy call re-reads the metadata in about a second.
 
+Since 2026-09-08 that endpoint also returns each parameter's nested line type, and the
+signature includes it. The parameter list on its own missed a whole class of failure:
+a DDIC structure behind a TABLES parameter can gain a field while every parameter line
+stays identical, and a client holding the old layout then decodes every row at the wrong
+offset. rfc-api throws on it; the Java MW returns the table empty with a success code.
+
+WHAT DRIFT DOES AND DOES NOT PROVE
+----------------------------------
+Drift means SAP changed and any cached copy elsewhere is now suspect. It does NOT prove
+a parameter is being dropped — that is an inference, and on 2026-09-08 it turned out to
+be wrong twice. The 2026-08-21 note recorded IM_BIN_TYPE on ZWM_RFC_STOCK_TAKE_SAVE_V11
+as live data corruption, "every stock-take save on the PROD device path is blanking the
+bin type". LAGP says otherwise: that FM is the only writer of KOBER='F01', and 2,871 of
+3,000 recent rows it wrote carry LPTYP='F1'. The parameter arrives. The blanks that do
+exist are confined to storage type E03 and run back to 2026-03-16, five months before
+the parameter existed. Treat drift as "go and verify", never as a finding on its own.
+
 USAGE
 -----
   python hht_interface_canary.py --snapshot     # rewrite the baseline (after an approved change)
@@ -98,10 +115,21 @@ def read_interface(fm):
             return fm, ["__ABSENT__"]
         return fm, ["__ERROR__:%s" % (msg or json.dumps(data)[:200])]
 
-    return fm, sorted(
-        "%s:%s:%s:%s" % (p.get("name"), p.get("direction"), p.get("type"), p.get("length"))
-        for p in iface
-    )
+    # A parameter line alone is NOT the wire contract. On 2026-09-08 transport S4DK928696
+    # added EAN2 to ZDIR_TR_ST_2, the row structure behind ET_EAN_ART_DATA on
+    # ZSDC_DIRECT_HU_VAL_RFC. Every parameter line stayed byte-identical, so this canary
+    # reported OK while both gateways decoded that table at the wrong offsets and the HHT
+    # "HU wise Article transfer" barcode scan matched nothing for a full working day.
+    # rfc-api now returns each parameter's nested line type under "fields", so fold it into
+    # the signature: a structure gaining or losing a field is drift too.
+    sig = []
+    for p in iface:
+        line = "%s:%s:%s:%s" % (p.get("name"), p.get("direction"), p.get("type"), p.get("length"))
+        for f in (p.get("fields") or []):
+            line += "|%s:%s:%s.%s" % (
+                f.get("name"), f.get("type"), f.get("length"), f.get("decimals"))
+        sig.append(line)
+    return fm, sorted(sig)
 
 
 def load_watchlist():
@@ -192,15 +220,26 @@ def main():
 
     print("""
 WHAT THIS MEANS
-  A transport changed one of these interfaces in SAP PROD. The Java middleware on
-  192.168.144.200:9080 still holds the OLD JCo function template. Any parameter added
-  above is being dropped on the floor right now - SAP receives spaces, the RFC runs
-  anyway, and neither the device nor the log says a word.
+  A transport changed one of these interfaces in SAP PROD, so every cached copy of it
+  elsewhere is now suspect. A '|' segment is a field INSIDE a structure: a table can
+  gain a field while its parameter line never moves, and a client holding the old row
+  layout then decodes every row at the wrong offset - rfc-api throws a conversion
+  error, the Java MW returns the table EMPTY with EX_RETURN blank.
+
+  This is a signal to VERIFY, not a finding. It does not prove a parameter is being
+  dropped. That inference was recorded as fact for IM_BIN_TYPE on 2026-08-21 and was
+  wrong: LAGP shows that FM writing LPTYP='F1' on 2,871 of 3,000 recent rows, so the
+  parameter arrives fine. Go and measure the effect before reporting one.
 
 WHAT TO DO
-  1. Restart Tomcat on 192.168.144.200 (this is the only thing that clears the JCo
-     template cache - restarting the Azure app v2-hht-api does NOT).
-  2. Re-run the affected HHT flow end to end and confirm the new parameter arrives.
+  1. Verify the effect on real data before calling anything broken. MCP tool
+     hht_struct_stale_check <FM> names the structures and their activation dates;
+     hht_gateway_probe compares row counts across both gateways on a read-only FM.
+  2. If the device path really is stale, the fix is NOT a Tomcat restart - that host
+     is not administrable from here. Add the FM to Azure app setting
+     HHT_PROD_FORCE_RFC_API on v2-hht-api (comma-separated, re-list the FMs already
+     there, the setting REPLACES the built-in default). rfc-api self-heals its own
+     metadata, including structures, since 2026-09-08.
   3. Re-baseline:  python tools/hht_interface_canary.py --snapshot
      and commit tools/hht_fm_interfaces.prod.json.
 
