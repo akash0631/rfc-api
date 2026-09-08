@@ -183,7 +183,31 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                     });
                 }
 
-                myfun.Invoke(dest);
+                // ── Stale-STRUCTURE self-heal ───────────────────────────────
+                // RemoveFunctionMetadata drops the FM signature but NOT the DDIC
+                // structures its TABLES/EXPORT parameters are typed on. When a transport
+                // changes one of those structures — 2026-09-08, ZDIR_TR_ST_2 gained EAN2
+                // at position 2 — the cached line type is a field short, NCo reads every
+                // row at the wrong offsets and Invoke throws:
+                //   "FIELD UMREZ of STRUCTURE ZDIR_TR_ST_2 (SETTER): cannot convert Byte[] into BCD[3:0]"
+                // No parameter error is raised, so the input self-heal above never fires,
+                // and /api/rfc/refresh?fm=X cannot clear it either. NCo has no per-structure
+                // removal, so drop the structure and table caches wholesale, rebuild and
+                // invoke once more. Cost is one re-read per structure, ~1s.
+                try
+                {
+                    myfun.Invoke(dest);
+                }
+                catch (Exception iex) when (IsStaleStructureMetadata(iex.Message))
+                {
+                    rfcrep.ClearStructureMetadata();
+                    rfcrep.ClearTableMetadata();
+                    rfcrep.RemoveFunctionMetadata(rfcName);
+                    myfun = rfcrep.CreateFunction(rfcName);
+                    ApplyParams(myfun, body, out paramApplied, out paramErrors);
+                    myfun.Invoke(dest);
+                    metadataRefreshed = true;
+                }
 
                 // ── Build response with ALL export parameters ───────────────
                 JObject result = new JObject();
@@ -375,6 +399,13 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                     });
                 }
 
+                // Structure and table caches go too. RemoveFunctionMetadata drops only the
+                // signature; the DDIC line types the TABLES parameters are built on survive,
+                // so an fm-scoped refresh could not clear a changed structure and the caller
+                // was left with ?all=1 or an app-pool recycle. NCo exposes no per-structure
+                // removal, so this is deliberately wider than the fm argument suggests.
+                rfcrep.ClearStructureMetadata();
+                rfcrep.ClearTableMetadata();
                 rfcrep.RemoveFunctionMetadata(fm);
 
                 // Re-read straight from SAP so the caller sees the live signature.
@@ -383,13 +414,22 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 for (int i = 0; i < meta.ParameterCount; i++)
                 {
                     RfcParameterMetadata p = meta[i];
-                    iface.Add(new JObject
+                    JObject entry = new JObject
                     {
                         ["name"] = p.Name,
                         ["direction"] = p.Direction.ToString(),
                         ["type"] = p.DataType.ToString(),
                         ["length"] = p.NucLength
-                    });
+                    };
+
+                    // Nested line type. A parameter list can be byte-identical across a
+                    // transport while the DDIC structure underneath it gains a field — the
+                    // 2026-09-08 ZDIR_TR_ST_2/EAN2 case, which broke ET_EAN_ART_DATA on
+                    // both gateways and was invisible to a signature-only comparison.
+                    JArray fields = DescribeLineType(p);
+                    if (fields != null) entry["fields"] = fields;
+
+                    iface.Add(entry);
                 }
 
                 return Json(new JObject
@@ -397,7 +437,8 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                     ["EX_RETURN"] = new JObject
                     {
                         ["TYPE"] = "S",
-                        ["MESSAGE"] = "Metadata refreshed for " + fm + " on env " + env + " — " + iface.Count + " parameter(s) live"
+                        ["MESSAGE"] = "Metadata refreshed for " + fm + " on env " + env + " — " + iface.Count +
+                                      " parameter(s) live; structure and table caches also cleared"
                     },
                     ["_RFC_NAME"] = fm,
                     ["_ENV"] = env,
@@ -555,6 +596,59 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// Field list of a parameter's line type, or null when the parameter is scalar.
+        /// Best-effort: a repository that cannot resolve the line type must not turn a
+        /// refresh into an error, so any failure degrades to "no nested detail".
+        /// </summary>
+        private static JArray DescribeLineType(RfcParameterMetadata p)
+        {
+            try
+            {
+                RfcStructureMetadata line = null;
+                if (p.DataType == RfcDataType.TABLE) line = p.ValueMetadataAsTable.LineType;
+                else if (p.DataType == RfcDataType.STRUCTURE) line = p.ValueMetadataAsStructure;
+                if (line == null) return null;
+
+                JArray fields = new JArray();
+                for (int j = 0; j < line.FieldCount; j++)
+                {
+                    RfcFieldMetadata f = line[j];
+                    fields.Add(new JObject
+                    {
+                        ["name"] = f.Name,
+                        ["type"] = f.DataType.ToString(),
+                        ["length"] = f.NucLength,
+                        ["decimals"] = f.Decimals
+                    });
+                }
+                return fields;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// True when Invoke failed because a cached DDIC *structure* predates a transport.
+        /// Distinct from HasStaleMetadataError, which watches input-parameter apply errors:
+        /// this one fires on the read/serialise side, where the FM signature is correct but
+        /// a TABLES line type has gained or lost a field, so NCo decodes at wrong offsets.
+        /// NCo wording: "FIELD UMREZ of STRUCTURE ZDIR_TR_ST_2 (SETTER): cannot convert
+        /// Byte[] into BCD[3:0]".
+        /// </summary>
+        private static bool IsStaleStructureMetadata(string msg)
+        {
+            if (string.IsNullOrEmpty(msg)) return false;
+            bool namesStructure = msg.IndexOf("of STRUCTURE", StringComparison.OrdinalIgnoreCase) >= 0
+                               || msg.IndexOf("of TABLE", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool conversionFault = msg.IndexOf("cannot convert", StringComparison.OrdinalIgnoreCase) >= 0
+                               || msg.IndexOf("(SETTER)", StringComparison.OrdinalIgnoreCase) >= 0
+                               || msg.IndexOf("(GETTER)", StringComparison.OrdinalIgnoreCase) >= 0;
+            return namesStructure && conversionFault;
         }
 
         /// <summary>
