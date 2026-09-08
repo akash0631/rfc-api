@@ -1,4 +1,4 @@
-using SAP.Middleware.Connector;
+﻿using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -410,6 +410,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
 
                 // Re-read straight from SAP so the caller sees the live signature.
                 RfcFunctionMetadata meta = rfcrep.GetFunctionMetadata(fm);
+                IRfcFunction probe = rfcrep.CreateFunction(fm);
                 JArray iface = new JArray();
                 for (int i = 0; i < meta.ParameterCount; i++)
                 {
@@ -426,7 +427,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                     // transport while the DDIC structure underneath it gains a field — the
                     // 2026-09-08 ZDIR_TR_ST_2/EAN2 case, which broke ET_EAN_ART_DATA on
                     // both gateways and was invisible to a signature-only comparison.
-                    JArray fields = DescribeLineType(p);
+                    JArray fields = DescribeLineType(probe, p);
                     if (fields != null) entry["fields"] = fields;
 
                     iface.Add(entry);
@@ -600,16 +601,19 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
 
         /// <summary>
         /// Field list of a parameter's line type, or null when the parameter is scalar.
-        /// Best-effort: a repository that cannot resolve the line type must not turn a
+        /// Takes a live function container because RfcParameterMetadata does not expose the
+        /// line type in this NCo build. Best-effort: a repository that cannot resolve the line type must not turn a
         /// refresh into an error, so any failure degrades to "no nested detail".
         /// </summary>
-        private static JArray DescribeLineType(RfcParameterMetadata p)
+        private static JArray DescribeLineType(IRfcFunction fn, RfcParameterMetadata p)
         {
             try
             {
+                // RfcParameterMetadata exposes no line type in this NCo build, so read it
+                // off a live container the same way the response serialiser does.
                 RfcStructureMetadata line = null;
-                if (p.DataType == RfcDataType.TABLE) line = p.ValueMetadataAsTable.LineType;
-                else if (p.DataType == RfcDataType.STRUCTURE) line = p.ValueMetadataAsStructure;
+                if (p.DataType == RfcDataType.TABLE) line = fn.GetTable(p.Name).Metadata.LineType;
+                else if (p.DataType == RfcDataType.STRUCTURE) line = fn.GetStructure(p.Name).Metadata;
                 if (line == null) return null;
 
                 JArray fields = new JArray();
