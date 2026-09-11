@@ -21,7 +21,7 @@ namespace Vendor_Application_MVC.Controllers
             rfcPar.Add(RfcConfigParameters.Name, "ConnectionDEV"); // env-unique name prevents NCo dest cache collision
             // NCo connection pooling (added 2026-07-20): reuse warm connections, avoid per-call SAP logon
             rfcPar.Add(RfcConfigParameters.PoolSize, "10");           // warm idle connections kept open
-            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections ceiling
+            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections = the "peak connections limit" in NCo errors (MAX_POOL_SIZE)
             rfcPar.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
             rfcPar.Add(RfcConfigParameters.IdleTimeout, "600");       // release idle connections after 10 min
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.174");//Target IP Address  // TCODE: SM59 -> check RFC connection
@@ -49,7 +49,7 @@ namespace Vendor_Application_MVC.Controllers
             rfcPar.Add(RfcConfigParameters.Name, "ConnectionPROD"); // env-unique name prevents NCo dest cache collision
             // NCo connection pooling (added 2026-07-20): reuse warm connections, avoid per-call SAP logon
             rfcPar.Add(RfcConfigParameters.PoolSize, "20");           // warm idle connections kept open (PROD .170 sized higher)
-            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "50");        // max concurrent connections ceiling
+            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "50");        // max concurrent connections = the "peak connections limit" in NCo errors (MAX_POOL_SIZE)
             rfcPar.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
             rfcPar.Add(RfcConfigParameters.IdleTimeout, "600");       // release idle connections after 10 min
             //rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.194");//Target IP Address  // TCODE: SM59 -> check RFC connection
@@ -88,7 +88,7 @@ namespace Vendor_Application_MVC.Controllers
             rfcPar.Add(RfcConfigParameters.Name, "ConnectionPRODFA"); // env-unique name prevents NCo dest cache collision
             // Pooled smaller than ConnectionPROD: this lane carries one batch job, not the whole estate.
             rfcPar.Add(RfcConfigParameters.PoolSize, "10");           // warm idle connections kept open
-            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections ceiling
+            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections = the "peak connections limit" in NCo errors (MAX_POOL_SIZE)
             rfcPar.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
             rfcPar.Add(RfcConfigParameters.IdleTimeout, "600");       // release idle connections after 10 min
             rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.170");
@@ -108,7 +108,7 @@ namespace Vendor_Application_MVC.Controllers
             rfcPar.Add(RfcConfigParameters.Name, "ConnectionQA"); // env-unique name prevents NCo dest cache collision
             // NCo connection pooling (added 2026-07-20): reuse warm connections, avoid per-call SAP logon
             rfcPar.Add(RfcConfigParameters.PoolSize, "10");           // warm idle connections kept open
-            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections ceiling
+            rfcPar.Add(RfcConfigParameters.MaxPoolSize, "25");        // max concurrent connections = the "peak connections limit" in NCo errors (MAX_POOL_SIZE)
             rfcPar.Add(RfcConfigParameters.MaxPoolWaitTime, "30000"); // wait up to 30s for a free conn, then error
             rfcPar.Add(RfcConfigParameters.IdleTimeout, "600");       // release idle connections after 10 min
             //rfcPar.Add(RfcConfigParameters.AppServerHost, "192.168.144.194");//Target IP Address  // TCODE: SM59 -> check RFC connection
