@@ -1,8 +1,9 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SAP.Middleware.Connector;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -37,10 +38,31 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
     {
         private const string API_KEY = "v2-rfc-proxy-2026";
 
-        // Green On endpoint + auth (provided by Green On 2026-07-07)
-        private const string GREENON_URL = "https://engine.kartmax.in/api/import/catalogue-import-inventory";
-        private const string GREENON_SITE_TOKEN = "UHwgPDz7YxPHimOYNEzg";
-        private const string GREENON_API_TOKEN = "UshlJr1FhG3tuXNN4ijf5az2adf7453dfsps";
+        // Tenant credentials come from the HOST (secrets.config appSettings ->
+        // machine env var -> process env var), never from this repo — the repo
+        // is public. These are the same GREENON_PROD_* keys and the same
+        // three-tier lookup GreenOnRelayController uses, so this route and the
+        // SAP-driven relay route always speak to the same Green Honchos tenant.
+        //
+        // Fixed 2026-09-11: this controller still carried the pre-2026-07-13
+        // staging site_token/token and sent no Origin header, so every live
+        // batch came back 401 Unauthorized (136,345 SKUs lost on the 05:00 run
+        // of 2026-09-11). The dry run never caught it because dryRun returns
+        // before any HTTP call is made.
+        private static readonly string GREENON_URL = ReadSetting("GREENON_PROD_URL") ?? "https://engine.kartmax.in/api/import/catalogue-import-inventory";
+        private static readonly string GREENON_SITE_TOKEN = ReadSetting("GREENON_PROD_SITE_TOKEN");
+        private static readonly string GREENON_API_TOKEN = ReadSetting("GREENON_PROD_API_TOKEN");
+        private static readonly string GREENON_ORIGIN = ReadSetting("GREENON_PROD_ORIGIN");
+
+        private static string ReadSetting(string key)
+        {
+            string v = ConfigurationManager.AppSettings[key];
+            if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
+            v = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Machine);
+            if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
+            v = Environment.GetEnvironmentVariable(key);
+            return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        }
 
         [HttpPost]
         [Route("greenon-push")]
@@ -157,6 +179,24 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
                 });
             }
 
+            // Never push with credentials the host has not supplied — a missing
+            // token silently turns into 401 on every batch. Fail the run loudly.
+            if (string.IsNullOrEmpty(GREENON_SITE_TOKEN) ||
+                string.IsNullOrEmpty(GREENON_API_TOKEN) ||
+                string.IsNullOrEmpty(GREENON_ORIGIN))
+            {
+                return Json(new
+                {
+                    Status = false,
+                    Env = env,
+                    DryRun = false,
+                    TotalSkus = totalSkus,
+                    Pushed = 0,
+                    Failed = totalSkus,
+                    Error = "greenon-push is not configured on this host — set GREENON_PROD_SITE_TOKEN, GREENON_PROD_API_TOKEN and GREENON_PROD_ORIGIN in secrets.config (or as machine env vars) and recycle the pool. This route never falls back to the staging tenant."
+                });
+            }
+
             // ── Live push: chunk + POST to Green On ───────────────────────
             List<JObject> batchResults = new List<JObject>();
             int pushed = 0, failed = 0;
@@ -165,6 +205,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Inventory
             {
                 http.DefaultRequestHeaders.Add("site_token", GREENON_SITE_TOKEN);
                 http.DefaultRequestHeaders.Add("token", GREENON_API_TOKEN);
+                http.DefaultRequestHeaders.Add("Origin", GREENON_ORIGIN);
 
                 for (int i = 0; i < allItems.Count; i += chunkSize)
                 {
