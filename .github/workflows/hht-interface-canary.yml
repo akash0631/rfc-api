@@ -23,9 +23,15 @@ name: HHT interface canary (SAP PROD)
 # answer ground truth instead of another cached copy, and it is harmless (the next proxy
 # call re-reads in about a second). No RFC is executed. Nothing is written.
 #
-# AFTER AN EXPECTED CHANGE: restart Tomcat on .200, verify the flow, then re-baseline
+# AFTER A CHANGE: check whether the Java MW really is stale for that FM (hht_gateway_probe
+# on a read-only FM, or the data an FM writes). If it is, add the FM to
+# HHT_PROD_FORCE_RFC_API on v2-hht-api. Then re-baseline
 #   python tools/hht_interface_canary.py --snapshot
 # and commit tools/hht_fm_interfaces.prod.json.
+#
+# ALERTING: a red run opens (or comments on) one GitHub issue labelled hht-canary and
+# assigned to akash0631, and a green run closes it. From 22 to 30 Sep 2026 this job was red
+# every day and nobody saw it, because a failed scheduled run notifies no one reliably.
 
 on:
   schedule:
@@ -50,6 +56,9 @@ jobs:
   canary:
     name: Compare live SAP interfaces against baseline
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - uses: actions/checkout@v4
@@ -80,12 +89,44 @@ jobs:
             if [ "${{ steps.check.outcome }}" = "success" ]; then
               echo 'No drift. The Java MW on 192.168.144.200 is consistent with SAP.'
             else
-              echo '**Interface drift detected — the Java MW on 192.168.144.200 is now STALE.**'
+              echo '**Interface drift detected — SAP PROD changed since the baseline.**'
               echo ''
-              echo 'Restart Tomcat on .200, re-run the affected HHT flow, then re-baseline.'
+              echo 'Check whether the Java MW on .200 is stale for these FMs before acting, then re-baseline.'
             fi
             echo ''
             echo '```'
             cat canary.log 2>/dev/null || echo '(no output captured)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Raise or clear the alert issue
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'push')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          TITLE="HHT interface canary is red"
+          gh label create hht-canary --color B60205 --description "HHT interface canary alert" 2>/dev/null || true
+          OPEN=$(gh issue list --label hht-canary --state open --json number -q '.[0].number')
+          if [ "$OUTCOME" = "success" ]; then
+            if [ -n "$OPEN" ]; then
+              gh issue close "$OPEN" --comment "Green again: run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            fi
+            exit 0
+          fi
+          {
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ''
+            echo 'SAP PROD interfaces differ from tools/hht_fm_interfaces.prod.json.'
+            echo 'Verify each FM before acting. If the Java MW on .200 is stale, add the FM to HHT_PROD_FORCE_RFC_API on v2-hht-api.'
+            echo 'If it is not, re-baseline: python tools/hht_interface_canary.py --snapshot'
+            echo ''
+            echo '```'
+            tail -c 60000 canary.log 2>/dev/null || echo '(no output captured)'
+            echo '```'
+          } > alert.md
+          if [ -n "$OPEN" ]; then
+            gh issue comment "$OPEN" --body-file alert.md
+          else
+            gh issue create --title "$TITLE" --label hht-canary --assignee akash0631 --body-file alert.md
+          fi
