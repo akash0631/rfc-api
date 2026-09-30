@@ -50,11 +50,29 @@ jobs:
       - name: Download nuget.exe
         shell: powershell
         run: |
+          # .36's outbound internet is unreliable (socket 10060 timeouts to
+          # dist.nuget.org, codeload and github.com on 2026-09-11), and this
+          # step had no retry - one timeout failed the whole deploy after 5
+          # minutes. Prefer the copy staged on the box; only reach out if it
+          # is missing, and retry three times before giving up.
+          $stagedNuget = "C:\tools\nuget.exe"
           $nugetPath = "$env:RUNNER_TEMP\nuget.exe"
-          if (-not (Test-Path $nugetPath)) {
-            Write-Host "Downloading nuget.exe..."
-            Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" `
-              -OutFile $nugetPath -UseBasicParsing
+          if (Test-Path $stagedNuget) {
+            Write-Host "Using nuget.exe staged on the runner: $stagedNuget"
+            $nugetPath = $stagedNuget
+          } elseif (-not (Test-Path $nugetPath)) {
+            $ok = $false
+            for ($i = 1; $i -le 3 -and -not $ok; $i++) {
+              try {
+                Write-Host "Downloading nuget.exe (attempt $i of 3)..."
+                Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile $nugetPath -UseBasicParsing -TimeoutSec 120
+                $ok = $true
+              } catch {
+                Write-Host "attempt $i failed: $($_.Exception.Message)"
+                if ($i -lt 3) { Start-Sleep -Seconds 15 }
+              }
+            }
+            if (-not $ok) { throw "Could not obtain nuget.exe - stage it at $stagedNuget on the runner." }
           } else {
             Write-Host "nuget.exe already cached at $nugetPath"
           }
