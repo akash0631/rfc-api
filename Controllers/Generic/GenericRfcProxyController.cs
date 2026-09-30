@@ -351,6 +351,11 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
         ///
         /// GET/POST /api/rfc/refresh?env=qa&amp;fm=ZWM_PTL_GRT_HUB_CRATE_VLDT
         /// GET/POST /api/rfc/refresh?env=qa&amp;all=1
+        ///
+        /// describe=1 returns the interface without clearing any cache. The HHT
+        /// middleware calls it to learn which parameters are table-typed IMPORTING
+        /// parameters, which the Java MW on .200 cannot bind.
+        /// GET /api/rfc/refresh?env=prod&amp;fm=ZVND_UNLOAD_SAVE_RFC&amp;describe=1
         /// </summary>
         [HttpGet]
         [HttpPost]
@@ -371,6 +376,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 string env = qs?["env"] ?? "dev";
                 string fm = (qs?["fm"] ?? "").Trim().ToUpperInvariant();
                 bool all = (qs?["all"] ?? "") == "1";
+                bool describeOnly = (qs?["describe"] ?? "") == "1";
 
                 if (string.IsNullOrWhiteSpace(fm) && !all)
                 {
@@ -383,7 +389,7 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 RfcDestination dest = GetDestinationWithSelfHeal(ResolveRfcParams(env));
                 RfcRepository rfcrep = dest.Repository;
 
-                if (all)
+                if (all && !describeOnly)
                 {
                     rfcrep.ClearFunctionMetadata();
                     rfcrep.ClearStructureMetadata();
@@ -404,9 +410,12 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                 // so an fm-scoped refresh could not clear a changed structure and the caller
                 // was left with ?all=1 or an app-pool recycle. NCo exposes no per-structure
                 // removal, so this is deliberately wider than the fm argument suggests.
-                rfcrep.ClearStructureMetadata();
-                rfcrep.ClearTableMetadata();
-                rfcrep.RemoveFunctionMetadata(fm);
+                if (!describeOnly)
+                {
+                    rfcrep.ClearStructureMetadata();
+                    rfcrep.ClearTableMetadata();
+                    rfcrep.RemoveFunctionMetadata(fm);
+                }
 
                 // Re-read straight from SAP so the caller sees the live signature.
                 RfcFunctionMetadata meta = rfcrep.GetFunctionMetadata(fm);
@@ -438,8 +447,10 @@ namespace Vendor_SRM_Routing_Application.Controllers.Generic
                     ["EX_RETURN"] = new JObject
                     {
                         ["TYPE"] = "S",
-                        ["MESSAGE"] = "Metadata refreshed for " + fm + " on env " + env + " — " + iface.Count +
-                                      " parameter(s) live; structure and table caches also cleared"
+                        ["MESSAGE"] = describeOnly
+                            ? "Interface of " + fm + " on env " + env + " — " + iface.Count + " parameter(s); no cache cleared"
+                            : "Metadata refreshed for " + fm + " on env " + env + " — " + iface.Count +
+                              " parameter(s) live; structure and table caches also cleared"
                     },
                     ["_RFC_NAME"] = fm,
                     ["_ENV"] = env,
