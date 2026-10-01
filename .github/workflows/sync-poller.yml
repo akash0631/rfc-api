@@ -41,15 +41,18 @@ jobs:
           & "$env:PYEXE" -m pip install --quiet --upgrade snowflake-connector-python
       - name: Process pending requests
         shell: powershell
+        # Key pair, not password: the SF_USER/SF_PASSWORD secret login needs a TOTP since 30-Sep 20:53 IST
+        # (every poll failed with 394508). SAP_SYNC_SVC (SAP_SYNC_ROLE: SELECT/UPDATE on SYNC_REQUEST) uses the
+        # key that already sits on the .36 runner box -- the same file rfc-api's Web.config points at.
         env:
-          SF_ACCOUNT:     ${{ secrets.SF_ACCOUNT }}
-          SF_USER:        ${{ secrets.SF_USER }}
-          SF_PASSWORD:    ${{ secrets.SF_PASSWORD }}
-          DISPATCH_TOKEN: ${{ secrets.PIPELINE_GITHUB_TOKEN }}
+          SF_ACCOUNT:          ${{ secrets.SF_ACCOUNT }}
+          SF_USER:             SAP_SYNC_SVC
+          SF_PRIVATE_KEY_FILE: C:\snowflake\sap_sync_svc.p8
+          DISPATCH_TOKEN:      ${{ secrets.PIPELINE_GITHUB_TOKEN }}
         run: |
           $src = @'
           import os, sys, json, urllib.request, urllib.error, snowflake.connector
-          con=snowflake.connector.connect(account=os.environ["SF_ACCOUNT"],user=os.environ["SF_USER"],password=os.environ["SF_PASSWORD"],warehouse="WH_SAP_LOAD",database="V2RETAIL",schema="BRONZE")
+          con=snowflake.connector.connect(account=os.environ["SF_ACCOUNT"],user=os.environ["SF_USER"],authenticator="SNOWFLAKE_JWT",private_key_file=os.environ["SF_PRIVATE_KEY_FILE"],warehouse="WH_SAP_LOAD",database="V2RETAIL",schema="BRONZE")
           cur=con.cursor()
           try: cur.execute("USE SECONDARY ROLES ALL")
           except Exception: pass
